@@ -67,8 +67,27 @@ export type RunDirectSplitTaskInput = {
   plannerQuery?: (
     prompt: string,
     env: SplitTaskEnv,
-    options?: { systemPrompt?: string; maxSessionTurns?: number },
+    options?: { systemPrompt?: string; maxSessionTurns?: number; signal?: AbortSignal },
   ) => Promise<string>;
+  generationJob?: {
+    markRunning(stage: 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing', statusMessage: string): Promise<void>;
+    markCanceled(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }): Promise<void>;
+    markSucceeded(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }): Promise<void>;
+    markFailed(input: {
+      statusMessage?: string | null;
+      errorCode?: string | null;
+      errorMessage?: string | null;
+    }): Promise<void>;
+  };
+  signal?: AbortSignal;
   loadProjectVersion?: (projectId: string) => Promise<number>;
   writeDebugLog?: typeof writeServerDebugLog;
   getLatestVisibleGroupId?: (projectId: string) => Promise<string | null>;
@@ -376,7 +395,7 @@ function parseFragmentPlan(payloadText: string, explicitItems: ParsedExplicitLis
 async function executeDirectSplitPlanningQuery(
   prompt: string,
   env: SplitTaskEnv,
-  options?: { systemPrompt?: string; maxSessionTurns?: number },
+  options?: { systemPrompt?: string; maxSessionTurns?: number; signal?: AbortSignal },
 ): Promise<string> {
   if (!env.OPENAI_API_KEY) {
     throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
@@ -390,7 +409,14 @@ async function executeDirectSplitPlanningQuery(
     },
     prompt,
     systemPrompt: options?.systemPrompt,
+    signal: options?.signal,
   });
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new Error('Generation canceled');
+  }
 }
 
 async function getProjectVersion(projectId: string): Promise<number> {
@@ -466,6 +492,8 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     explicitListItems: explicitItems.map((item) => item.text),
     existingChildCount: existingChildNames.length,
   });
+  await input.generationJob?.markRunning('interpreting', 'AI анализирует задачу для разбиения');
+  throwIfAborted(input.signal);
 
   const plannerSystemPrompt = buildSystemPrompt({
     taskName,
@@ -486,11 +514,14 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     explicitListMode: input.explicitListMode,
   });
 
+  await input.generationJob?.markRunning('planning', 'AI строит план разбиения задачи');
   const plannerOutput = await executePlannerQuery(plannerPrompt, input.env, {
     systemPrompt: plannerSystemPrompt,
     maxSessionTurns: input.explicitListMode ? 1 : 2,
+    signal: input.signal,
   });
   const fragmentPlan = parseFragmentPlan(plannerOutput, explicitItems);
+  throwIfAborted(input.signal);
   const projectVersion = await loadProjectVersion(input.projectId);
 
   const resolutionContext: ResolvedMutationContext = {
@@ -538,6 +569,8 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     tasksBefore,
   });
 
+  await input.generationJob?.markRunning('committing', 'Сохраняем разбиение задачи в проект');
+  throwIfAborted(input.signal);
   const execution = await executeMutationPlan({
     projectId: input.projectId,
     projectVersion,
@@ -553,11 +586,17 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   });
 
   if (execution.status !== 'completed') {
+    await input.generationJob?.markFailed({
+      statusMessage: execution.userFacingMessage || 'Разбиение задачи завершилось ошибкой.',
+      errorMessage: execution.userFacingMessage || 'Direct split task execution failed',
+    });
     throw new Error(execution.userFacingMessage || 'Direct split task execution failed');
   }
 
   const tasksAfter = await loadAllProjectTasks(input.services.taskService, input.projectId);
   const assistantResponse = `Задача «${taskName}» детализирована на ${fragmentPlan.nodes.length} подзадач.`;
+  await input.generationJob?.markRunning('finalizing', 'Фиксируем результат и обновляем историю');
+  throwIfAborted(input.signal);
 
   await input.services.messageService.add('assistant', assistantResponse, input.projectId, {
     requestContextId: input.runId,
@@ -572,6 +611,11 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
       requestContextId: input.runId,
       historyGroupId: checkpointGroupId,
     },
+  });
+  await input.generationJob?.markSucceeded({
+    requestContextId: input.runId,
+    historyGroupId: checkpointGroupId,
+    statusMessage: 'Разбиение задачи завершено',
   });
 
   await debugLog('direct_split_completed', {

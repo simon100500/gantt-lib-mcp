@@ -47,13 +47,30 @@ import { registerFeedbackRoutes } from './routes/feedback-routes.js';
 import { registerFinanceRoutes } from './routes/finance-routes.js';
 import { registerGrandSmetaImportRoutes } from './routes/grand-smeta-import-routes.js';
 import { registerHistoryRoutes } from './routes/history-routes.js';
+import { registerProjectIntentRoutes } from './routes/project-intent-routes.js';
 import { registerResourceRoutes } from './routes/resource-routes.js';
 import { registerTemplateRoutes } from './routes/template-routes.js';
+import { registerTemplatePublicationRoutes } from './routes/template-publication-routes.js';
 import { registerWorkProgressRoutes } from './routes/work-progress-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 import { runDirectSplitTask } from './split-task.js';
 import { normalizeStoredTaskStatus } from '@gantt/runtime-core/services/task-status';
+import {
+  markProjectGenerationJobCanceled,
+  markProjectGenerationJobFailed,
+  markProjectGenerationJobPreviewAvailable,
+  markProjectGenerationJobRunning,
+  markProjectGenerationJobSucceeded,
+  serializeProjectGenerationJob,
+  startProjectGenerationJob,
+  getProjectGenerationJobById,
+} from './services/project-generation-service.js';
+import {
+  cancelGenerationJob,
+  registerGenerationJobCancelHandler,
+  unregisterGenerationJobCancelHandler,
+} from './generation-job-control.js';
 
 const fastify = Fastify({ logger: true });
 const requireAiQueryLimit = requireTrackedLimit('ai_queries', {
@@ -74,8 +91,10 @@ await registerFeedbackRoutes(fastify);
 await registerFinanceRoutes(fastify);
 await registerGrandSmetaImportRoutes(fastify);
 await registerHistoryRoutes(fastify);
+await registerProjectIntentRoutes(fastify);
 await registerResourceRoutes(fastify);
 await registerTemplateRoutes(fastify);
+await registerTemplatePublicationRoutes(fastify);
 await registerWorkProgressRoutes(fastify);
 
 // ---------------------------------------------------------------------------
@@ -264,20 +283,63 @@ fastify.post('/api/chat', { preHandler: [authMiddleware, requireCurrentProjectEd
   if (!message) {
     return reply.status(400).send({ error: 'message required' });
   }
+  const runId = randomUUID();
   // Increment AI counter (D-07: 1 message = 1 generation)
   await incrementAiUsage(req.projectAccess?.billingUserId ?? req.user!.userId);
+  const { job } = await startProjectGenerationJob({
+    projectId: req.user!.projectId,
+    userId: req.user!.userId,
+    source: 'chat_request',
+    type: 'chat_request',
+    requestContextId: runId,
+    previewMode: 'ephemeral',
+  });
   await writeServerDebugLog('rest_chat_received', {
     userId: req.user!.userId,
     projectId: req.user!.projectId,
     sessionId: req.user!.sessionId,
     message,
   });
-  // Fire-and-forget — streaming goes via WebSocket
-  runAgentWithHistory(message, req.user!.projectId, req.user!.sessionId, req.user!.userId).catch((err: unknown) => {
-    broadcastToSession(req.user!.sessionId, { type: 'error', message: String(err) });
-    fastify.log.error(err, 'agent error');
+  const controller = new AbortController();
+  registerGenerationJobCancelHandler(job.id, () => {
+    controller.abort();
   });
-  return reply.send({ status: 'processing' });
+  // Fire-and-forget — streaming goes via WebSocket
+  runAgentWithHistory(message, req.user!.projectId, req.user!.sessionId, req.user!.userId, {
+    id: job.id,
+    async markRunning(stage, statusMessage) {
+      await markProjectGenerationJobRunning(job.id, stage, statusMessage);
+    },
+    async markPreviewAvailable() {
+      await markProjectGenerationJobPreviewAvailable(job.id);
+    },
+    async markCanceled(input) {
+      await markProjectGenerationJobCanceled(job.id, input);
+    },
+    async markSucceeded(input) {
+      await markProjectGenerationJobSucceeded(job.id, input);
+    },
+    async markFailed(input) {
+      await markProjectGenerationJobFailed(job.id, input);
+    },
+  }, controller.signal).catch((err: unknown) => {
+    if (controller.signal.aborted) {
+      void markProjectGenerationJobCanceled(job.id, {
+        requestContextId: runId,
+        statusMessage: 'Операция отменена пользователем.',
+      });
+    } else {
+      void markProjectGenerationJobFailed(job.id, {
+        statusMessage: 'AI-запрос завершился ошибкой.',
+        errorMessage: String(err),
+      });
+      broadcastToSession(req.user!.sessionId, { type: 'error', message: String(err) });
+      fastify.log.error(err, 'agent error');
+    }
+  }).finally(() => {
+    unregisterGenerationJobCancelHandler(job.id);
+  });
+  return reply.send({ status: 'processing', runId, job: serializeProjectGenerationJob(job) });
 });
 
 fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation, requireAiQueryLimit] }, async (req, reply) => {
@@ -294,6 +356,18 @@ fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireC
 
   await incrementAiUsage(req.projectAccess?.billingUserId ?? req.user!.userId);
   const runId = randomUUID();
+  const { job } = await startProjectGenerationJob({
+    projectId: req.user!.projectId,
+    userId: req.user!.userId,
+    source: 'direct_split_task',
+    type: 'split_task',
+    requestContextId: runId,
+    previewMode: 'none',
+  });
+  const controller = new AbortController();
+  registerGenerationJobCancelHandler(job.id, () => {
+    controller.abort();
+  });
 
   void runDirectSplitTask({
     runId,
@@ -314,12 +388,76 @@ fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireC
       commandService,
     },
     broadcastToSession,
+    generationJob: {
+      async markRunning(stage, statusMessage) {
+        await markProjectGenerationJobRunning(job.id, stage, statusMessage);
+      },
+      async markCanceled(input) {
+        await markProjectGenerationJobCanceled(job.id, input);
+      },
+      async markSucceeded(input) {
+        await markProjectGenerationJobSucceeded(job.id, input);
+      },
+      async markFailed(input) {
+        await markProjectGenerationJobFailed(job.id, input);
+      },
+    },
+    signal: controller.signal,
   }).catch((err: unknown) => {
-    broadcastToSession(req.user!.sessionId, { type: 'error', message: String(err) });
-    fastify.log.error(err, 'direct split task error');
+    if (controller.signal.aborted) {
+      void markProjectGenerationJobCanceled(job.id, {
+        requestContextId: runId,
+        statusMessage: 'Операция отменена пользователем.',
+      });
+    } else {
+      void markProjectGenerationJobFailed(job.id, {
+        statusMessage: 'Разбиение задачи завершилось ошибкой.',
+        errorMessage: String(err),
+      });
+      broadcastToSession(req.user!.sessionId, { type: 'error', message: String(err) });
+      fastify.log.error(err, 'direct split task error');
+    }
+  }).finally(() => {
+    unregisterGenerationJobCancelHandler(job.id);
   });
 
-  return reply.send({ status: 'processing', runId });
+  return reply.send({ status: 'processing', runId, job: serializeProjectGenerationJob(job) });
+});
+
+fastify.post('/api/project-generation-jobs/:jobId/cancel', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
+  const jobId = (req.params as { jobId?: string }).jobId?.trim();
+  if (!jobId) {
+    return reply.status(400).send({ error: 'jobId required' });
+  }
+
+  try {
+    const job = await getProjectGenerationJobById(jobId);
+    if (!job || job.projectId !== req.user!.projectId) {
+      return reply.status(404).send({ error: 'Generation job not found' });
+    }
+
+    if (job.status !== 'queued' && job.status !== 'running') {
+      return reply.send({ ok: true, job: serializeProjectGenerationJob(job) });
+    }
+
+    await markProjectGenerationJobCanceled(jobId, {
+      requestContextId: job.requestContextId,
+      historyGroupId: job.historyGroupId,
+      statusMessage: 'Операция отменена пользователем.',
+    });
+
+    try {
+      await cancelGenerationJob(jobId);
+    } catch (cancelError) {
+      req.log.warn({ err: cancelError, jobId }, 'generation cancel handler failed after job was marked canceled');
+    }
+
+    const updatedJob = await getProjectGenerationJobById(jobId);
+    return reply.send({ ok: true, job: updatedJob ? serializeProjectGenerationJob(updatedJob) : null });
+  } catch (error) {
+    req.log.error({ err: error, jobId }, 'failed to cancel generation job');
+    return reply.status(500).send({ error: 'Failed to cancel generation job' });
+  }
 });
 
 fastify.get('/api/messages', { preHandler: [authMiddleware] }, async (req, reply) => {
@@ -335,15 +473,59 @@ registerWsRoutes(fastify);
 
 // Handle chat messages arriving over WebSocket
 onChatMessage((msg, userId, projectId, sessionId) => {
-  void writeServerDebugLog('ws_chat_received', {
-    userId,
-    projectId,
-    sessionId,
-    message: msg,
-  });
-  runAgentWithHistory(msg, projectId, sessionId, userId).catch((err: unknown) => {
-    broadcastToSession(sessionId, { type: 'error', message: String(err) });
-    fastify.log.error(err, 'agent error (ws)');
+  void (async () => {
+    const runId = randomUUID();
+    const { job } = await startProjectGenerationJob({
+      projectId,
+      userId,
+      source: 'ws_chat_request',
+      type: 'chat_request',
+      requestContextId: runId,
+      previewMode: 'ephemeral',
+    });
+    const controller = new AbortController();
+    registerGenerationJobCancelHandler(job.id, () => {
+      controller.abort();
+    });
+    try {
+      await writeServerDebugLog('ws_chat_received', {
+        userId,
+        projectId,
+        sessionId,
+        message: msg,
+        generationJobId: job.id,
+      });
+      await runAgentWithHistory(msg, projectId, sessionId, userId, {
+        id: job.id,
+        async markRunning(stage, statusMessage) {
+          await markProjectGenerationJobRunning(job.id, stage, statusMessage);
+        },
+        async markPreviewAvailable() {
+          await markProjectGenerationJobPreviewAvailable(job.id);
+        },
+        async markCanceled(input) {
+          await markProjectGenerationJobCanceled(job.id, input);
+        },
+        async markSucceeded(input) {
+          await markProjectGenerationJobSucceeded(job.id, input);
+        },
+        async markFailed(input) {
+          await markProjectGenerationJobFailed(job.id, input);
+        },
+      }, controller.signal);
+    } catch (err) {
+      if (controller.signal.aborted) {
+        await markProjectGenerationJobCanceled(job.id, {
+          requestContextId: runId,
+          statusMessage: 'Операция отменена пользователем.',
+        });
+      } else {
+        broadcastToSession(sessionId, { type: 'error', message: String(err) });
+        fastify.log.error(err, 'agent error (ws)');
+      }
+    } finally {
+      unregisterGenerationJobCancelHandler(job.id);
+    }
   });
 });
 

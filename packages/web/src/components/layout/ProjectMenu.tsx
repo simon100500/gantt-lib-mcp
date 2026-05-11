@@ -57,6 +57,7 @@ interface ProjectMenuProps {
   onOpenFinance?: () => void | Promise<void>;
   onOpenChartMode?: () => void | Promise<void>;
   onCreateProjectTemplate?: () => void | Promise<void>;
+  adminTemplateLinks?: Array<{ id: string; label: string; href: string }>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
   ganttRef: React.RefObject<GanttChartRef>;
@@ -95,6 +96,7 @@ export function ProjectMenu({
   onOpenFinance,
   onOpenChartMode,
   onCreateProjectTemplate,
+  adminTemplateLinks = [],
   onCreateShareLink,
   onLoginRequired,
   ganttRef,
@@ -409,6 +411,7 @@ export function ProjectMenu({
             onInsertTemplateToProject={onInsertTemplateToProject}
             canInsertTemplateToProject={canInsertTemplateToProject}
             onOpenResourcePool={onOpenResourcePool}
+            adminTemplateLinks={hasAdminAccess ? adminTemplateLinks : []}
             onMenuOpenChange={setProjectActionsMenuOpen}
             onClose={() => setSidebarState('closed')}
             footer={billingFooter}
@@ -751,6 +754,7 @@ export function ProjectMenu({
               onInsertTemplateToProject={onInsertTemplateToProject}
               canInsertTemplateToProject={canInsertTemplateToProject}
               onOpenResourcePool={onOpenResourcePool}
+              adminTemplateLinks={hasAdminAccess ? adminTemplateLinks : []}
               onMenuOpenChange={setProjectActionsMenuOpen}
               footer={billingFooter}
             />

@@ -58,6 +58,7 @@ interface ProjectWorkspaceProps {
   chatDisabledReason?: string | null;
   batchUpdate?: UseBatchTaskUpdateResult;
   onSend?: (text: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
+  onStopGeneration?: () => void | Promise<void>;
   onLoginRequired: () => void;
   onCloseChat?: () => void;
   onToggleChat?: () => void;
@@ -522,6 +523,7 @@ export function ProjectWorkspace({
   chatDisabledReason = null,
   batchUpdate,
   onSend,
+  onStopGeneration,
   onLoginRequired,
   onCloseChat,
   onToggleChat,
@@ -2594,6 +2596,11 @@ export function ProjectWorkspace({
                   <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-primary" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900">AI готовит график. Подождите</p>
+                    {aiMutationLock.message && (
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {aiMutationLock.message}
+                      </p>
+                    )}
                   </div>
                   {canOpenChatFromLoader && (
                     <button
@@ -2652,12 +2659,6 @@ export function ProjectWorkspace({
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-primary">
                     <LoaderCircle className="h-3 w-3 animate-spin" />
                     AI занят
-                  </span>
-                )}
-
-                {previewRendering && (
-                  <span className="font-mono text-[11px] text-amber-600">
-                    Предварительный график до финального сохранения
                   </span>
                 )}
 
@@ -2747,8 +2748,9 @@ export function ProjectWorkspace({
               messages={chatMessages}
               streaming={streaming}
               onSend={onSend}
+              onStop={onStopGeneration}
               onTaskReferenceClick={handleTaskReferenceClick}
-              disabled={aiThinking || effectiveChatDisabled}
+              disabled={effectiveChatDisabled}
               connected={displayConnected}
               usage={chatUsage}
               disabledReason={aiThinking ? null : effectiveChatDisabledReason}

@@ -1,5 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import FeaturesChatDemo from "../components/FeaturesChatDemo";
+import FeaturesImportDemo from "../components/FeaturesImportDemo";
+import FeaturesPromptDemo from "../components/FeaturesPromptDemo";
 
 const features = [
   {
@@ -11,7 +14,7 @@ const features = [
       "Это в десятки раз быстрее, чем вручную создавать десятки задач и связей.",
     ],
     side: "left",
-    accent: true,
+    accent: false,
   },
   {
     id: "ai-editing",
@@ -25,14 +28,36 @@ const features = [
     accent: false,
   },
   {
+    id: "imports",
+    tag: "загружайте",
+    title: "Импорт из Excel и ГРАНД-Смета",
+    paragraphs: [
+      "Загружайте готовые графики из Excel по шаблону или подтягивайте структуру работ из файлов ГРАНД-Смета `.gsfx`.",
+      "Перед импортом GetGantt показывает превью, проверяет ошибки и помогает быстро перенести план в рабочий график.",
+    ],
+    side: "left",
+    accent: false,
+  },
+  {
     id: "workdays",
     tag: "считайте",
-    title: "Реальные сроки с учётом календаря",
+    title: "Российский производственный календарь",
     paragraphs: [
       "Настройте график под производственный календарь с учётом выходных и праздников. При переносе задач сроки не «поплывут» на субботу — система автоматически перепрыгивает нерабочие дни.",
       "Длительность этапов отображается в чистых рабочих днях, что делает график точным инструментом, а не формальной бумагой.",
     ],
     side: "left",
+    accent: false,
+  },
+  {
+    id: "table-control",
+    tag: "управляйте",
+    title: "Табличное управление задачами и связями",
+    paragraphs: [
+      "Работайте с задачами в таблице: меняйте даты, длительности, иерархию, порядок и видимые столбцы без лишних кликов.",
+      "Связи и зависимости можно не только тянуть мышью на диаграмме, но и редактировать через таблицу, что удобно для плотных графиков.",
+    ],
+    side: "right",
     accent: false,
   },
   {
@@ -58,14 +83,47 @@ const features = [
     accent: false,
   },
   {
+    id: "templates",
+    tag: "сохраняйте",
+    title: "Шаблоны и готовые блоки работ",
+    paragraphs: [
+      "Сохраняйте как шаблон весь график или только выбранную ветку задач вместе со связями и структурой.",
+      "Это удобно для типовых этапов: можно заранее собрать повторяющиеся блоки и вставлять их в новый проект за секунды.",
+    ],
+    side: "right",
+    accent: true,
+  },
+  {
+    id: "history-baseline",
+    tag: "сравнивайте",
+    title: "История версий и базовые планы",
+    paragraphs: [
+      "Каждое важное изменение попадает в историю: можно открыть старую версию, восстановить её или отменить последнее действие.",
+      "Текущий или исторический график можно сохранить как базовый план и затем сравнивать факт с исходным сценарием.",
+    ],
+    side: "left",
+    accent: false,
+  },
+  {
     id: "share",
     tag: "делитесь",
     title: "Единый источник правды для всех",
     paragraphs: [
-      "Создавайте ссылки на график для заказчиков, дизайнеров или подрядчиков. Им не нужно регистрироваться — актуальный план откроется в браузере на любом устройстве.",
-      "Вы сами определяете, кто может только просматривать график, а кто — вносить изменения.",
+      "Создавайте ссылки на весь график или только на выбранный раздел для заказчиков, дизайнеров и подрядчиков. Им не нужно регистрироваться — актуальный план откроется в браузере на любом устройстве.",
+      "Есть web-доступ на чтение, список активных ссылок и управление тем, какую часть проекта вы показываете внешним участникам.",
     ],
     side: "right",
+    accent: false,
+  },
+  {
+    id: "portfolio",
+    tag: "масштабируйте",
+    title: "Несколько проектов, группы и режимы работы",
+    paragraphs: [
+      "Держите несколько графиков в одном аккаунте, раскладывайте их по группам проектов, архивируйте завершённые и быстро переключайтесь между рабочими пространствами.",
+      "Отдельные режимы для графика, ресурсов и финансов помогают работать с одним и тем же проектом под разными углами без потери контекста.",
+    ],
+    side: "left",
     accent: false,
   },
 ];
@@ -84,6 +142,26 @@ const extras = [
     text: "Используйте блокировку холста, чтобы случайно не сдвинуть сроки при просмотре графика. Все важные изменения фиксируются в истории.",
   },
   {
+    title: "Фильтр несвязанных задач",
+    text: "Быстро находите задачи без зависимостей и другие проблемы графика через встроенные фильтры качества планирования.",
+  },
+  {
+    title: "Сдвиг всего проекта",
+    text: "Переносите весь график на нужное количество дней, если сдвинулись сроки старта или изменились внешние условия.",
+  },
+  {
+    title: "Базовый и фактический сценарий",
+    text: "Сохраняйте эталонный вариант графика и сравнивайте с текущим состоянием, чтобы видеть отклонения по срокам.",
+  },
+  {
+    title: "Финансовый режим",
+    text: "Назначайте стоимость работ, смотрите план финансирования и фиксируйте поступления по задачам и периодам.",
+  },
+  {
+    title: "Обратная связь из приложения",
+    text: "Пользователь может отправить сообщение прямо из интерфейса без отдельной переписки и скриншотов по почте.",
+  },
+  {
     title: "Мобильная версия",
     text: "Просматривайте график и отмечайте выполнение задач прямо со смартфона на стройплощадке.",
   },
@@ -99,14 +177,19 @@ const extras = [
   {/* Page Hero */}
   <section class="border-b border-border bg-background">
     <div class="mx-auto max-w-5xl px-4 py-20 text-center lg:px-6 lg:py-28">
-      <p class="mb-4 text-sm font-semibold uppercase tracking-widest text-primary">
+      <p
+        class="mb-4 text-sm font-semibold uppercase tracking-widest text-primary"
+      >
         Возможности
       </p>
-      <h1 class="mx-auto max-w-3xl text-4xl font-extrabold leading-tight tracking-tight text-foreground lg:text-5xl">
+      <h1
+        class="mx-auto max-w-3xl text-4xl font-extrabold leading-tight tracking-tight text-foreground lg:text-5xl"
+      >
         Профессиональный график Ганта с помощью ИИ
       </h1>
       <p class="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-        Опишите проект простыми словами. ИИ сам распределит задачи по этапам, свяжет их логикой и рассчитает сроки.
+        Опишите проект простыми словами. ИИ сам распределит задачи по этапам,
+        свяжет их логикой и рассчитает сроки.
       </p>
       <div class="mt-10">
         <a
@@ -120,61 +203,80 @@ const extras = [
   </section>
 
   {/* Feature Sections */}
-  {features.map((feature) => (
-    <section
-      id={feature.id}
-      class={`border-b border-border ${feature.accent ? "bg-accent/5" : "bg-background"}`}
-    >
-      <div class="mx-auto max-w-5xl px-4 py-16 lg:px-6 lg:py-24">
-        <div
-          class={`flex flex-col gap-10 lg:flex-row lg:items-center lg:gap-16 ${
-            feature.side === "right" ? "lg:flex-row-reverse" : ""
-          }`}
-        >
-          {/* Text Block */}
-          <div class="flex-1">
-            <span class="mb-3 inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              {feature.tag}
-            </span>
-            <h2 class="mt-2 text-3xl font-bold leading-tight text-foreground lg:text-4xl">
-              {feature.title}
-            </h2>
-            <div class="mt-4 space-y-3">
-              {feature.paragraphs.map((p) => (
-                <p class="text-base leading-relaxed text-muted-foreground lg:text-lg">{p}</p>
-              ))}
+  {
+    features.map((feature) => (
+      <section
+        id={feature.id}
+        class={feature.accent ? "bg-accent/5" : "bg-background"}
+      >
+        <div class="mx-auto max-w-5xl px-4 py-16 lg:px-6 lg:py-24">
+          <div
+            class={`flex flex-col gap-10 lg:flex-row lg:items-center lg:gap-16 ${
+              feature.side === "right" ? "lg:flex-row-reverse" : ""
+            }`}
+          >
+            {/* Text Block */}
+            <div class="flex-1">
+              <h2 class="text-3xl font-bold leading-tight text-foreground lg:text-4xl">
+                {feature.title}
+              </h2>
+              <div class="mt-4 space-y-3">
+                {feature.paragraphs.map((p) => (
+                  <p class="text-base leading-relaxed text-muted-foreground lg:text-lg">
+                    {p}
+                  </p>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Visual Placeholder */}
-          <div class="flex-1">
-            <div class="aspect-[4/3] rounded-2xl border border-border bg-muted/40 flex items-center justify-center">
-              <span class="text-4xl opacity-20">
-                {feature.id === "ai-planning" && "🤖"}
-                {feature.id === "ai-editing" && "🖱️"}
-                {feature.id === "workdays" && "📅"}
-                {feature.id === "resources" && "👷"}
-                {feature.id === "search-filters" && "🔍"}
-                {feature.id === "share" && "🔗"}
-              </span>
+            {/* Visual Block */}
+            <div class="flex-1">
+              {feature.id === "ai-planning" ? (
+                <FeaturesPromptDemo client:load />
+              ) : feature.id === "ai-editing" ? (
+                <FeaturesChatDemo client:load />
+              ) : feature.id === "imports" ? (
+                <FeaturesImportDemo client:load />
+              ) : (
+                <div class="aspect-[4/3] rounded-2xl border border-border bg-muted/40 flex items-center justify-center">
+                  <span class="text-4xl opacity-20">
+                    {feature.id === "workdays" && "📅"}
+                    {feature.id === "table-control" && "📋"}
+                    {feature.id === "resources" && "👷"}
+                    {feature.id === "search-filters" && "🔍"}
+                    {feature.id === "templates" && "🧱"}
+                    {feature.id === "history-baseline" && "🕓"}
+                    {feature.id === "share" && "🔗"}
+                    {feature.id === "portfolio" && "🗂️"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
-    </section>
-  ))}
+      </section>
+    ))
+  }
 
   {/* Extras Grid */}
   <section class="border-b border-border bg-background">
     <div class="mx-auto max-w-5xl px-4 py-16 lg:px-6 lg:py-24">
-      <h2 class="mb-10 text-2xl font-bold text-foreground lg:text-3xl">Что ещё</h2>
+      <h2 class="mb-10 text-2xl font-bold text-foreground lg:text-3xl">
+        Что ещё
+      </h2>
       <div class="grid gap-8 sm:grid-cols-2">
-        {extras.map((item) => (
-          <div>
-            <h3 class="text-lg font-semibold text-foreground">{item.title}</h3>
-            <p class="mt-2 text-base leading-relaxed text-muted-foreground">{item.text}</p>
-          </div>
-        ))}
+        {
+          extras.map((item) => (
+            <div>
+              <h3 class="text-lg font-semibold text-foreground">
+                {item.title}
+              </h3>
+              <p class="mt-2 text-base leading-relaxed text-muted-foreground">
+                {item.text}
+              </p>
+            </div>
+          ))
+        }
       </div>
     </div>
   </section>
@@ -186,7 +288,8 @@ const extras = [
         Попробуйте — это быстро
       </h2>
       <p class="mx-auto mt-4 max-w-xl text-muted-foreground">
-        Зайдите, напишите что нужно сделать, и через минуту у вас будет план. Без регистрации по паролю — только почта или Telegram.
+        Зайдите, напишите что нужно сделать, и через минуту у вас будет план.
+        Без регистрации по паролю — только почта или Telegram.
       </p>
       <div class="mt-8">
         <a

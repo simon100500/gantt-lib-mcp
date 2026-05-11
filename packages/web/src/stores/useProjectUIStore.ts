@@ -21,6 +21,7 @@ interface ProjectUIState {
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
   taskDateChangeMode: TaskDateChangeMode;
+  taskListColumnsInitialized: boolean;
   hiddenTaskListColumns: string[];
   hiddenFinanceTaskListColumns: string[];
   taskListColumnWidths: TaskListColumnWidthMap;
@@ -57,6 +58,7 @@ const DEFAULT_STATE: ProjectUIState = {
   collapsedParentIds: [],
   disableTaskDrag: false,
   taskDateChangeMode: 'preserve-duration',
+  taskListColumnsInitialized: false,
   hiddenTaskListColumns: [],
   hiddenFinanceTaskListColumns: [],
   taskListColumnWidths: {},

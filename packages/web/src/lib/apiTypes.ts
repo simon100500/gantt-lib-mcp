@@ -165,3 +165,84 @@ export interface TemplateWorkspaceResponse {
     dependencies: ProjectDependency[];
   };
 }
+
+export type TemplatePublicationKind = 'template' | 'block';
+export type TemplatePublicationStatus = 'draft' | 'published' | 'archived' | 'rejected';
+export type TemplatePublicationVisibility = 'private' | 'marketplace' | 'site' | 'both';
+export type TemplatePublicationVerificationStatus = 'unverified' | 'reviewed' | 'verified' | 'editorial';
+export type TemplateGenerationJobStatus = 'queued' | 'in_progress' | 'review_required' | 'ready_to_publish' | 'published' | 'failed';
+
+export interface TemplatePublicationListItem {
+  id: string;
+  slug: string;
+  kind: TemplatePublicationKind;
+  sourceProjectId: string;
+  sourceUserId: string;
+  sourceTemplateId: string | null;
+  sourceKind: 'project' | 'task_selection';
+  sourceSelectionTaskIds: string[];
+  title: string;
+  subtitle: string | null;
+  summary: string | null;
+  category: string | null;
+  industry: string | null;
+  tags: string[];
+  status: TemplatePublicationStatus;
+  visibility: TemplatePublicationVisibility;
+  verificationStatus: TemplatePublicationVerificationStatus;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoBody: string | null;
+  coverImageUrl: string | null;
+  previewImageUrl: string | null;
+  taskCount: number;
+  publishedAt: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemplatePublicationDetail extends TemplatePublicationListItem {
+  snapshot: {
+    tasks: Task[];
+    dependencies: ProjectDependency[];
+    ganttDayMode: 'business' | 'calendar';
+    calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
+    timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
+  };
+}
+
+export interface TemplateGenerationJobListItem {
+  id: string;
+  requestedByUserId: string;
+  sourceProjectId: string | null;
+  publicationId: string | null;
+  sourceDescription: string;
+  kind: TemplatePublicationKind;
+  category: string | null;
+  industry: string | null;
+  title: string | null;
+  slug: string | null;
+  autoPublish: boolean;
+  status: TemplateGenerationJobStatus;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoBody: string | null;
+  errorMessage: string | null;
+  lastRunAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemplateGenerationSourceListItem {
+  projectId: string;
+  projectName: string;
+  projectStatus: 'active' | 'archived' | 'deleted';
+  sourceDescription: string;
+  latestJobId: string;
+  latestJobStatus: TemplateGenerationJobStatus;
+  publicationCount: number;
+  createdAt: string;
+  updatedAt: string;
+}

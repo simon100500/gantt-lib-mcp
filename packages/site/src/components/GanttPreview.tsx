@@ -1,9 +1,8 @@
-import { memo, useState, useRef, useEffect, useCallback } from 'react';
+import { memo, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
 import type { Task, GanttChartHandle } from 'gantt-lib';
 import 'gantt-lib/styles.css';
-
 
 const DAY_WIDTHS = {
   day: 22,
@@ -33,13 +32,106 @@ const getAllDescendants = (parentId: string, tasks: Task[]): Task[] => {
 interface GanttPreviewProps {
   initialTasks?: Task[];
   title?: string;
+  fullWidth?: boolean;
+  containerHeight?: string;
+  headerNote?: string;
+  headerNoteHref?: string;
+  showDateHeader?: boolean;
+  progressiveReveal?: boolean;
 }
 
-function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
+function toDate(value: string | Date): Date {
+  if (value instanceof Date) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year!, (month ?? 1) - 1, day ?? 1);
+  }
+
+  const parsed = new Date(value);
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function formatLocalIsoDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function diffDays(start: Date, end: Date): number {
+  return Math.round((end.getTime() - start.getTime()) / 86400000);
+}
+
+function getTaskMetrics(tasks: Task[]) {
+  if (tasks.length === 0) {
+    return null;
+  }
+
+  const starts = tasks.map((task) => toDate(task.startDate as string | Date));
+  const ends = tasks.map((task) => toDate(task.endDate as string | Date));
+  const earliestStart = starts.reduce((min, value) => (value.getTime() < min.getTime() ? value : min), starts[0]!);
+  const latestEnd = ends.reduce((max, value) => (value.getTime() > max.getTime() ? value : max), ends[0]!);
+  const totalDays = Math.max(1, diffDays(earliestStart, latestEnd) + 1);
+
+  return {
+    earliestStart,
+    latestEnd,
+    totalDays,
+  };
+}
+
+function shiftTasksToStart(tasks: Task[], nextStartDate: string): Task[] {
+  const metrics = getTaskMetrics(tasks);
+  if (!metrics) {
+    return tasks;
+  }
+
+  const selectedStart = toDate(nextStartDate);
+  return tasks.map((task) => {
+    const startOffset = diffDays(metrics.earliestStart, toDate(task.startDate as string | Date));
+    const endOffset = diffDays(metrics.earliestStart, toDate(task.endDate as string | Date));
+    return {
+      ...task,
+      startDate: formatLocalIsoDate(addDays(selectedStart, startOffset)),
+      endDate: formatLocalIsoDate(addDays(selectedStart, endOffset)),
+    };
+  });
+}
+
+function mergeChangedTasks(currentTasks: Task[], changedTasks: Task[]): Task[] {
+  if (changedTasks.length === 0) {
+    return currentTasks;
+  }
+
+  const changedById = new Map(changedTasks.map((task) => [task.id, task]));
+  return currentTasks.map((task) => changedById.get(task.id) ?? task);
+}
+
+function GanttPreview({
+  initialTasks,
+  title,
+  fullWidth = false,
+  containerHeight = '500px',
+  headerNote,
+  headerNoteHref,
+  showDateHeader = true,
+  progressiveReveal = false,
+}: GanttPreviewProps) {
   const allTasks = initialTasks ?? [];
+  const todayIso = useMemo(() => formatLocalIsoDate(new Date()), []);
+  const [projectStartDate, setProjectStartDate] = useState(todayIso);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
   const [showTaskList, setShowTaskList] = useState(true);
   const ganttRef = useRef<GanttChartHandle>(null);
   const previewRootRef = useRef<HTMLDivElement>(null);
@@ -55,32 +147,42 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
     return () => mql.removeEventListener('change', listener);
   }, []);
 
-  // Reveal tasks one by one when the selected template changes.
   useEffect(() => {
     revealTimersRef.current.forEach(clearTimeout);
     revealTimersRef.current = [];
-    setTasks([]);
     setCollapsedParentIds(new Set());
 
     if (!allTasks.length) {
+      setTasks([]);
       return;
     }
 
-    let i = 0;
+    const shiftedTasks = shiftTasksToStart(allTasks, todayIso);
+    setProjectStartDate(todayIso);
+
+    if (!progressiveReveal) {
+      setTasks(shiftedTasks);
+      return;
+    }
+
+    setTasks([]);
+
+    let index = 0;
     const reveal = () => {
-      i++;
-      setTasks(allTasks.slice(0, i));
-      if (i < allTasks.length) {
+      index += 1;
+      setTasks(shiftedTasks.slice(0, index));
+      if (index < shiftedTasks.length) {
         revealTimersRef.current.push(setTimeout(reveal, 110));
       }
     };
+
     revealTimersRef.current.push(setTimeout(reveal, 150));
 
     return () => {
       revealTimersRef.current.forEach(clearTimeout);
       revealTimersRef.current = [];
     };
-  }, [allTasks]);
+  }, [allTasks, todayIso, progressiveReveal]);
 
   useEffect(() => {
     const container = previewRootRef.current?.querySelector<HTMLElement>('.gantt-container');
@@ -91,17 +193,48 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
 
   // Scroll to first task once it appears
   useEffect(() => {
-    if (tasks.length === 1 && allTasks[0]) {
+    const shouldScroll = progressiveReveal ? tasks.length === 1 : tasks.length > 0;
+    if (shouldScroll && allTasks[0]) {
       ganttRef.current?.scrollToTask(allTasks[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks.length, progressiveReveal]);
+
+  const taskMetrics = useMemo(() => getTaskMetrics(tasks), [tasks]);
+
+  useEffect(() => {
+    if (!taskMetrics) {
+      return;
+    }
+    const nextStartDate = formatLocalIsoDate(taskMetrics.earliestStart);
+    setProjectStartDate((current) => (current === nextStartDate ? current : nextStartDate));
+  }, [taskMetrics]);
+
+  const finishDate = useMemo(() => {
+    if (!taskMetrics) {
+      return null;
+    }
+    return formatLocalIsoDate(taskMetrics.latestEnd);
+  }, [taskMetrics]);
+
+  const handleProjectStartChange = useCallback((value: string) => {
+    if (!value || tasks.length === 0) {
+      return;
+    }
+    setTasks((prev) => shiftTasksToStart(prev, value));
   }, [tasks.length]);
 
+  const handleFinishDateChange = useCallback((value: string) => {
+    if (!value || !taskMetrics || tasks.length === 0) {
+      return;
+    }
+    const nextFinishDate = toDate(value);
+    const nextStartDate = addDays(nextFinishDate, -(taskMetrics.totalDays - 1));
+    setTasks((prev) => shiftTasksToStart(prev, formatLocalIsoDate(nextStartDate)));
+  }, [taskMetrics, tasks.length]);
+
   const handleChange = useCallback((updatedTasks: Task[]) => {
-    setTasks(prev => {
-      const updatedMap = new Map(updatedTasks.map(t => [t.id, t]));
-      return prev.map(t => updatedMap.get(t.id) ?? t);
-    });
+    setTasks((currentTasks) => mergeChangedTasks(currentTasks, updatedTasks));
   }, []);
 
   const handleAdd = useCallback((newTask: Task) => {
@@ -167,9 +300,57 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   }, []);
 
   return (
-    <div ref={previewRootRef} className="mx-auto w-[90%]">
+    <div ref={previewRootRef} className={fullWidth ? 'w-full' : 'mx-auto w-[90%]'}>
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
+        {(showDateHeader || headerNote) ? (
+          <div className={`grid gap-3 border-b border-slate-200 bg-white px-4 py-3 ${showDateHeader ? (headerNote ? 'lg:grid-cols-[220px_220px_120px_minmax(0,1fr)]' : 'lg:grid-cols-[220px_220px_120px]') : 'lg:grid-cols-[minmax(0,1fr)]'} lg:items-start`}>
+            {showDateHeader ? (
+              <>
+                <label className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+                  <span>Старт проекта</span>
+                  <input
+                    type="date"
+                    value={projectStartDate}
+                    onChange={(event) => handleProjectStartChange(event.target.value)}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none transition-colors focus:border-primary"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+                  <span>Финиш (фикс дата)</span>
+                  <input
+                    type="date"
+                    value={finishDate ?? ''}
+                    onChange={(event) => handleFinishDateChange(event.target.value)}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none transition-colors focus:border-primary"
+                  />
+                </label>
+                <div className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+                  <span>Дней</span>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700">
+                    {taskMetrics?.totalDays ?? 0}
+                  </div>
+                </div>
+              </>
+            ) : null}
+            {headerNote ? (
+              <div className={showDateHeader ? 'pt-[22px] text-sm leading-6 text-slate-600' : 'text-sm leading-6 text-slate-600'}>
+                <span>{headerNote}</span>
+                {headerNoteHref ? (
+                  <>
+                    {' '}
+                    <a
+                      href={headerNoteHref}
+                      className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
+                    >
+                      Использовать шаблон
+                    </a>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {/* Chart header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
           {/* Project name */}
@@ -251,7 +432,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
         {/* Gantt Chart */}
         <div>
           {tasks.length === 0 ? (
-            <div className="flex items-center justify-center text-slate-400 text-sm animate-pulse" style={{ height: '500px' }}>
+            <div className="flex items-center justify-center text-slate-400 text-sm animate-pulse" style={{ height: containerHeight }}>
               Генерирую график…
             </div>
           ) : <GanttChart
@@ -259,7 +440,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
             tasks={tasks}
             dayWidth={DAY_WIDTHS[viewMode]}
             rowHeight={36}
-            containerHeight="500px"
+            containerHeight={containerHeight}
             onTasksChange={handleChange}
             onAdd={handleAdd}
             onDelete={handleDelete}

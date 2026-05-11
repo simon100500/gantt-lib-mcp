@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
 
 import { AccountPage } from './components/AccountPage.tsx';
 import { AdminPage } from './components/AdminPage.tsx';
@@ -9,6 +9,7 @@ import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
+import { BlockPublicationIntentPage } from './components/PublicationIntentPages.tsx';
 import { SaveTemplateModal } from './components/SaveTemplateModal.tsx';
 import { ShareLinksManagerModal } from './components/ShareLinksManagerModal.tsx';
 import { BackupRestoreModal, type BackupRestoreSummary } from './components/BackupRestoreModal.tsx';
@@ -27,7 +28,7 @@ import { FinanceWorkspace } from './components/workspace/FinanceWorkspace.tsx';
 import { ResourcePlannerWorkspace } from './components/workspace/ResourcePlannerWorkspace.tsx';
 import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
 import { TemplateWorkspace } from './components/workspace/TemplateWorkspace.tsx';
-import { useAuth, type UseAuthResult } from './hooks/useAuth.ts';
+import { useAuth, type AuthProject, type UseAuthResult } from './hooks/useAuth.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
 import { useAppUpdateCheck } from './hooks/useAppUpdateCheck.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
@@ -36,7 +37,7 @@ import { useTasks } from './hooks/useTasks.ts';
 import { useTemplateBatchUpdate } from './hooks/useTemplateBatchUpdate.ts';
 import { useTemplates } from './hooks/useTemplates.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
-import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts';
+import type { AuthSuccessResponse, ProjectLoadResponse, TemplatePublicationDetail } from './lib/apiTypes.ts';
 import { PLAN_LABELS, type PlanId } from './lib/billing.ts';
 import { normalizeConstraintDenialPayload, type ConstraintDenialPayload, type ConstraintLimitKey } from './lib/constraintUi.ts';
 import { collectTaskSubtreeIds } from './lib/shareLinkSelection.ts';
@@ -51,6 +52,8 @@ import { useProjectStore } from './stores/useProjectStore.ts';
 import { normalizeTasks, type ProjectSectionPermissions, type Task, type TimelineMarker, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
+const GENERATION_JOB_STORAGE_KEY_PREFIX = 'gantt_generation_job:';
+const GENERATION_PREVIEW_STORAGE_KEY_PREFIX = 'gantt_generation_preview:';
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
 const AI_DONE_GRACE_PERIOD_MS = 10000;
 const AI_MUTATION_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
@@ -61,7 +64,7 @@ interface RouteState {
 }
 
 type BillingConstraintStatus = UsageStatus | SubscriptionStatus | null;
-const SUPPORTED_APP_PATHS = new Set(['/', '/auth/yandex/callback', '/purchase', '/account', '/admin']);
+const SUPPORTED_APP_PATHS = new Set(['/', '/login', '/auth/yandex/callback', '/purchase', '/account', '/admin']);
 const TRANSIENT_QUERY_PARAMS = new Set(['auth']);
 
 function isConstraintCode(code: string | undefined): code is ConstraintDenialPayload['code'] {
@@ -152,6 +155,65 @@ function normalizePathname(pathname: string): string {
   }
 
   return pathname;
+}
+
+function parseTemplateCreatePath(pathname: string): { publicationId: string } | null {
+  const match = pathname.match(/^\/app\/templates\/([^/]+)\/create$/);
+  if (!match) {
+    return null;
+  }
+
+  const publicationId = match[1] ? decodeURIComponent(match[1]) : '';
+  return publicationId ? { publicationId } : null;
+}
+
+function parseBlockIntentPath(pathname: string): { publicationId: string } | null {
+  const match = pathname.match(/^\/app\/blocks\/([^/]+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const publicationId = match[1] ? decodeURIComponent(match[1]) : '';
+  return publicationId ? { publicationId } : null;
+}
+
+function parseProjectOpenSearch(search: string): { projectId: string } | null {
+  const projectId = new URLSearchParams(search).get('projectId')?.trim() ?? '';
+  return projectId ? { projectId } : null;
+}
+
+function parseProjectCreationIntentRoute(pathname: string, search: string): { intentId: string | null } | null {
+  if (pathname !== '/app/new') {
+    return null;
+  }
+
+  const intentId = new URLSearchParams(search).get('intent')?.trim() ?? '';
+  return { intentId: intentId || null };
+}
+
+function sanitizeNextPath(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin) {
+      return null;
+    }
+
+    if (!url.pathname.startsWith('/')) {
+      return null;
+    }
+
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
+}
+
+function buildLoginRoute(nextPath: string): string {
+  return `/login?next=${encodeURIComponent(nextPath)}`;
 }
 
 function removeTransientSearchParams(search: string): string {
@@ -259,6 +321,196 @@ type PreviewState = {
   wave: number;
 };
 
+type ProjectGenerationJobView = {
+  id: string;
+  projectId: string | null;
+  intentId: string | null;
+  userId: string;
+  source: string;
+  type: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  stage: 'queued' | 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing' | 'succeeded' | 'failed';
+  statusMessage: string | null;
+  requestContextId: string | null;
+  historyGroupId: string | null;
+  progressPercent: number | null;
+  previewMode: 'none' | 'ephemeral' | 'persisted';
+  previewAvailable: boolean;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type NormalizedChatMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  requestContextId: string | null;
+  historyGroupId: string | null;
+};
+
+function isActiveProjectGenerationJob(job: ProjectGenerationJobView | null): boolean {
+  return Boolean(job && (job.status === 'queued' || job.status === 'running'));
+}
+
+function isSameChatMessage(left: NormalizedChatMessage, right: NormalizedChatMessage): boolean {
+  if (left.id === right.id) {
+    return true;
+  }
+
+  if (left.requestContextId && right.requestContextId && left.requestContextId === right.requestContextId) {
+    return true;
+  }
+
+  if (left.historyGroupId && right.historyGroupId && left.historyGroupId === right.historyGroupId) {
+    return true;
+  }
+
+  return left.role === right.role && left.content === right.content;
+}
+
+function mergeOptimisticChatMessages(
+  serverMessages: NormalizedChatMessage[],
+  localMessages: NormalizedChatMessage[],
+): NormalizedChatMessage[] {
+  const trailingOptimisticUsers: NormalizedChatMessage[] = [];
+
+  for (let index = localMessages.length - 1; index >= 0; index -= 1) {
+    const message = localMessages[index];
+    if (message.role !== 'user') {
+      break;
+    }
+
+    if (message.requestContextId || message.historyGroupId) {
+      break;
+    }
+
+    if (serverMessages.some((serverMessage) => isSameChatMessage(serverMessage, message))) {
+      break;
+    }
+
+    trailingOptimisticUsers.unshift(message);
+  }
+
+  if (trailingOptimisticUsers.length === 0) {
+    return serverMessages;
+  }
+
+  return [...serverMessages, ...trailingOptimisticUsers];
+}
+
+function getGenerationStageFallbackMessage(stage: ProjectGenerationJobView['stage']): string | null {
+  switch (stage) {
+    case 'queued':
+      return 'Ручное редактирование пока недоступно';
+    case 'interpreting':
+      return 'Понимаем запрос';
+    case 'planning':
+      return 'Планируем график';
+    case 'compiling':
+      return 'Собираем график';
+    case 'committing':
+      return 'Сохраняем изменения в проект';
+    case 'finalizing':
+      return 'Фиксируем результат';
+    default:
+      return null;
+  }
+}
+
+function resolveGenerationLockMessage(
+  job: ProjectGenerationJobView | null,
+  currentMessage: string | null,
+): string | null {
+  if (!job) {
+    return currentMessage;
+  }
+
+  return job.statusMessage ?? getGenerationStageFallbackMessage(job.stage) ?? currentMessage;
+}
+
+type StoredGenerationPreview = {
+  jobId: string;
+  projectId: string;
+  tasks: Task[];
+  mode: 'rendering' | 'failed';
+  message: string | null;
+  wave: number;
+};
+
+function canUseSessionStorage(): boolean {
+  return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
+}
+
+function getGenerationJobStorageKey(projectId: string): string {
+  return `${GENERATION_JOB_STORAGE_KEY_PREFIX}${projectId}`;
+}
+
+function getGenerationPreviewStorageKey(projectId: string): string {
+  return `${GENERATION_PREVIEW_STORAGE_KEY_PREFIX}${projectId}`;
+}
+
+function readStoredGenerationJob(projectId: string): ProjectGenerationJobView | null {
+  if (!canUseSessionStorage()) {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(getGenerationJobStorageKey(projectId));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as ProjectGenerationJobView;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredGenerationJob(projectId: string, job: ProjectGenerationJobView | null): void {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+
+  if (!job || !isActiveProjectGenerationJob(job)) {
+    window.sessionStorage.removeItem(getGenerationJobStorageKey(projectId));
+    return;
+  }
+
+  window.sessionStorage.setItem(getGenerationJobStorageKey(projectId), JSON.stringify(job));
+}
+
+function readStoredGenerationPreview(projectId: string): StoredGenerationPreview | null {
+  if (!canUseSessionStorage()) {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(getGenerationPreviewStorageKey(projectId));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as StoredGenerationPreview;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredGenerationPreview(projectId: string, preview: StoredGenerationPreview | null): void {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+
+  if (!preview) {
+    window.sessionStorage.removeItem(getGenerationPreviewStorageKey(projectId));
+    return;
+  }
+
+  window.sessionStorage.setItem(getGenerationPreviewStorageKey(projectId), JSON.stringify(preview));
+}
+
 export default function App() {
   const auth = useAuth();
   const localTasks = useLocalTasks();
@@ -272,6 +524,9 @@ export default function App() {
     pathname: window.location.pathname,
     search: window.location.search,
   }));
+  const [workspaceTemplateCreateIntentId, setWorkspaceTemplateCreateIntentId] = useState<string | null>(null);
+  const [workspaceProjectCreationIntentId, setWorkspaceProjectCreationIntentId] = useState<string | null>(null);
+  const [workspaceProjectOpenIntentId, setWorkspaceProjectOpenIntentId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleRouteChange = () => {
@@ -283,6 +538,19 @@ export default function App() {
 
     window.addEventListener('popstate', handleRouteChange);
     return () => window.removeEventListener('popstate', handleRouteChange);
+  }, []);
+
+  const navigate = useCallback((target: string, replace = true) => {
+    const nextUrl = `${window.location.origin}${target}`;
+    if (replace) {
+      window.history.replaceState(window.history.state, '', nextUrl);
+    } else {
+      window.history.pushState(window.history.state, '', nextUrl);
+    }
+    setRoute({
+      pathname: window.location.pathname,
+      search: window.location.search,
+    });
   }, []);
 
   useEffect(() => {
@@ -389,11 +657,29 @@ export default function App() {
         console.error('Failed to transfer project name after login:', transferError);
       }
     }
-  }, [auth, localTasks, setShowOtpModal]);
+
+    const nextPath = sanitizeNextPath(new URLSearchParams(route.search).get('next'));
+    if (nextPath) {
+      navigate(nextPath);
+      return;
+    }
+
+    if (normalizePathname(route.pathname) === '/login') {
+      navigate('/');
+    }
+  }, [auth, localTasks, navigate, route.pathname, route.search, setShowOtpModal]);
 
   const normalizedPathname = normalizePathname(route.pathname);
-  const isKnownRoute = SUPPORTED_APP_PATHS.has(normalizedPathname);
+  const templateCreateRoute = parseTemplateCreatePath(normalizedPathname);
+  const blockIntentRoute = parseBlockIntentPath(normalizedPathname);
+  const projectCreationIntentRoute = parseProjectCreationIntentRoute(normalizedPathname, route.search);
+  const isLoginRoute = normalizedPathname === '/login';
+  const isKnownRoute = SUPPORTED_APP_PATHS.has(normalizedPathname)
+    || Boolean(templateCreateRoute)
+    || Boolean(blockIntentRoute)
+    || Boolean(projectCreationIntentRoute);
   const authModalMethod = new URLSearchParams(route.search).get('auth') === 'otp' ? 'otp' : 'yandex';
+  const projectOpenRoute = parseProjectOpenSearch(route.search);
   const isYandexCallbackRoute = normalizedPathname === '/auth/yandex/callback';
   const isPurchaseRoute = normalizedPathname === '/purchase';
   const isAccountRoute = normalizedPathname === '/account';
@@ -416,10 +702,83 @@ export default function App() {
     });
   }, [isKnownRoute, route.search]);
 
+  useEffect(() => {
+    if (!isLoginRoute) {
+      return;
+    }
+
+    if (auth.isAuthenticated) {
+      const nextPath = sanitizeNextPath(new URLSearchParams(route.search).get('next'));
+      navigate(nextPath ?? '/');
+      return;
+    }
+
+    setShowOtpModal(true);
+  }, [auth.isAuthenticated, isLoginRoute, navigate, route.search, setShowOtpModal]);
+
+  useEffect(() => {
+    const intentRoute = templateCreateRoute ?? blockIntentRoute;
+    if (!intentRoute || auth.isAuthenticated) {
+      return;
+    }
+
+    navigate(buildLoginRoute(`${route.pathname}${route.search}`));
+  }, [auth.isAuthenticated, blockIntentRoute, navigate, route.pathname, route.search, templateCreateRoute]);
+
+  useEffect(() => {
+    if (!projectCreationIntentRoute) {
+      return;
+    }
+
+    if (!auth.isAuthenticated) {
+      navigate(buildLoginRoute(`${route.pathname}${route.search}`));
+      return;
+    }
+
+    setWorkspaceProjectCreationIntentId(projectCreationIntentRoute.intentId);
+    navigate('/');
+  }, [auth.isAuthenticated, navigate, projectCreationIntentRoute, route.pathname, route.search]);
+
+  useEffect(() => {
+    if (!projectOpenRoute) {
+      return;
+    }
+
+    if (!auth.isAuthenticated) {
+      navigate(buildLoginRoute(`${route.pathname}${route.search}`));
+      return;
+    }
+
+    setWorkspaceProjectOpenIntentId(projectOpenRoute.projectId);
+    navigate('/');
+  }, [auth.isAuthenticated, navigate, projectOpenRoute, route.pathname, route.search]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !templateCreateRoute) {
+      return;
+    }
+
+    setWorkspaceTemplateCreateIntentId(templateCreateRoute.publicationId);
+    navigate('/');
+  }, [auth.isAuthenticated, navigate, templateCreateRoute]);
+
+  const handleOtpClose = useCallback(() => {
+    setShowOtpModal(false);
+    if (isLoginRoute) {
+      navigate('/');
+    }
+  }, [isLoginRoute, navigate, setShowOtpModal]);
+
   return (
     <>
       {isYandexCallbackRoute ? (
         <YandexCallbackPage />
+      ) : blockIntentRoute ? (
+        <BlockPublicationIntentPage
+          publicationId={blockIntentRoute.publicationId}
+          auth={auth}
+          onLoginRequired={() => setShowOtpModal(true)}
+        />
       ) : isPurchaseRoute ? (
         <PurchasePage
           initialPlan={initialPurchasePlan}
@@ -446,6 +805,12 @@ export default function App() {
           auth={auth}
           localTasks={localTasks}
           onLoginRequired={() => setShowOtpModal(true)}
+          templateCreateIntentId={workspaceTemplateCreateIntentId}
+          onConsumeTemplateCreateIntent={() => setWorkspaceTemplateCreateIntentId(null)}
+          projectCreationIntentId={workspaceProjectCreationIntentId}
+          onConsumeProjectCreationIntent={() => setWorkspaceProjectCreationIntentId(null)}
+          projectOpenIntentId={workspaceProjectOpenIntentId}
+          onConsumeProjectOpenIntent={() => setWorkspaceProjectOpenIntentId(null)}
         />
       )}
 
@@ -453,7 +818,7 @@ export default function App() {
         <OtpModal
           initialMethod={authModalMethod}
           onSuccess={handleAuthSuccess}
-          onClose={() => setShowOtpModal(false)}
+          onClose={handleOtpClose}
         />
       )}
 
@@ -483,15 +848,36 @@ interface WorkspaceAppProps {
   auth: UseAuthResult;
   localTasks: ReturnType<typeof useLocalTasks>;
   onLoginRequired: () => void;
+  templateCreateIntentId: string | null;
+  onConsumeTemplateCreateIntent: () => void;
+  projectCreationIntentId: string | null;
+  onConsumeProjectCreationIntent: () => void;
+  projectOpenIntentId: string | null;
+  onConsumeProjectOpenIntent: () => void;
 }
 
 interface PendingProjectCreation {
   firstPrompt?: string;
   createEmptyChart?: boolean;
   groupId?: string;
+  projectIntentId?: string;
+  templatePublicationId?: string;
+  initialProjectName?: string;
+  title?: string;
+  description?: string;
 }
 
-function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) {
+function WorkspaceApp({
+  auth,
+  localTasks,
+  onLoginRequired,
+  templateCreateIntentId,
+  onConsumeTemplateCreateIntent,
+  projectCreationIntentId,
+  onConsumeProjectCreationIntent,
+  projectOpenIntentId,
+  onConsumeProjectOpenIntent,
+}: WorkspaceAppProps) {
   const sharedProject = useSharedProject();
   const workspace = useUIStore((state) => state.workspace);
   const pendingPostAuthAction = useUIStore((state) => state.pendingPostAuthAction);
@@ -508,6 +894,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setShowProjectSettingsModal = useUIStore((state) => state.setShowProjectSettingsModal);
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
+  const aiMutationLock = useUIStore((state) => state.aiMutationLock);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const activeTemplate = useTemplateStore((state) => state.activeTemplate);
@@ -517,6 +904,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showPdfHelper, setShowPdfHelper] = useState(false);
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
+  const [pendingPreparedIntentStart, setPendingPreparedIntentStart] = useState<{ intentId: string; projectId: string } | null>(null);
+  const [preparedIntentChatProjectId, setPreparedIntentChatProjectId] = useState<string | null>(null);
+  const [activeGenerationJob, setActiveGenerationJob] = useState<ProjectGenerationJobView | null>(null);
+  const [generationJobLookupPending, setGenerationJobLookupPending] = useState(false);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const [isImportTemplateLoading, setIsImportTemplateLoading] = useState(false);
@@ -672,12 +1063,51 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const queuedPromptRef = useRef<string | null>(null);
   const aiDoneGraceTimerRef = useRef<number | null>(null);
   const aiMutationWatchdogRef = useRef<number | null>(null);
+  const lastGenerationFailureJobIdRef = useRef<string | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
   const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
   const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
   const clearAiMutationLock = useUIStore((state) => state.clearAiMutationLock);
   const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
+  const activeWorkspaceProjectId = workspace.kind === 'project' ? workspace.projectId : null;
+  const activeProjectGenerationRunning = Boolean(
+    activeGenerationJob
+    && isActiveProjectGenerationJob(activeGenerationJob)
+    && activeGenerationJob.projectId === activeWorkspaceProjectId,
+  );
+
+  useLayoutEffect(() => {
+    if (!activeWorkspaceProjectId) {
+      return;
+    }
+
+    const storedJob = readStoredGenerationJob(activeWorkspaceProjectId);
+    if (storedJob && isActiveProjectGenerationJob(storedJob)) {
+      setActiveGenerationJob((current) => current?.id === storedJob.id ? current : storedJob);
+      setAiMutationLock({
+        active: true,
+        stage: 'thinking',
+        message: storedJob.statusMessage ?? 'Восстанавливаем активную генерацию...',
+      });
+      useChatStore.setState((state) => ({
+        ...state,
+        aiThinking: true,
+        error: null,
+      }));
+    }
+
+    const storedPreview = readStoredGenerationPreview(activeWorkspaceProjectId);
+    if (storedPreview) {
+      setPreviewState({
+        tasks: normalizeTasks(storedPreview.tasks),
+        active: true,
+        mode: storedPreview.mode,
+        message: storedPreview.message,
+        wave: storedPreview.wave,
+      });
+    }
+  }, [activeWorkspaceProjectId, setAiMutationLock]);
 
   useEffect(() => {
     if (!pendingGanttDayMode) {
@@ -729,6 +1159,84 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     clearAiMutationLock();
   }, [clearAiMutationLock]);
 
+  useEffect(() => {
+    if (!activeWorkspaceProjectId || !activeGenerationJob || activeGenerationJob.projectId !== activeWorkspaceProjectId) {
+      return;
+    }
+
+    writeStoredGenerationJob(activeWorkspaceProjectId, activeGenerationJob);
+
+    if (activeGenerationJob.status === 'queued' || activeGenerationJob.status === 'running') {
+      clearAiDoneGraceTimer();
+      setAiMutationLock({
+        active: true,
+        stage: activeGenerationJob.previewAvailable ? 'preview' : 'thinking',
+        message: resolveGenerationLockMessage(activeGenerationJob, 'Ручное редактирование пока недоступно'),
+      });
+      useChatStore.setState((state) => ({
+        ...state,
+        aiThinking: true,
+        error: null,
+      }));
+      return;
+    }
+
+    if (activeGenerationJob.status === 'failed') {
+      releaseAiMutationLock();
+      setPreparedIntentChatProjectId(null);
+      const storedPreview = readStoredGenerationPreview(activeWorkspaceProjectId);
+      setPreviewState((current) => ({
+        tasks: current.tasks.length > 0 ? current.tasks : normalizeTasks(storedPreview?.tasks ?? []),
+        active: current.tasks.length > 0 || Boolean(storedPreview?.tasks?.length),
+        mode: 'failed',
+        message: activeGenerationJob.errorMessage ?? activeGenerationJob.statusMessage ?? 'Генерация завершилась ошибкой.',
+        wave: current.wave > 0 ? current.wave : (storedPreview?.wave ?? 0),
+      }));
+      if (lastGenerationFailureJobIdRef.current !== activeGenerationJob.id) {
+        lastGenerationFailureJobIdRef.current = activeGenerationJob.id;
+        useChatStore.getState().setError(activeGenerationJob.errorMessage ?? activeGenerationJob.statusMessage ?? 'Генерация завершилась ошибкой.');
+      }
+      return;
+    }
+
+    if (activeGenerationJob.status === 'succeeded' || activeGenerationJob.status === 'canceled') {
+      writeStoredGenerationJob(activeWorkspaceProjectId, null);
+      writeStoredGenerationPreview(activeWorkspaceProjectId, null);
+      releaseAiMutationLock();
+      setPreparedIntentChatProjectId(null);
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
+    }
+  }, [
+    activeGenerationJob,
+    activeWorkspaceProjectId,
+    clearAiDoneGraceTimer,
+    releaseAiMutationLock,
+    setAiMutationLock,
+  ]);
+
+  useEffect(() => {
+    if (!activeWorkspaceProjectId || generationJobLookupPending || activeProjectGenerationRunning || previewState.active) {
+      return;
+    }
+
+    const storedJob = readStoredGenerationJob(activeWorkspaceProjectId);
+    const lockActive = useUIStore.getState().aiMutationLock.active;
+    if (!storedJob && !lockActive) {
+      return;
+    }
+
+    writeStoredGenerationJob(activeWorkspaceProjectId, null);
+    writeStoredGenerationPreview(activeWorkspaceProjectId, null);
+    releaseAiMutationLock();
+    setPreparedIntentChatProjectId(null);
+  }, [
+    activeProjectGenerationRunning,
+    activeWorkspaceProjectId,
+    generationJobLookupPending,
+    previewState.active,
+    releaseAiMutationLock,
+  ]);
+
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     console.log('[WS] message', msg);
     if (msg.type === 'preview_tasks' || msg.type === 'preview_tasks_replace') {
@@ -737,7 +1245,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       setAiMutationLock({
         active: true,
         stage: 'preview',
-        message: 'AI формирует стартовый график и сохраняет его в проект.',
+        message: 'Ручное редактирование пока недоступно',
       });
       setPreviewState({
         tasks: normalizedPreviewTasks,
@@ -746,6 +1254,17 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         message: null,
         wave: msg.type === 'preview_tasks_replace' ? (msg.wave ?? 1) : 1,
       });
+      if (workspace.kind === 'project') {
+        const previewJobId = activeGenerationJob?.projectId === workspace.projectId ? activeGenerationJob.id : 'unknown';
+        writeStoredGenerationPreview(workspace.projectId, {
+          jobId: previewJobId,
+          projectId: workspace.projectId,
+          tasks: normalizedPreviewTasks,
+          mode: 'rendering',
+          message: null,
+          wave: msg.type === 'preview_tasks_replace' ? (msg.wave ?? 1) : 1,
+        });
+      }
       return;
     }
     if (msg.type === 'preview_failed') {
@@ -755,6 +1274,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         stage: 'failed',
         message: msg.message ?? 'Предварительный график не был сохранён.',
       });
+      setPreparedIntentChatProjectId(null);
       setPreviewState((current) => current.active
         ? {
             ...current,
@@ -762,6 +1282,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             message: msg.message ?? 'Предварительный график не был сохранён.',
           }
         : current);
+      if (workspace.kind === 'project') {
+        const storedPreview = readStoredGenerationPreview(workspace.projectId);
+        if (storedPreview) {
+          writeStoredGenerationPreview(workspace.projectId, {
+            ...storedPreview,
+            mode: 'failed',
+            message: msg.message ?? 'Предварительный график не был сохранён.',
+          });
+        }
+      }
       useChatStore.getState().setError(msg.message ?? 'Предварительный график не был сохранён.');
       return;
     }
@@ -777,6 +1307,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       });
       releaseAiMutationLock();
       scheduleAiDoneGraceExit();
+      if (workspace.kind === 'project') {
+        writeStoredGenerationPreview(workspace.projectId, null);
+        writeStoredGenerationJob(workspace.projectId, null);
+      }
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
       useTaskStore.getState().replaceFromSystem(normalizedTasks);
 
@@ -791,28 +1325,57 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           dependencies: buildDependencyRowsFromTasks(normalizedTasks),
         });
       }
+      setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
+        ? { ...current, status: 'succeeded', stage: 'succeeded', statusMessage: 'График готов', errorCode: null, errorMessage: null }
+        : current);
       return;
     }
     if (msg.type === 'token') {
+      setPreparedIntentChatProjectId(null);
       armAiMutationWatchdog();
       useChatStore.getState().appendToken(msg.content ?? '');
       return;
     }
     if (msg.type === 'done') {
+      setPreparedIntentChatProjectId(null);
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
+      if (workspace.kind === 'project') {
+        writeStoredGenerationPreview(workspace.projectId, null);
+        writeStoredGenerationJob(workspace.projectId, null);
+      }
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
+      setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
+        ? { ...current, status: 'succeeded', stage: 'succeeded', statusMessage: 'График готов', errorCode: null, errorMessage: null }
+        : current);
       useChatStore.getState().attachCheckpointToLatestUserMessage(msg.chatMessage);
       useChatStore.getState().finishStreaming(msg.chatMessage);
       return;
     }
     if (msg.type === 'error') {
+      setPreparedIntentChatProjectId(null);
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
+      if (workspace.kind === 'project') {
+        const storedPreview = readStoredGenerationPreview(workspace.projectId);
+        if (storedPreview) {
+          writeStoredGenerationPreview(workspace.projectId, {
+            ...storedPreview,
+            mode: 'failed',
+            message: msg.message ?? 'unknown error',
+          });
+        }
+      }
+      setPreviewState((current) => current.active
+        ? { ...current, mode: 'failed', message: msg.message ?? 'unknown error' }
+        : current);
+      setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
+        ? { ...current, status: 'failed', stage: 'failed', statusMessage: msg.message ?? 'unknown error', errorMessage: msg.message ?? 'unknown error' }
+        : current);
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
   }, [
+    activeGenerationJob,
     armAiMutationWatchdog,
     auth.isAuthenticated,
     bumpHistoryRefreshRevision,
@@ -821,6 +1384,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     releaseAiMutationLock,
     scheduleAiDoneGraceExit,
     setAiMutationLock,
+    workspace,
   ]);
 
   const { connected, connectedToken } = useWebSocket(
@@ -830,6 +1394,109 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     hasShareToken ? undefined : auth.refreshAccessToken,
   );
   const displayConnected = hasShareToken ? true : auth.isAuthenticated ? connected : true;
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !auth.accessToken || hasShareToken || workspace.kind !== 'project') {
+      setActiveGenerationJob(null);
+      setGenerationJobLookupPending(false);
+      return;
+    }
+
+    let cancelled = false;
+    let pollTimer: number | null = null;
+
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+
+    const loadLatestGenerationJob = async () => {
+      setGenerationJobLookupPending(true);
+      let token = getLatestAccessToken();
+      if (!token) {
+        setGenerationJobLookupPending(false);
+        return;
+      }
+
+      let response = await fetch(`/api/project-generation-jobs/active?projectId=${encodeURIComponent(workspace.projectId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.status === 401) {
+        const refreshedToken = await auth.refreshAccessToken();
+        if (!refreshedToken) {
+          setGenerationJobLookupPending(false);
+          return;
+        }
+        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+        response = await fetch(`/api/project-generation-jobs/active?projectId=${encodeURIComponent(workspace.projectId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+
+      if (!response.ok || cancelled) {
+        setGenerationJobLookupPending(false);
+        return;
+      }
+
+      const payload = await response.json() as { job: ProjectGenerationJobView | null };
+      if (cancelled) {
+        setGenerationJobLookupPending(false);
+        return;
+      }
+
+      if (payload.job) {
+        setActiveGenerationJob(payload.job);
+        setGenerationJobLookupPending(false);
+
+        if ((payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer === null) {
+          pollTimer = window.setInterval(() => {
+            void loadLatestGenerationJob();
+          }, 2000);
+        }
+
+        if (!(payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer !== null) {
+          window.clearInterval(pollTimer);
+          pollTimer = null;
+        }
+        return;
+      }
+
+      const latestResponse = await fetch(`/api/project-generation-jobs/latest?projectId=${encodeURIComponent(workspace.projectId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!latestResponse.ok || cancelled) {
+        setGenerationJobLookupPending(false);
+        return;
+      }
+      const latestPayload = await latestResponse.json() as { job: ProjectGenerationJobView | null };
+      if (cancelled) {
+        setGenerationJobLookupPending(false);
+        return;
+      }
+
+      if (!latestPayload.job) {
+        setActiveGenerationJob(null);
+      } else if (latestPayload.job.status === 'succeeded' || latestPayload.job.status === 'canceled') {
+        setActiveGenerationJob(latestPayload.job);
+      } else {
+        setActiveGenerationJob(latestPayload.job);
+      }
+      setGenerationJobLookupPending(false);
+    };
+
+    void loadLatestGenerationJob();
+
+    return () => {
+      cancelled = true;
+      if (pollTimer !== null) {
+        window.clearInterval(pollTimer);
+      }
+    };
+  }, [
+    auth.accessToken,
+    auth.isAuthenticated,
+    auth.refreshAccessToken,
+    hasShareToken,
+    workspace,
+  ]);
 
   useEffect(() => {
     if (hasShareToken) {
@@ -875,21 +1542,32 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setWorkspace]);
 
   const openProjectChat = useCallback(() => {
+    if (auth.project?.taskCount === 0 && workspace.kind === 'project') {
+      setActiveEmptyProjectModeProjectId(workspace.projectId);
+    }
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
-  }, [setWorkspace]);
+  }, [auth.project?.taskCount, setWorkspace, workspace]);
 
   const toggleProjectChat = useCallback(() => {
+    if (auth.project?.taskCount === 0 && workspace.kind === 'project' && !workspace.chatOpen) {
+      setActiveEmptyProjectModeProjectId(workspace.projectId);
+    }
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: !current.chatOpen } : current);
-  }, [setWorkspace]);
+  }, [auth.project?.taskCount, setWorkspace, workspace]);
 
   const resetWorkspacePresentation = useCallback(() => {
     clearAiDoneGraceTimer();
     releaseAiMutationLock();
+    if (activeWorkspaceProjectId) {
+      writeStoredGenerationJob(activeWorkspaceProjectId, null);
+      writeStoredGenerationPreview(activeWorkspaceProjectId, null);
+    }
+    setActiveGenerationJob(null);
     setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
     replaceTasksFromSystem([]);
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
-  }, [clearAiDoneGraceTimer, releaseAiMutationLock, replaceTasksFromSystem]);
+  }, [activeWorkspaceProjectId, clearAiDoneGraceTimer, releaseAiMutationLock, replaceTasksFromSystem]);
 
   const openCreateProjectModal = useCallback((nextIntent: PendingProjectCreation = {}) => {
     setPendingProjectCreation(nextIntent);
@@ -910,31 +1588,202 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     resetWorkspacePresentation();
 
     try {
-      const newProject = await auth.createProject(name.trim(), options.groupId ?? auth.project?.groupId);
+      let newProject: AuthProject | null = null;
+
+      if (options.projectIntentId) {
+        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+        let token = getLatestAccessToken();
+        if (!token || !auth.user) {
+          queuedPromptRef.current = null;
+          createEmptyChartAfterActivationRef.current = false;
+          return null;
+        }
+
+        let response = await fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/create-project`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            projectName: name.trim(),
+            groupId: options.groupId ?? auth.project?.groupId,
+          }),
+        });
+
+        if (response.status === 401) {
+          const refreshedToken = await auth.refreshAccessToken();
+          if (!refreshedToken) {
+            queuedPromptRef.current = null;
+            createEmptyChartAfterActivationRef.current = false;
+            return null;
+          }
+          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+          response = await fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/create-project`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              projectName: name.trim(),
+              groupId: options.groupId ?? auth.project?.groupId,
+            }),
+          });
+        }
+
+        if (response.status === 403) {
+          try {
+            const body = await response.json() as Partial<ConstraintDenialPayload>;
+            if (isConstraintCode(body.code)) {
+              await openLimitModal(body);
+              queuedPromptRef.current = null;
+              createEmptyChartAfterActivationRef.current = false;
+              return null;
+            }
+          } catch {
+            // fall through
+          }
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json() as {
+          accessToken: string;
+          refreshToken: string;
+          project: AuthProject;
+        };
+        auth.login(
+          { accessToken: payload.accessToken, refreshToken: payload.refreshToken },
+          auth.user,
+          payload.project,
+        );
+        newProject = payload.project;
+        queuedPromptRef.current = null;
+        setPreparedIntentChatProjectId(payload.project.id);
+        useChatStore.setState({
+          streamingText: '',
+          pendingAssistantMeta: null,
+          aiThinking: true,
+          error: null,
+        });
+        try {
+          const startGenerationResponse = await fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/start-generation`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${payload.accessToken}`,
+            },
+          });
+
+          if (!startGenerationResponse.ok) {
+            const startPayload = await startGenerationResponse.json().catch(() => ({ error: `HTTP ${startGenerationResponse.status}` })) as { error?: string };
+            throw new Error(startPayload.error ?? `HTTP ${startGenerationResponse.status}`);
+          }
+
+          const startPayload = await startGenerationResponse.json() as { job?: ProjectGenerationJobView | null };
+          setPendingPreparedIntentStart(null);
+          if (startPayload.job) {
+            setActiveGenerationJob(startPayload.job);
+            setPreparedIntentChatProjectId(startPayload.job.projectId ?? payload.project.id);
+          }
+        } catch (startError) {
+          console.error('Failed to start prepared project intent generation immediately:', startError);
+          setPendingPreparedIntentStart({ intentId: options.projectIntentId, projectId: payload.project.id });
+        }
+      } else if (options.templatePublicationId) {
+        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+        let token = getLatestAccessToken();
+        if (!token) {
+          queuedPromptRef.current = null;
+          createEmptyChartAfterActivationRef.current = false;
+          return null;
+        }
+
+        let response = await fetch(`/api/template-publications/${encodeURIComponent(options.templatePublicationId)}/create-project`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            projectName: name.trim(),
+            groupId: options.groupId ?? auth.project?.groupId,
+          }),
+        });
+
+        if (response.status === 401) {
+          const refreshedToken = await auth.refreshAccessToken();
+          if (!refreshedToken) {
+            queuedPromptRef.current = null;
+            createEmptyChartAfterActivationRef.current = false;
+            return null;
+          }
+          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+          response = await fetch(`/api/template-publications/${encodeURIComponent(options.templatePublicationId)}/create-project`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              projectName: name.trim(),
+              groupId: options.groupId ?? auth.project?.groupId,
+            }),
+          });
+        }
+
+        if (response.status === 403) {
+          try {
+            const body = await response.json() as Partial<ConstraintDenialPayload>;
+            if (isConstraintCode(body.code)) {
+              await openLimitModal(body);
+              queuedPromptRef.current = null;
+              createEmptyChartAfterActivationRef.current = false;
+              return null;
+            }
+          } catch {
+            // fall through to generic error below
+          }
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json() as { project: AuthProject };
+        newProject = payload.project;
+      } else {
+        newProject = await auth.createProject(name.trim(), options.groupId ?? auth.project?.groupId);
+      }
+
       if (!newProject) {
         queuedPromptRef.current = null;
         createEmptyChartAfterActivationRef.current = false;
         return null;
       }
 
-      setProjectState(newProject.id, {
-        hiddenTaskListColumns: [...DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS],
-      });
+      await auth.refreshProjects();
 
-      await auth.switchProject(newProject.id);
+      if (!options.projectIntentId) {
+        await auth.switchProject(newProject.id);
+      }
       setSidebarState('closed');
       if (options.createEmptyChart) {
         setActiveEmptyProjectModeProjectId(newProject.id);
       } else {
         replaceTasksFromSystem([]);
       }
-      if (options.firstPrompt) {
+      if (options.firstPrompt && !options.projectIntentId) {
         useChatStore.getState().addMessage({ role: 'user', content: options.firstPrompt });
       }
       setWorkspace({
         kind: 'project',
         projectId: newProject.id,
-        chatOpen: options.firstPrompt ? true : readProjectChatOpenState(),
+        chatOpen: options.createEmptyChart
+          ? false
+          : (options.firstPrompt || options.projectIntentId ? true : readProjectChatOpenState()),
       });
       setPendingProjectCreation(null);
       setPendingPostAuthAction(null);
@@ -942,7 +1791,204 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     } finally {
       activationInFlightRef.current = false;
     }
-  }, [auth, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setPendingPostAuthAction, setProjectState, setSidebarState, setWorkspace]);
+  }, [auth, hasShareToken, openLimitModal, replaceTasksFromSystem, resetWorkspacePresentation, setPendingPostAuthAction, setProjectState, setSidebarState, setWorkspace]);
+
+  useEffect(() => {
+    if (!projectCreationIntentId || !auth.isAuthenticated || hasShareToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const openProjectIntentModal = async () => {
+      const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+      let token = getLatestAccessToken();
+      if (!token) {
+        onConsumeProjectCreationIntent();
+        return;
+      }
+
+      let response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        const refreshedToken = await auth.refreshAccessToken();
+        if (!refreshedToken) {
+          onConsumeProjectCreationIntent();
+          return;
+        }
+        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+        response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      if (response.status === 410) {
+        window.alert('Черновик запроса устарел. Опишите проект ещё раз.');
+        onConsumeProjectCreationIntent();
+        return;
+      }
+
+      if (!response.ok) {
+        window.alert('Не удалось подготовить запрос. Попробуйте ещё раз.');
+        onConsumeProjectCreationIntent();
+        return;
+      }
+
+      await response.json();
+
+      openCreateProjectModal({
+        projectIntentId: projectCreationIntentId,
+        groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
+        initialProjectName: 'Новый проект',
+        title: 'Новый проект по вашему описанию',
+        description: 'Запрос уже подготовлен. Создайте проект, и стартовый prompt появится в рабочем пространстве.',
+      });
+      onConsumeProjectCreationIntent();
+    };
+
+    void openProjectIntentModal();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    auth.accessToken,
+    auth.isAuthenticated,
+    auth.project?.groupId,
+    auth.projectGroups,
+    auth.refreshAccessToken,
+    hasShareToken,
+    onConsumeProjectCreationIntent,
+    openCreateProjectModal,
+    projectCreationIntentId,
+  ]);
+
+  useEffect(() => {
+    if (!pendingPreparedIntentStart || !auth.isAuthenticated || !auth.accessToken || workspace.kind !== 'project') {
+      return;
+    }
+    if (workspace.projectId !== pendingPreparedIntentStart.projectId) {
+      return;
+    }
+
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    if (!token) {
+      return;
+    }
+
+    const currentIntentStart = pendingPreparedIntentStart;
+    setPendingPreparedIntentStart(null);
+
+    void fetch(`/api/project-intents/${encodeURIComponent(currentIntentStart.intentId)}/start-generation`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+          throw new Error(payload.error ?? `HTTP ${response.status}`);
+        }
+        const payload = await response.json() as { job?: ProjectGenerationJobView | null };
+        if (payload.job) {
+          setActiveGenerationJob(payload.job);
+          setPreparedIntentChatProjectId(payload.job.projectId ?? currentIntentStart.projectId);
+        }
+      })
+      .catch((startError) => {
+        setPreparedIntentChatProjectId(null);
+        console.error('Failed to start prepared project intent generation:', startError);
+        useChatStore.getState().setError(String(startError));
+      });
+  }, [auth.accessToken, auth.isAuthenticated, pendingPreparedIntentStart, workspace]);
+
+  useEffect(() => {
+    if (!templateCreateIntentId || !auth.isAuthenticated || hasShareToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const openTemplateCreateModal = async () => {
+      const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+      let token = getLatestAccessToken();
+      let publication: TemplatePublicationDetail | null = null;
+
+      if (token) {
+        let response = await fetch(`/api/template-publications/${encodeURIComponent(templateCreateIntentId)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.status === 401) {
+          const refreshedToken = await auth.refreshAccessToken();
+          if (refreshedToken) {
+            token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+            response = await fetch(`/api/template-publications/${encodeURIComponent(templateCreateIntentId)}`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
+          }
+        }
+
+        if (response.ok) {
+          publication = await response.json() as TemplatePublicationDetail;
+        }
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      const briefParts = [
+        publication?.taskCount ? `${publication.taskCount} задач` : null,
+        publication?.category?.trim() ? publication.category.trim() : null,
+        publication?.industry?.trim() ? publication.industry.trim() : null,
+      ].filter(Boolean);
+
+      openCreateProjectModal({
+        templatePublicationId: templateCreateIntentId,
+        initialProjectName: publication?.title ?? 'Новый проект',
+        groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
+        title: publication?.title ? `Новый проект из шаблона «${publication.title}»` : 'Новый проект из шаблона',
+        description: publication
+          ? [
+              publication.summary?.trim() || 'Шаблон уже выбран. Укажите название проекта и группу, где он будет создан.',
+              briefParts.length > 0 ? briefParts.join(' • ') : null,
+            ].filter(Boolean).join(' ')
+          : 'Шаблон уже выбран. Укажите название проекта и группу, где он будет создан.',
+      });
+      onConsumeTemplateCreateIntent();
+    };
+
+    void openTemplateCreateModal();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    auth.accessToken,
+    auth.isAuthenticated,
+    auth.project?.groupId,
+    auth.projectGroups,
+    hasShareToken,
+    onConsumeTemplateCreateIntent,
+    openCreateProjectModal,
+    templateCreateIntentId,
+  ]);
 
   const submitChatMessage = useCallback(async (message: string) => {
     if (isScheduleReadOnlyProject) {
@@ -1013,8 +2059,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       releaseAiMutationLock();
       throw new Error(`HTTP ${response.status}`);
     }
+    const responsePayload = await response.json() as { job?: ProjectGenerationJobView | null };
+    if (responsePayload.job) {
+      setActiveGenerationJob(responsePayload.job);
+    }
     return true;
-  }, [armAiMutationWatchdog, auth, isScheduleReadOnlyProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
+  }, [armAiMutationWatchdog, auth, isScheduleReadOnlyProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setActiveGenerationJob, setAiMutationLock]);
 
   const submitSplitTask = useCallback(async (task: Task, payload: SplitTaskSubmitPayload): Promise<StartScreenSendResult> => {
     if (hasShareToken) {
@@ -1096,8 +2146,58 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return { accepted: false, message: `HTTP ${response.status}` };
     }
 
+    const responsePayload = await response.json() as { job?: ProjectGenerationJobView | null };
+    if (responsePayload.job) {
+      setActiveGenerationJob(responsePayload.job);
+    }
+
     return { accepted: true };
-  }, [armAiMutationWatchdog, auth, hasShareToken, isScheduleReadOnlyProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
+  }, [armAiMutationWatchdog, auth, hasShareToken, isScheduleReadOnlyProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setActiveGenerationJob, setAiMutationLock]);
+
+  const handleCancelActiveGeneration = useCallback(async () => {
+    const activeJob = activeGenerationJob;
+    if (!activeJob || !isActiveProjectGenerationJob(activeJob)) {
+      return;
+    }
+
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    let token = getLatestAccessToken();
+    if (!token) {
+      return;
+    }
+
+    let response = await fetch(`/api/project-generation-jobs/${encodeURIComponent(activeJob.id)}/cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      const refreshedToken = await auth.refreshAccessToken();
+      if (!refreshedToken) {
+        return;
+      }
+      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+      response = await fetch(`/api/project-generation-jobs/${encodeURIComponent(activeJob.id)}/cancel`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+
+    if (!response.ok) {
+      useChatStore.getState().setError(`Не удалось остановить AI-задачу (HTTP ${response.status}).`);
+      return;
+    }
+
+    const payload = await response.json() as { job?: ProjectGenerationJobView | null };
+    if (payload.job) {
+      setActiveGenerationJob(payload.job);
+    }
+    useChatStore.getState().finishStreaming();
+  }, [activeGenerationJob, auth.accessToken, auth.refreshAccessToken]);
 
   const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {
@@ -1218,6 +2318,38 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     await openTemplate(templateId);
     setWorkspace({ kind: 'template', templateId });
   }, [openTemplate, setWorkspace]);
+
+  useEffect(() => {
+    if (!projectOpenIntentId || !auth.isAuthenticated) {
+      return;
+    }
+
+    if (auth.project?.id === projectOpenIntentId) {
+      const activeWorkspace = getProjectState(projectOpenIntentId)?.activeWorkspace ?? 'project';
+      setWorkspace(
+        activeWorkspace === 'planner'
+          ? { kind: 'planner', projectId: projectOpenIntentId }
+          : activeWorkspace === 'finance'
+            ? { kind: 'finance', projectId: projectOpenIntentId }
+            : { kind: 'project', projectId: projectOpenIntentId, chatOpen: readProjectChatOpenState() },
+      );
+      onConsumeProjectOpenIntent();
+      return;
+    }
+
+    void handleSwitchProject(projectOpenIntentId)
+      .finally(() => {
+        onConsumeProjectOpenIntent();
+      });
+  }, [
+    auth.isAuthenticated,
+    auth.project?.id,
+    getProjectState,
+    handleSwitchProject,
+    onConsumeProjectOpenIntent,
+    projectOpenIntentId,
+    setWorkspace,
+  ]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken || !auth.project?.id || !plannerCorrectionTarget) {
@@ -1567,10 +2699,19 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
 
     const hasQueuedFirstPrompt = Boolean(queuedPromptRef.current);
-    if (!hasQueuedFirstPrompt) {
+    const isPreparedIntentProject = preparedIntentChatProjectId === auth.project.id
+      || (activeGenerationJob?.projectId === auth.project.id && isActiveProjectGenerationJob(activeGenerationJob));
+    const chatState = useChatStore.getState();
+    const hasLocalOptimisticChat = chatState.aiThinking || chatState.streamingText.length > 0 || chatState.messages.length > 0;
+    if (!hasQueuedFirstPrompt && !isPreparedIntentProject && !hasLocalOptimisticChat) {
       useChatStore.getState().reset();
     } else {
-      useChatStore.setState({ streamingText: '', error: null });
+      useChatStore.setState((state) => ({
+        ...state,
+        streamingText: '',
+        error: null,
+        aiThinking: isPreparedIntentProject ? true : state.aiThinking,
+      }));
     }
 
     fetch('/api/messages', {
@@ -1589,22 +2730,35 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         if (createEmptyChartAfterActivationRef.current || hasQueuedFirstPrompt) {
           return;
         }
-        useChatStore.getState().replaceMessages(data.map((message) => ({
+        const normalizedMessages: NormalizedChatMessage[] = data.map((message) => ({
           id: message.id ?? crypto.randomUUID(),
           role: message.role as 'user' | 'assistant' | 'system',
           content: message.content,
           requestContextId: message.requestContextId ?? null,
           historyGroupId: message.historyGroupId ?? null,
-        })));
+        }));
+        const mergedMessages = mergeOptimisticChatMessages(
+          normalizedMessages,
+          useChatStore.getState().messages as NormalizedChatMessage[],
+        );
+        if (isPreparedIntentProject) {
+          useChatStore.setState((state) => ({
+            ...state,
+            messages: mergedMessages,
+            streamingText: '',
+            pendingAssistantMeta: null,
+            aiThinking: true,
+            error: null,
+          }));
+          return;
+        }
+        useChatStore.getState().replaceMessages(mergedMessages);
       })
       .catch(() => {});
-  }, [auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, workspace.kind]);
+  }, [activeGenerationJob, auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, preparedIntentChatProjectId, workspace.kind]);
 
   useEffect(() => {
-    if (!auth.isAuthenticated || !connected || workspace.kind !== 'project') {
-      return;
-    }
-    if (!auth.accessToken || connectedToken !== auth.accessToken) {
+    if (!auth.isAuthenticated || workspace.kind !== 'project') {
       return;
     }
     const promptToSend = queuedPromptRef.current;
@@ -1615,7 +2769,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     void submitChatMessage(promptToSend).catch((submitError) => {
       useChatStore.getState().setError(String(submitError));
     });
-  }, [auth.accessToken, auth.isAuthenticated, connected, connectedToken, submitChatMessage, workspace.kind]);
+  }, [auth.isAuthenticated, submitChatMessage, workspace.kind]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken || pendingPostAuthAction?.kind !== 'send_prompt') {
@@ -1859,20 +3013,34 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const showProjectStartScreen = workspace.kind === 'project'
     && !hasShareToken
     && currentProjectIsEmpty
-    && !previewState.active
+    && !activeProjectGenerationRunning
+    && !generationJobLookupPending
     && !hasQueuedProjectPrompt
-    && !projectChatOpen
     && activeEmptyProjectModeProjectId !== workspace.projectId;
   const canReturnEmptyProjectToWizard = workspace.kind === 'project'
-    && !hasShareToken
     && currentProjectIsEmpty
-    && !previewState.active
-    && !hasQueuedProjectPrompt
-    && activeEmptyProjectModeProjectId === workspace.projectId;
+    && !aiMutationLock.active;
   const shouldRenderStartScreenProjectSettingsModal = showProjectStartScreen
     && showProjectSettingsModal
     && Boolean(auth.project)
     && !hasShareToken;
+
+  useEffect(() => {
+    if (workspace.kind !== 'project' || !currentProjectIsEmpty) {
+      return;
+    }
+
+    const currentProjectState = getProjectState(workspace.projectId);
+    if (currentProjectState?.taskListColumnsInitialized) {
+      return;
+    }
+
+    setProjectState(workspace.projectId, {
+      taskListColumnsInitialized: true,
+      hiddenTaskListColumns: [...DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS],
+    });
+  }, [currentProjectIsEmpty, getProjectState, setProjectState, workspace]);
+
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'template'
@@ -2385,6 +3553,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               chatDisabledReason={chatDisabledReason}
               batchUpdate={batchUpdate}
               onSend={handleSend}
+              onStopGeneration={handleCancelActiveGeneration}
               onSplitTask={submitSplitTask}
               onLoginRequired={onLoginRequired}
               onCloseChat={closeProjectChat}
@@ -2561,6 +3730,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         setWorkspace({ kind: 'project', projectId: targetProjectId, chatOpen: readProjectChatOpenState() });
       }}
       onCreateProjectTemplate={handleCreateCurrentProjectTemplate}
+      adminTemplateLinks={[
+        { id: 'admin-template-cms', label: 'CMS шаблонов', href: '/admin?section=templates' },
+      ]}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}
       ganttRef={ganttRef}
@@ -2631,6 +3803,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       <CreateProjectModal
         projectGroups={auth.projectGroups}
         initialGroupId={pendingProjectCreation?.groupId ?? auth.project?.groupId ?? auth.projectGroups[0]?.id}
+        initialName={pendingProjectCreation?.initialProjectName}
+        title={pendingProjectCreation?.templatePublicationId ? pendingProjectCreation.title : undefined}
+        description={pendingProjectCreation?.templatePublicationId ? pendingProjectCreation.description : undefined}
+        submitLabel={pendingProjectCreation?.templatePublicationId ? 'Создать проект' : undefined}
         onSave={async (name, groupId) => {
           return createProjectAndActivate(name, { ...(pendingProjectCreation ?? {}), groupId });
         }}

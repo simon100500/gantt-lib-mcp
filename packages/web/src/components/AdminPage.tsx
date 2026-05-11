@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { TemplateAutomationAdminPanel } from './admin/TemplateAutomationAdminPanel.tsx';
 import { LoginButton } from './LoginButton';
 import { PLAN_CATALOG, PLAN_LABELS, formatDate, type BillingPeriod, type PlanId } from '../lib/billing';
 import { useAuthStore, type AdminContext, type AuthProject } from '../stores/useAuthStore';
@@ -209,6 +210,11 @@ function PageHeader({ children }: { children?: React.ReactNode }) {
   );
 }
 
+function readInitialAdminSection(): 'subscriptions' | 'templates' {
+  const section = new URLSearchParams(window.location.search).get('section');
+  return section === 'templates' ? 'templates' : 'subscriptions';
+}
+
 function GuardState({
   isAuthenticated,
   onLoginRequired,
@@ -278,6 +284,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
   const [copiedLogs, setCopiedLogs] = useState(false);
+  const [adminSection, setAdminSection] = useState<'subscriptions' | 'templates'>(() => readInitialAdminSection());
 
   const loadUsers = useCallback(async (nextQuery: string, nextPage = 1) => {
     setLoading(true);
@@ -375,6 +382,15 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
     }
     void loadUserDetails(selectedUserId);
   }, [forbidden, isAuthenticated, loadUserDetails, selectedUserId]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('section', adminSection);
+    if (adminSection !== 'templates') {
+      url.searchParams.delete('tab');
+    }
+    window.history.replaceState(window.history.state, '', url.toString());
+  }, [adminSection]);
 
   const selectedSummary = useMemo(
     () => users.find((user) => user.id === selectedUserId) ?? null,
@@ -509,6 +525,10 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
     } finally {
       setOpeningProjectId(null);
     }
+  }, []);
+
+  const openEditableProjectById = useCallback(async (projectId: string) => {
+    window.location.href = `/?projectId=${encodeURIComponent(projectId)}`;
   }, []);
 
   const openProjectChat = useCallback(async (projectId: string, projectName: string) => {
@@ -735,6 +755,37 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
             </div>
           )}
 
+          <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setAdminSection('subscriptions')}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                adminSection === 'subscriptions'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Подписки
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdminSection('templates')}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                adminSection === 'templates'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Шаблоны
+            </button>
+          </div>
+
+          {adminSection === 'templates' ? (
+            <TemplateAutomationAdminPanel
+              fetchAdmin={fetchAdminWithRetry}
+              onOpenSourceProject={openEditableProjectById}
+            />
+          ) : (
           <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
@@ -1418,6 +1469,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
               )}
             </section>
           </div>
+          )}
         </div>
       </main>
     </div>

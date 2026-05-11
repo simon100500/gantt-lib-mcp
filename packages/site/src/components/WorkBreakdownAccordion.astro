@@ -1,0 +1,43 @@
+---
+import WorkBreakdownNode from './WorkBreakdownNode.astro';
+
+type WorkTask = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  parentId?: string;
+};
+
+interface Props {
+  tasks: WorkTask[];
+  title: string;
+}
+
+const { tasks, title } = Astro.props;
+
+const childrenByParent = new Map<string, WorkTask[]>();
+for (const task of tasks) {
+  const parentKey = task.parentId ?? '__root__';
+  const bucket = childrenByParent.get(parentKey) ?? [];
+  bucket.push(task);
+  childrenByParent.set(parentKey, bucket);
+}
+
+const rootNodes = childrenByParent.get('__root__') ?? tasks.filter((task) => !task.parentId);
+---
+
+<section>
+  <h2 class="text-2xl font-bold text-slate-950">{title}</h2>
+  <div class="mt-4 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm">
+    <div class="grid grid-cols-[minmax(0,1fr)_84px_120px_120px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3">
+      <div class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Работы</div>
+      <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Дней</div>
+      <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Старт</div>
+      <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Финиш</div>
+    </div>
+    {rootNodes.map((node) => (
+      <WorkBreakdownNode node={node} childrenByParent={childrenByParent} depth={0} />
+    ))}
+  </div>
+</section>

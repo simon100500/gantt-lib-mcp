@@ -1,0 +1,188 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import GanttPreview from "../../components/GanttPreview.tsx";
+import { TemplateCustomRequestSection } from "../../components/TemplateCustomRequestSection";
+import WorkBreakdownAccordion from "../../components/WorkBreakdownAccordion.astro";
+import {
+  fetchSitePublicationDetail,
+  fetchSitePublicationList,
+} from "../../lib/publications";
+import { buildAppTemplateCreateUrl, getSiteApiOrigin } from "../../lib/utils";
+import { splitSeoMarkdownSections } from "../../lib/renderSeoMarkdown";
+
+export async function getStaticPaths() {
+  const publications = await fetchSitePublicationList("template");
+  return publications.map((publication) => ({
+    params: { slug: publication.slug },
+    props: { publication },
+  }));
+}
+
+const { publication: prefetched } = Astro.props;
+const slug = Astro.params.slug ?? "";
+const publication =
+  (await fetchSitePublicationDetail("template", slug)) ?? prefetched;
+const tasks = publication?.snapshot.tasks ?? [];
+const MS_PER_DAY = 86_400_000;
+const parseIsoDate = (value: string) => new Date(`${value}T00:00:00`);
+const totalDays = tasks.length
+  ? Math.max(
+      1,
+      Math.round(
+        (Math.max(
+          ...tasks.map((task) => parseIsoDate(task.endDate).getTime()),
+        ) -
+          Math.min(
+            ...tasks.map((task) => parseIsoDate(task.startDate).getTime()),
+          )) /
+          MS_PER_DAY,
+      ) + 1,
+    )
+  : 0;
+const previewTasks = tasks.map((task) => ({
+  id: task.id,
+  name: task.name,
+  startDate: task.startDate,
+  endDate: task.endDate,
+  parentId: task.parentId,
+  type: task.type === "milestone" ? "milestone" as const : "task" as const,
+  progress: task.progress ?? 0,
+  dependencies: (publication?.snapshot.dependencies ?? [])
+    .filter((dependency) => dependency.taskId === task.id)
+    .map((dependency) => ({
+      taskId: dependency.depTaskId,
+      type: dependency.type,
+      lag: dependency.lag,
+    })),
+}));
+const createProjectUrl = publication
+  ? buildAppTemplateCreateUrl(publication.id)
+  : "https://ai.getgantt.ru";
+const apiBaseUrl = getSiteApiOrigin();
+const seoSections = splitSeoMarkdownSections(publication?.seoBody);
+const introSeoHtml = seoSections[0]?.html ?? "";
+---
+
+<Layout
+  title={publication?.seoTitle ??
+    publication?.title ??
+    "Шаблон проекта — GetGantt"}
+  description={publication?.seoDescription ??
+    publication?.summary ??
+    "Публичный шаблон проекта GetGantt"}
+>
+  <section>
+    <div class="mx-auto max-w-6xl px-4 py-16 lg:py-20">
+      <div class="max-w-4xl">
+        <div
+          class="text-sm font-semibold uppercase tracking-[0.18em] text-primary"
+        >
+          Шаблон графика работ
+        </div>
+        <h1
+          class="mt-4 text-3xl font-extrabold tracking-tight text-slate-950 lg:text-5xl"
+        >
+          {publication?.title ?? "Шаблон проекта"}
+        </h1>
+        {
+          publication?.subtitle && (
+            <p class="mt-5 max-w-3xl text-xl leading-8 text-slate-600">
+              {publication.subtitle}
+            </p>
+          )
+        }
+        <p class="mt-6 max-w-3xl text-lg leading-8 text-slate-700">
+          {
+            publication?.summary ??
+              "Публичный шаблон проекта из publication-базы GetGantt."
+          }
+        </p>
+      </div>
+
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a
+          href={createProjectUrl}
+          class="inline-flex items-center justify-center rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+        >
+          Открыть в ГетГант
+        </a>
+        <a
+          href="#"
+          class="inline-flex items-center justify-center rounded-xl border border-primary px-6 py-3 text-sm font-semibold text-primary transition hover:bg-primary/5"
+        >
+          Скачать в Excel
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="w-full px-0 py-8 lg:py-10">
+    <div class="mx-auto w-full max-w-[1600px] px-3 sm:px-4 lg:px-6">
+      <GanttPreview
+        client:load
+        initialTasks={previewTasks}
+        title={publication?.title ?? "Шаблон проекта"}
+        fullWidth={true}
+        containerHeight="640px"
+        headerNote="Чтобы ваши изменения сохранились, сначала скопируйте шаблон в свой кабинет ГетГант"
+        headerNoteHref={createProjectUrl}
+      />
+    </div>
+  </section>
+
+  {
+    introSeoHtml && (
+      <section class="mx-auto max-w-6xl px-4 pb-10 lg:pb-12">
+        <div
+          class="max-w-none text-slate-700 [&_h2]:mt-0 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:tracking-tight [&_h2]:text-slate-950 [&_h3]:mt-7 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:text-slate-900 [&_p]:mt-4 [&_p]:max-w-4xl [&_p]:text-base [&_p]:leading-8 [&_ul]:mt-4 [&_ul]:space-y-2 [&_ul]:pl-6 [&_li]:list-disc [&_li]:leading-8 [&_strong]:font-semibold [&_strong]:text-slate-950"
+          set:html={introSeoHtml}
+        />
+      </section>
+    )
+  }
+
+  <section class="mx-auto max-w-6xl px-4 pb-16 lg:pb-24">
+    <div>
+      <WorkBreakdownAccordion tasks={tasks} title="Состав работ" />
+    </div>
+
+    <div class="mt-12 max-w-4xl">
+      <h2 class="text-2xl font-bold tracking-tight text-slate-950">
+        Как использовать
+      </h2>
+      <div class="mt-4 space-y-4 text-base leading-8 text-slate-700">
+        <p>
+          Скопируйте шаблон в свой проект в ГетГант и используйте его как
+          готовую основу для планирования работ.
+        </p>
+        <p>
+          После этого можно поправить сроки, убрать или добавить нужные этапы,
+          уточнить зависимости между задачами и адаптировать график под свою
+          студию, бригаду и темп ремонта.
+        </p>
+      </div>
+    </div>
+
+    {
+      publication?.tags?.length ? (
+        <div class="mt-12 flex flex-wrap gap-2 border-t border-slate-200 pt-6">
+          {publication.tags.map((tag) => (
+            <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null
+    }
+  </section>
+
+  {
+    publication?.slug && (
+      <TemplateCustomRequestSection
+        client:load
+        apiBaseUrl={apiBaseUrl}
+        templateSlug={publication.slug}
+      />
+    )
+  }
+</Layout>

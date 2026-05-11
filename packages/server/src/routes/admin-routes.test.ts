@@ -204,3 +204,50 @@ describe('admin user pagination and destructive routes', () => {
     );
   });
 });
+
+describe('template generation admin routes', () => {
+  it('registers GET jobs, sources, and publications template endpoints', () => {
+    assert.match(
+      adminRoutesSource,
+      /fastify\.get\('\/api\/admin\/template-generation\/jobs',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+    assert.match(
+      adminRoutesSource,
+      /fastify\.get\('\/api\/admin\/template-generation\/sources',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+    assert.match(
+      adminRoutesSource,
+      /fastify\.get\('\/api\/admin\/template-generation\/publications',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+  });
+
+  it('registers POST create job, publish job, and regenerate seo endpoints', () => {
+    assert.match(
+      adminRoutesSource,
+      /fastify\.post\('\/api\/admin\/template-generation\/jobs',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+    assert.match(
+      adminRoutesSource,
+      /fastify\.post\('\/api\/admin\/template-generation\/jobs\/:id\/publish',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+    assert.match(
+      adminRoutesSource,
+      /fastify\.post\('\/api\/admin\/template-generation\/publications\/:id\/regenerate-seo',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+  });
+
+  it('uses templateGenerationAdminService for create, publish, and seo regeneration', () => {
+    assert.match(
+      adminRoutesSource,
+      /templateGenerationAdminService\.createJobFromDescription\(/,
+    );
+    assert.match(
+      adminRoutesSource,
+      /templateGenerationAdminService\.publishJob\(/,
+    );
+    assert.match(
+      adminRoutesSource,
+      /templateGenerationAdminService\.regenerateSeoDraft\(/,
+    );
+  });
+});

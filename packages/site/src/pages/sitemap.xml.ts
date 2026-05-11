@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { fetchSitePublicationList } from "../lib/publications";
 
 const SITE_URL = "https://getgantt.ru";
 
@@ -11,8 +12,20 @@ const STATIC_PAGES = [
   "/terms",
 ] as const;
 
-export const GET: APIRoute = () => {
-  const urls = STATIC_PAGES.map(
+export const GET: APIRoute = async () => {
+  const [templates, blocks] = await Promise.all([
+    fetchSitePublicationList('template'),
+    fetchSitePublicationList('block'),
+  ]);
+
+  const dynamicPages = [
+    '/templates',
+    '/blocks',
+    ...templates.map((item) => `/templates/${item.slug}`),
+    ...blocks.map((item) => `/blocks/${item.slug}`),
+  ];
+
+  const urls = [...STATIC_PAGES, ...dynamicPages].map(
     (path) => `  <url>
     <loc>${SITE_URL}${path}</loc>
   </url>`

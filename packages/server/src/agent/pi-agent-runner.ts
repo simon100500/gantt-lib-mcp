@@ -613,6 +613,7 @@ export async function runPiOrdinaryAgent(input: {
     listAll(projectId: string): Promise<unknown[]>;
   };
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
+  signal?: AbortSignal;
   logger?: {
     debug(event: string, payload: Record<string, unknown>): Promise<void> | void;
   };
@@ -651,6 +652,16 @@ export async function runPiOrdinaryAgent(input: {
     getApiKey: () => input.env.OPENAI_API_KEY,
     sessionId: input.sessionId,
   });
+
+  if (input.signal) {
+    if (input.signal.aborted) {
+      agent.abort();
+    } else {
+      input.signal.addEventListener('abort', () => {
+        agent.abort();
+      }, { once: true });
+    }
+  }
 
   agent.subscribe(async (event: AgentEvent) => {
     switch (event.type) {

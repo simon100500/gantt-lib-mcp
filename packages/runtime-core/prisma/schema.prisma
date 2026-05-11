@@ -132,6 +132,66 @@ enum TemplateSourceKind {
   task_selection
 }
 
+enum TemplatePublicationKind {
+  template
+  block
+}
+
+enum TemplatePublicationStatus {
+  draft
+  published
+  archived
+  rejected
+}
+
+enum TemplatePublicationVisibility {
+  private
+  marketplace
+  site
+  both
+}
+
+enum TemplatePublicationVerificationStatus {
+  unverified
+  reviewed
+  verified
+  editorial
+}
+
+enum TemplateGenerationJobStatus {
+  queued
+  in_progress
+  review_required
+  ready_to_publish
+  published
+  failed
+}
+
+enum ProjectGenerationJobStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+}
+
+enum ProjectGenerationJobStage {
+  queued
+  interpreting
+  planning
+  compiling
+  committing
+  finalizing
+  succeeded
+  failed
+}
+
+enum ProjectGenerationPreviewMode {
+  none
+  ephemeral
+  persisted
+}
+
 enum ProjectGroupMemberRole {
   editor
   viewer
@@ -158,8 +218,12 @@ model User {
 
   // Relations
   projects        Project[]
+  projectCreationIntents ProjectCreationIntent[]
   projectGroups   ProjectGroup[]
   templates       Template[]
+  templatePublications TemplatePublication[] @relation("TemplatePublicationSourceUser")
+  templateGenerationJobs TemplateGenerationJob[] @relation("TemplateGenerationJobRequestedByUser")
+  projectGenerationJobs ProjectGenerationJob[]
   resources       Resource[]
   sessions        Session[]
   subscriptions   Subscription[]
@@ -266,6 +330,9 @@ model Project {
   messages       Message[]
   agentSessionState AgentSessionState?
   shareLinks     ShareLink[]
+  templatePublications TemplatePublication[] @relation("TemplatePublicationSourceProject")
+  templateGenerationJobs TemplateGenerationJob[] @relation("TemplateGenerationJobSourceProject")
+  projectGenerationJobs ProjectGenerationJob[]
   projectEvents  ProjectEvent[]
   mutationGroups MutationGroup[]
   baselines      Baseline[]
@@ -589,6 +656,7 @@ model Template {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   owner        User                 @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  publications TemplatePublication[] @relation("TemplatePublicationSourceTemplate")
   tasks        TemplateTask[]
   dependencies TemplateDependency[]
 
@@ -632,6 +700,141 @@ model TemplateDependency {
   @@index([templateId])
   @@index([templateId, sourceLocalId])
   @@index([templateId, targetLocalId])
+}
+
+model TemplatePublication {
+  id                 String                               @id @default(uuid())
+  slug               String                               @unique
+  kind               TemplatePublicationKind
+  sourceProjectId    String                               @map("source_project_id")
+  sourceUserId       String                               @map("source_user_id")
+  sourceTemplateId   String?                              @map("source_template_id")
+  sourceKind         TemplateSourceKind                   @map("source_kind")
+  sourceSelectionTaskIds String[]                         @default([]) @map("source_selection_task_ids")
+  title              String
+  subtitle           String?
+  summary            String?
+  category           String?
+  industry           String?
+  tags               String[]                             @default([])
+  status             TemplatePublicationStatus            @default(draft)
+  visibility         TemplatePublicationVisibility        @default(private)
+  verificationStatus TemplatePublicationVerificationStatus @default(unverified) @map("verification_status")
+  seoTitle           String?                              @map("seo_title")
+  seoDescription     String?                              @map("seo_description")
+  seoBody            String?                              @map("seo_body")
+  coverImageUrl      String?                              @map("cover_image_url")
+  previewImageUrl    String?                              @map("preview_image_url")
+  snapshot           Json
+  taskCount          Int                                  @default(0) @map("task_count")
+  publishedAt        DateTime?                            @map("published_at")
+  archivedAt         DateTime?                            @map("archived_at")
+  createdAt          DateTime                             @default(now()) @map("created_at")
+  updatedAt          DateTime                             @updatedAt @map("updated_at")
+
+  sourceProject  Project  @relation("TemplatePublicationSourceProject", fields: [sourceProjectId], references: [id], onDelete: Cascade)
+  sourceUser     User     @relation("TemplatePublicationSourceUser", fields: [sourceUserId], references: [id], onDelete: Cascade)
+  sourceTemplate Template? @relation("TemplatePublicationSourceTemplate", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  generationJobs TemplateGenerationJob[] @relation("TemplateGenerationJobPublication")
+
+  @@map("template_publications")
+  @@index([sourceProjectId, updatedAt(sort: Desc)])
+  @@index([sourceUserId, updatedAt(sort: Desc)])
+  @@index([kind, status, visibility, verificationStatus])
+  @@index([status, visibility, verificationStatus, updatedAt(sort: Desc)])
+  @@index([category, kind])
+  @@index([industry, kind])
+}
+
+model TemplateGenerationJob {
+  id                 String                      @id @default(uuid())
+  requestedByUserId  String                      @map("requested_by_user_id")
+  sourceProjectId    String?                     @map("source_project_id")
+  publicationId      String?                     @map("publication_id")
+  sourceDescription  String                      @map("source_description")
+  kind               TemplatePublicationKind
+  category           String?
+  industry           String?
+  title              String?
+  slug               String?
+  autoPublish        Boolean                     @default(false) @map("auto_publish")
+  status             TemplateGenerationJobStatus @default(queued)
+  seoTitle           String?                     @map("seo_title")
+  seoDescription     String?                     @map("seo_description")
+  seoBody            String?                     @map("seo_body")
+  errorMessage       String?                     @map("error_message")
+  lastRunAt          DateTime?                   @map("last_run_at")
+  completedAt        DateTime?                   @map("completed_at")
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  updatedAt          DateTime                    @updatedAt @map("updated_at")
+
+  requestedByUser User                 @relation("TemplateGenerationJobRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  sourceProject    Project?            @relation("TemplateGenerationJobSourceProject", fields: [sourceProjectId], references: [id], onDelete: SetNull)
+  publication      TemplatePublication? @relation("TemplateGenerationJobPublication", fields: [publicationId], references: [id], onDelete: SetNull)
+
+  @@map("template_generation_jobs")
+  @@index([requestedByUserId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([sourceProjectId])
+  @@index([publicationId])
+}
+
+model ProjectCreationIntent {
+  id           String   @id @default(uuid())
+  source       String
+  text         String
+  userId       String?  @map("user_id")
+  projectId    String?  @map("project_id")
+  requestContextId String? @map("request_context_id")
+  historyGroupId String? @map("history_group_id")
+  templateSlug String?  @map("template_slug")
+  createdAt    DateTime @default(now()) @map("created_at")
+  expiresAt    DateTime @map("expires_at")
+  consumedAt   DateTime? @map("consumed_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  generationJobs ProjectGenerationJob[]
+
+  @@map("project_creation_intents")
+  @@index([userId])
+  @@index([projectId])
+  @@index([templateSlug])
+  @@index([expiresAt])
+  @@index([consumedAt])
+}
+
+model ProjectGenerationJob {
+  id               String                       @id @default(uuid())
+  projectId        String?                      @map("project_id")
+  intentId         String?                      @map("intent_id")
+  userId           String                       @map("user_id")
+  source           String
+  type             String
+  status           ProjectGenerationJobStatus   @default(queued)
+  stage            ProjectGenerationJobStage    @default(queued)
+  statusMessage    String?                      @map("status_message")
+  requestContextId String?                      @map("request_context_id")
+  historyGroupId   String?                      @map("history_group_id")
+  progressPercent  Int?                         @map("progress_percent")
+  previewMode      ProjectGenerationPreviewMode @default(none) @map("preview_mode")
+  previewAvailable Boolean                      @default(false) @map("preview_available")
+  errorCode        String?                      @map("error_code")
+  errorMessage     String?                      @map("error_message")
+  startedAt        DateTime?                    @map("started_at")
+  finishedAt       DateTime?                    @map("finished_at")
+  createdAt        DateTime                     @default(now()) @map("created_at")
+  updatedAt        DateTime                     @updatedAt @map("updated_at")
+
+  project Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  intent  ProjectCreationIntent? @relation(fields: [intentId], references: [id], onDelete: SetNull)
+  user    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("project_generation_jobs")
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([intentId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([projectId, status, createdAt(sort: Desc)])
 }
 
 // Messages table

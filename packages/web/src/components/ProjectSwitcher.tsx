@@ -12,6 +12,62 @@ import type { AuthProject } from '../stores/useAuthStore.ts';
 import type { ProjectGroup } from '../types.ts';
 import type { TemplateItem } from '../lib/apiTypes.ts';
 
+const PROJECT_SWITCHER_SECTIONS_KEY = 'gantt_project_switcher_sections_v1';
+
+function canUseDOM(): boolean {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+type PersistedProjectSwitcherSections = {
+  openGroupIds: string[];
+  templatesOpen: boolean;
+  archiveOpen: boolean;
+};
+
+function readPersistedSections(): PersistedProjectSwitcherSections {
+  if (!canUseDOM()) {
+    return {
+      openGroupIds: [],
+      templatesOpen: false,
+      archiveOpen: false,
+    };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PROJECT_SWITCHER_SECTIONS_KEY);
+    if (!raw) {
+      return {
+        openGroupIds: [],
+        templatesOpen: false,
+        archiveOpen: false,
+      };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<PersistedProjectSwitcherSections>;
+    return {
+      openGroupIds: Array.isArray(parsed.openGroupIds)
+        ? parsed.openGroupIds.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        : [],
+      templatesOpen: parsed.templatesOpen === true,
+      archiveOpen: parsed.archiveOpen === true,
+    };
+  } catch {
+    return {
+      openGroupIds: [],
+      templatesOpen: false,
+      archiveOpen: false,
+    };
+  }
+}
+
+function persistSections(state: PersistedProjectSwitcherSections): void {
+  if (!canUseDOM()) {
+    return;
+  }
+
+  window.localStorage.setItem(PROJECT_SWITCHER_SECTIONS_KEY, JSON.stringify(state));
+}
+
 interface ProjectSwitcherProps {
   currentProject: Pick<AuthProject, 'id' | 'name' | 'status' | 'taskCount' | 'groupId'> & { kind?: 'project' | 'draft' | 'template' };
   projects: AuthProject[];
@@ -36,6 +92,7 @@ interface ProjectSwitcherProps {
   onInsertTemplateToProject?: (templateId: string) => void | Promise<void>;
   canInsertTemplateToProject?: boolean;
   onOpenResourcePool?: () => void | Promise<void>;
+  adminTemplateLinks?: Array<{ id: string; label: string; href: string }>;
   onMenuOpenChange?: (open: boolean) => void;
   onClose?: () => void;
   footer?: ReactNode;
@@ -450,6 +507,7 @@ export function ProjectSwitcher({
   onDeleteTemplate,
   onInsertTemplateToProject,
   canInsertTemplateToProject = false,
+  adminTemplateLinks = [],
   onMenuOpenChange,
   onClose,
   footer,
@@ -457,16 +515,16 @@ export function ProjectSwitcher({
   const activeProjects = useMemo(() => projects.filter((project) => project.status !== 'archived'), [projects]);
   const archivedProjects = useMemo(() => projects.filter((project) => project.status === 'archived'), [projects]);
   const archiveTitle = archivedProjects.length > 0 ? `Архив (${archivedProjects.length})` : 'Архив';
-  const [openGroupIds, setOpenGroupIds] = useState<Set<string>>(() => new Set());
-  const [archiveOpen, setArchiveOpen] = useState(currentProject.status === 'archived');
-  const prevArchivedCountRef = useRef(archivedProjects.length);
+  const persistedSectionsRef = useRef<PersistedProjectSwitcherSections>(readPersistedSections());
+  const [openGroupIds, setOpenGroupIds] = useState<Set<string>>(() => new Set(persistedSectionsRef.current.openGroupIds));
+  const [archiveOpen, setArchiveOpen] = useState(persistedSectionsRef.current.archiveOpen);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const selectedProjectId = pendingProjectId ?? currentProject.id;
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
   const [openMenuTemplateId, setOpenMenuTemplateId] = useState<string | null>(null);
   const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
   const [membersGroupId, setMembersGroupId] = useState<string | null>(null);
-  const [templatesOpen, setTemplatesOpen] = useState(true);
+  const [templatesOpen, setTemplatesOpen] = useState(persistedSectionsRef.current.templatesOpen);
 
   const effectiveGroups = useMemo<ProjectGroup[]>(() => {
     if (projectGroups.length > 0) return projectGroups;
@@ -505,18 +563,18 @@ export function ProjectSwitcher({
 
   useEffect(() => {
     setOpenGroupIds((current) => {
-      const next = new Set(current);
-      for (const group of effectiveGroups) {
-        if (group.isDefault || group.id === defaultCreateGroupId) next.add(group.id);
-      }
-      return next;
+      const validGroupIds = new Set(effectiveGroups.map((group) => group.id));
+      return new Set(Array.from(current).filter((groupId) => validGroupIds.has(groupId)));
     });
-  }, [defaultCreateGroupId, effectiveGroups]);
+  }, [effectiveGroups]);
 
   useEffect(() => {
-    if (archivedProjects.length > prevArchivedCountRef.current) setArchiveOpen(true);
-    prevArchivedCountRef.current = archivedProjects.length;
-  }, [archivedProjects.length]);
+    persistSections({
+      openGroupIds: Array.from(openGroupIds),
+      templatesOpen,
+      archiveOpen,
+    });
+  }, [archiveOpen, openGroupIds, templatesOpen]);
 
   useEffect(() => {
     if (pendingProjectId && currentProject.id === pendingProjectId) setPendingProjectId(null);

@@ -53,6 +53,7 @@ type PlannerQueryInput = {
   model: string;
   stage: InitialGenerationPlannerStage;
   onTextDelta?: (delta: string, fullText: string) => Promise<void> | void;
+  signal?: AbortSignal;
 };
 
 type PlannerQueryResult = string | { content?: string };
@@ -61,6 +62,7 @@ type InterpretationQueryInput = {
   prompt: string;
   model: string;
   stage: 'initial_request_interpretation' | 'initial_request_interpretation_repair';
+  signal?: AbortSignal;
 };
 
 type InterpretationQueryResult = string | { content?: string };
@@ -170,6 +172,27 @@ export type RunInitialGenerationInput = {
   services: InitialGenerationServices;
   logger: InitialGenerationLogger;
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
+  generationJob?: {
+    id: string;
+    markRunning(stage: 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing', statusMessage: string): Promise<void>;
+    markPreviewAvailable(): Promise<void>;
+    markCanceled(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }): Promise<void>;
+    markSucceeded(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }): Promise<void>;
+    markFailed(input: {
+      statusMessage?: string | null;
+      errorCode?: string | null;
+      errorMessage?: string | null;
+    }): Promise<void>;
+  };
+  signal?: AbortSignal;
   deps?: Partial<InitialGenerationDeps>;
 };
 
@@ -203,6 +226,14 @@ function buildSuccessResponse(): string {
 
 function buildInitialGenerationSystemMessage(): string {
   return 'Стартовый график составлен в календарных днях. Изменить режим можно в меню проекта.';
+}
+
+const ASSISTANT_MESSAGE_SAVE_TIMEOUT_MS = 3000;
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new Error('Generation canceled');
+  }
 }
 
 function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): string {
@@ -705,8 +736,31 @@ async function saveAssistantMessage(
     historyGroupId?: string;
   },
 ): Promise<void> {
-  await input.services.messageService.add('assistant', assistantResponse, input.projectId, metadata);
   input.broadcastToSession(input.sessionId, { type: 'token', content: assistantResponse });
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  try {
+    await Promise.race([
+      input.services.messageService.add('assistant', assistantResponse, input.projectId, metadata),
+      new Promise((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`assistant message save timed out after ${ASSISTANT_MESSAGE_SAVE_TIMEOUT_MS}ms`));
+        }, ASSISTANT_MESSAGE_SAVE_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    await input.logger.debug('assistant_message_save_failed', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      requestContextId: metadata?.requestContextId ?? null,
+      historyGroupId: metadata?.historyGroupId ?? null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
 }
 
 function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {
@@ -906,10 +960,15 @@ export async function runInitialGeneration(
       if (!input.interpretationQuery) {
         throw new Error('model_unavailable');
       }
-      return input.interpretationQuery(queryInput);
+      return input.interpretationQuery({
+        ...queryInput,
+        signal: input.signal,
+      });
     },
   });
+  throwIfAborted(input.signal);
   const interpretation = interpretationResult.interpretation;
+  await input.generationJob?.markRunning('interpreting', 'Понимаем запрос и состав проекта');
   const classification = deps.classifyInitialRequest({
     normalizedRequest,
     interpretation,
@@ -1050,6 +1109,7 @@ export async function runInitialGeneration(
     visiblePreviewTasks = mergedTasks;
     visiblePreviewSignature = mergedSignature;
     visiblePreviewSemanticSignature = mergedSemanticSignature;
+    await input.generationJob?.markPreviewAvailable();
     previewWaveCount += 1;
     await broadcastPreviewWave(input, previewWaveCount, mergedTasks, source, debugCapture ?? undefined);
   };
@@ -1090,8 +1150,10 @@ export async function runInitialGeneration(
     });
 
     try {
+      throwIfAborted(input.signal);
       const result = await input.plannerQuery({
         ...plannerInput,
+        signal: input.signal,
         onTextDelta: async (delta, fullText) => {
           await plannerInput.onTextDelta?.(delta, fullText);
           const family = plannerInput.stage === 'structure_planning' || plannerInput.stage === 'structure_planning_repair'
@@ -1135,6 +1197,8 @@ export async function runInitialGeneration(
   };
 
   try {
+    throwIfAborted(input.signal);
+    await input.generationJob?.markRunning('planning', 'Строим структуру графика');
     const planning = await planInitialProject({
       userMessage: input.userMessage,
       brief,
@@ -1166,6 +1230,7 @@ export async function runInitialGeneration(
       },
     });
     repairAttempted = planning.repairAttempted;
+    throwIfAborted(input.signal);
 
     await input.logger.debug('structure_plan_output', {
       runId: input.runId,
@@ -1209,6 +1274,8 @@ export async function runInitialGeneration(
       plan: planning.plan,
     });
 
+    await input.generationJob?.markRunning('compiling', 'Рассчитываем календарь и связи');
+    throwIfAborted(input.signal);
     const execution = await executeInitialProjectPlan({
       projectId: input.projectId,
       baseVersion: input.baseVersion,
@@ -1252,6 +1319,11 @@ export async function runInitialGeneration(
     });
 
     if (!execution.ok) {
+      await input.generationJob?.markFailed({
+        statusMessage: 'Не удалось собрать и сохранить стартовый график',
+        errorCode: execution.reason,
+        errorMessage: execution.message,
+      });
       const assistantResponse = buildFailureResponse('compile');
       if (previewWaveCount > 0) {
         input.broadcastToSession(input.sessionId, {
@@ -1285,6 +1357,8 @@ export async function runInitialGeneration(
     }
 
     const assistantResponse = buildSuccessResponse();
+    await input.generationJob?.markRunning('finalizing', 'Сохраняем итоговый график в проект');
+    throwIfAborted(input.signal);
     await saveAssistantMessage(input, assistantResponse, {
       requestContextId: input.runId,
       historyGroupId: checkpointGroupId,
@@ -1303,6 +1377,11 @@ export async function runInitialGeneration(
       historyGroupId: checkpointGroupId,
       systemMessage: buildInitialGenerationSystemMessage(),
     });
+    await input.generationJob?.markSucceeded({
+      requestContextId: input.runId,
+      historyGroupId: checkpointGroupId,
+      statusMessage: 'График готов',
+    });
     await flushDebugCapture(input, debugCapture, 'complete');
 
     return {
@@ -1313,6 +1392,24 @@ export async function runInitialGeneration(
       tasksAfter,
     };
   } catch (error) {
+    if (input.signal?.aborted) {
+      await input.generationJob?.markCanceled({
+        requestContextId: input.runId,
+        statusMessage: 'Операция отменена пользователем.',
+      });
+      return {
+        ok: false,
+        assistantResponse: '',
+        repairAttempted,
+        failureStage: 'planning',
+      };
+    }
+
+    await input.generationJob?.markFailed({
+      statusMessage: 'Не удалось подготовить стартовый график',
+      errorCode: 'planning_error',
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
     const assistantResponse = buildFailureResponse('planning');
     await saveAssistantMessage(input, assistantResponse, {
       requestContextId: input.runId,
