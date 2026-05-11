@@ -321,6 +321,11 @@ type PreviewState = {
   wave: number;
 };
 
+type WorkspaceToast = {
+  id: number;
+  message: string;
+};
+
 type ProjectGenerationJobView = {
   id: string;
   projectId: string | null;
@@ -908,6 +913,7 @@ function WorkspaceApp({
   const [preparedIntentChatProjectId, setPreparedIntentChatProjectId] = useState<string | null>(null);
   const [activeGenerationJob, setActiveGenerationJob] = useState<ProjectGenerationJobView | null>(null);
   const [generationJobLookupPending, setGenerationJobLookupPending] = useState(false);
+  const [toasts, setToasts] = useState<WorkspaceToast[]>([]);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const [isImportTemplateLoading, setIsImportTemplateLoading] = useState(false);
@@ -919,6 +925,8 @@ function WorkspaceApp({
   const [backupRestoreSummary, setBackupRestoreSummary] = useState<BackupRestoreSummary | null>(null);
   const [startScreenProjectSettingsPending, setStartScreenProjectSettingsPending] = useState(false);
   const [startScreenProjectSettingsError, setStartScreenProjectSettingsError] = useState<string | null>(null);
+  const toastIdRef = useRef(0);
+  const projectIntentFlowRef = useRef<string | null>(null);
   const [shareSelectionMode, setShareSelectionMode] = useState(false);
   const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
   const [templateSelectionMode, setTemplateSelectionMode] = useState(false);
@@ -1574,6 +1582,19 @@ function WorkspaceApp({
     setShowCreateProjectModal(true);
   }, []);
 
+  const dismissToast = useCallback((toastId: number) => {
+    setToasts((current) => current.filter((toast) => toast.id !== toastId));
+  }, []);
+
+  const showToast = useCallback((message: string) => {
+    const id = toastIdRef.current + 1;
+    toastIdRef.current = id;
+    setToasts((current) => [...current, { id, message }]);
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, 4000);
+  }, []);
+
   const createProjectAndActivate = useCallback(async (
     name: string,
     options: PendingProjectCreation = {},
@@ -1797,66 +1818,103 @@ function WorkspaceApp({
     if (!projectCreationIntentId || !auth.isAuthenticated || hasShareToken) {
       return;
     }
+    if (projectIntentFlowRef.current === projectCreationIntentId) {
+      return;
+    }
 
     let cancelled = false;
+    projectIntentFlowRef.current = projectCreationIntentId;
 
-    const openProjectIntentModal = async () => {
-      const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-      let token = getLatestAccessToken();
-      if (!token) {
-        onConsumeProjectCreationIntent();
-        return;
-      }
-
-      let response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status === 401) {
-        const refreshedToken = await auth.refreshAccessToken();
-        if (!refreshedToken) {
+    const startProjectIntentFlow = async () => {
+      try {
+        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+        let token = getLatestAccessToken();
+        if (!token) {
           onConsumeProjectCreationIntent();
           return;
         }
-        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-        response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
+
+        let response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
-      }
 
-      if (cancelled) {
-        return;
-      }
+        if (response.status === 401) {
+          const refreshedToken = await auth.refreshAccessToken();
+          if (!refreshedToken) {
+            onConsumeProjectCreationIntent();
+            return;
+          }
+          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+          response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+        }
 
-      if (response.status === 410) {
-        window.alert('Черновик запроса устарел. Опишите проект ещё раз.');
+        if (cancelled) {
+          return;
+        }
+
+        if (response.status === 410) {
+          window.alert('Черновик запроса устарел. Опишите проект ещё раз.');
+          onConsumeProjectCreationIntent();
+          return;
+        }
+
+        if (!response.ok) {
+          window.alert('Не удалось подготовить запрос. Попробуйте ещё раз.');
+          onConsumeProjectCreationIntent();
+          return;
+        }
+
+        const intentPayload = await response.json() as { projectId?: string | null };
+        const currentProject = auth.project;
+        const shouldArchiveCurrentProject = Boolean(
+          currentProject
+          && currentProject.status === 'active'
+          && currentProject.id !== (intentPayload.projectId ?? null),
+        );
+
+        if (shouldArchiveCurrentProject) {
+          const currentProjectToArchive = currentProject;
+          if (!currentProjectToArchive) {
+            onConsumeProjectCreationIntent();
+            return;
+          }
+          try {
+            await auth.archiveProject(currentProjectToArchive.id);
+            await fetchUsage();
+            if (cancelled) {
+              return;
+            }
+            showToast(`Проект "${currentProjectToArchive.name}" автоматически архивирован.`);
+          } catch (archiveError) {
+            if (cancelled) {
+              return;
+            }
+            window.alert(archiveError instanceof Error ? archiveError.message : 'Не удалось архивировать текущий проект.');
+            onConsumeProjectCreationIntent();
+            return;
+          }
+        }
+
+        const result = await createProjectAndActivate('Новый проект', {
+          projectIntentId: projectCreationIntentId,
+          groupId: currentProject?.groupId ?? auth.projectGroups[0]?.id,
+        });
+        if (!result && !cancelled) {
+          useChatStore.getState().setError('Не удалось автоматически создать проект по вашему описанию.');
+        }
         onConsumeProjectCreationIntent();
-        return;
+      } finally {
+        projectIntentFlowRef.current = null;
       }
-
-      if (!response.ok) {
-        window.alert('Не удалось подготовить запрос. Попробуйте ещё раз.');
-        onConsumeProjectCreationIntent();
-        return;
-      }
-
-      await response.json();
-
-      openCreateProjectModal({
-        projectIntentId: projectCreationIntentId,
-        groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
-        initialProjectName: 'Новый проект',
-        title: 'Новый проект по вашему описанию',
-        description: 'Запрос уже подготовлен. Создайте проект, и стартовый prompt появится в рабочем пространстве.',
-      });
-      onConsumeProjectCreationIntent();
     };
 
-    void openProjectIntentModal();
+    void startProjectIntentFlow();
 
     return () => {
       cancelled = true;
@@ -1864,13 +1922,16 @@ function WorkspaceApp({
   }, [
     auth.accessToken,
     auth.isAuthenticated,
-    auth.project?.groupId,
+    auth.archiveProject,
+    auth.project,
     auth.projectGroups,
     auth.refreshAccessToken,
+    createProjectAndActivate,
+    fetchUsage,
     hasShareToken,
     onConsumeProjectCreationIntent,
-    openCreateProjectModal,
     projectCreationIntentId,
+    showToast,
   ]);
 
   useEffect(() => {
@@ -3686,6 +3747,28 @@ function WorkspaceApp({
             Обновить
           </button>
         </div>
+      </div>
+    )}
+    {toasts.length > 0 && (
+      <div className="fixed right-4 top-4 z-[95] flex max-w-sm flex-col gap-2">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-[0_12px_32px_rgba(15,23,42,0.14)]"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="min-w-0 flex-1">{toast.message}</div>
+            <button
+              type="button"
+              onClick={() => dismissToast(toast.id)}
+              className="shrink-0 text-slate-400 transition hover:text-slate-600"
+              aria-label="Закрыть уведомление"
+            >
+              ×
+            </button>
+          </div>
+        ))}
       </div>
     )}
     <ProjectMenu
