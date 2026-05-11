@@ -2033,8 +2033,13 @@ function WorkspaceApp({
       return { accepted: false, message: `HTTP ${response.status}` };
     }
 
+    const responsePayload = await response.json() as { job?: ProjectGenerationJobView | null };
+    if (responsePayload.job) {
+      setActiveGenerationJob(responsePayload.job);
+    }
+
     return { accepted: true };
-  }, [armAiMutationWatchdog, auth, hasShareToken, isScheduleReadOnlyProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
+  }, [armAiMutationWatchdog, auth, hasShareToken, isScheduleReadOnlyProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setActiveGenerationJob, setAiMutationLock]);
 
   const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {

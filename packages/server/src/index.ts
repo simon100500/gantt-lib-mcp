@@ -56,6 +56,13 @@ import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 import { runDirectSplitTask } from './split-task.js';
 import { normalizeStoredTaskStatus } from '@gantt/runtime-core/services/task-status';
+import {
+  markProjectGenerationJobFailed,
+  markProjectGenerationJobRunning,
+  markProjectGenerationJobSucceeded,
+  serializeProjectGenerationJob,
+  startProjectGenerationJob,
+} from './services/project-generation-service.js';
 
 const fastify = Fastify({ logger: true });
 const requireAiQueryLimit = requireTrackedLimit('ai_queries', {
@@ -298,6 +305,14 @@ fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireC
 
   await incrementAiUsage(req.projectAccess?.billingUserId ?? req.user!.userId);
   const runId = randomUUID();
+  const { job } = await startProjectGenerationJob({
+    projectId: req.user!.projectId,
+    userId: req.user!.userId,
+    source: 'direct_split_task',
+    type: 'split_task',
+    requestContextId: runId,
+    previewMode: 'none',
+  });
 
   void runDirectSplitTask({
     runId,
@@ -318,12 +333,27 @@ fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireC
       commandService,
     },
     broadcastToSession,
+    generationJob: {
+      async markRunning(stage, statusMessage) {
+        await markProjectGenerationJobRunning(job.id, stage, statusMessage);
+      },
+      async markSucceeded(input) {
+        await markProjectGenerationJobSucceeded(job.id, input);
+      },
+      async markFailed(input) {
+        await markProjectGenerationJobFailed(job.id, input);
+      },
+    },
   }).catch((err: unknown) => {
+    void markProjectGenerationJobFailed(job.id, {
+      statusMessage: 'Разбиение задачи завершилось ошибкой.',
+      errorMessage: String(err),
+    });
     broadcastToSession(req.user!.sessionId, { type: 'error', message: String(err) });
     fastify.log.error(err, 'direct split task error');
   });
 
-  return reply.send({ status: 'processing', runId });
+  return reply.send({ status: 'processing', runId, job: serializeProjectGenerationJob(job) });
 });
 
 fastify.get('/api/messages', { preHandler: [authMiddleware] }, async (req, reply) => {
