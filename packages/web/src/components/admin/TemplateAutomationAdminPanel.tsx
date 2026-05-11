@@ -9,6 +9,9 @@ import type {
   TemplatePublicationVisibility,
 } from '../../lib/apiTypes.ts';
 
+const DEFAULT_LANDING_SITE_URL = 'https://getgantt.ru/';
+const SITE_PREVIEW_ORIGIN = (import.meta.env.VITE_LANDING_SITE_URL?.trim() || DEFAULT_LANDING_SITE_URL).replace(/\/+$/, '');
+
 type TemplateAdminFilter = 'all' | 'draft' | 'in_work' | 'published' | 'failed';
 
 type TemplateAdminEntity =
@@ -1007,10 +1010,10 @@ export function TemplateAutomationAdminPanel({
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}/${selectedEntity.publication.slug}`} target="_blank" rel="noreferrer" className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100">
+                  <a href={`${SITE_PREVIEW_ORIGIN}/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}/${selectedEntity.publication.slug}`} target="_blank" rel="noreferrer" className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100">
                     Открыть detail page
                   </a>
-                  <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}`} target="_blank" rel="noreferrer" className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100">
+                  <a href={`${SITE_PREVIEW_ORIGIN}/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}`} target="_blank" rel="noreferrer" className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100">
                     Открыть каталог
                   </a>
                 </div>

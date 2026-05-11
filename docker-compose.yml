@@ -1,6 +1,9 @@
 services:
   gantt:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_LANDING_SITE_URL: ${VITE_LANDING_SITE_URL:-https://getgantt.ru/}
     ports:
       - "8080:80"
     volumes:
