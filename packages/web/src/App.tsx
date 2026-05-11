@@ -52,6 +52,8 @@ import { useProjectStore } from './stores/useProjectStore.ts';
 import { normalizeTasks, type ProjectSectionPermissions, type Task, type TimelineMarker, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
+const GENERATION_JOB_STORAGE_KEY_PREFIX = 'gantt_generation_job:';
+const GENERATION_PREVIEW_STORAGE_KEY_PREFIX = 'gantt_generation_preview:';
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
 const AI_DONE_GRACE_PERIOD_MS = 10000;
 const AI_MUTATION_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
@@ -344,6 +346,85 @@ type ProjectGenerationJobView = {
 
 function isActiveProjectGenerationJob(job: ProjectGenerationJobView | null): boolean {
   return Boolean(job && (job.status === 'queued' || job.status === 'running'));
+}
+
+type StoredGenerationPreview = {
+  jobId: string;
+  projectId: string;
+  tasks: Task[];
+  mode: 'rendering' | 'failed';
+  message: string | null;
+  wave: number;
+};
+
+function canUseSessionStorage(): boolean {
+  return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
+}
+
+function getGenerationJobStorageKey(projectId: string): string {
+  return `${GENERATION_JOB_STORAGE_KEY_PREFIX}${projectId}`;
+}
+
+function getGenerationPreviewStorageKey(projectId: string): string {
+  return `${GENERATION_PREVIEW_STORAGE_KEY_PREFIX}${projectId}`;
+}
+
+function readStoredGenerationJob(projectId: string): ProjectGenerationJobView | null {
+  if (!canUseSessionStorage()) {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(getGenerationJobStorageKey(projectId));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as ProjectGenerationJobView;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredGenerationJob(projectId: string, job: ProjectGenerationJobView | null): void {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+
+  if (!job || !isActiveProjectGenerationJob(job)) {
+    window.sessionStorage.removeItem(getGenerationJobStorageKey(projectId));
+    return;
+  }
+
+  window.sessionStorage.setItem(getGenerationJobStorageKey(projectId), JSON.stringify(job));
+}
+
+function readStoredGenerationPreview(projectId: string): StoredGenerationPreview | null {
+  if (!canUseSessionStorage()) {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(getGenerationPreviewStorageKey(projectId));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as StoredGenerationPreview;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredGenerationPreview(projectId: string, preview: StoredGenerationPreview | null): void {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+
+  if (!preview) {
+    window.sessionStorage.removeItem(getGenerationPreviewStorageKey(projectId));
+    return;
+  }
+
+  window.sessionStorage.setItem(getGenerationPreviewStorageKey(projectId), JSON.stringify(preview));
 }
 
 export default function App() {
@@ -904,6 +985,33 @@ function WorkspaceApp({
   const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
   const activeWorkspaceProjectId = workspace.kind === 'project' ? workspace.projectId : null;
+  const activeProjectGenerationRunning = Boolean(
+    activeGenerationJob
+    && isActiveProjectGenerationJob(activeGenerationJob)
+    && activeGenerationJob.projectId === activeWorkspaceProjectId,
+  );
+
+  useEffect(() => {
+    if (!activeWorkspaceProjectId) {
+      return;
+    }
+
+    const storedJob = readStoredGenerationJob(activeWorkspaceProjectId);
+    if (storedJob && isActiveProjectGenerationJob(storedJob)) {
+      setActiveGenerationJob((current) => current?.id === storedJob.id ? current : storedJob);
+    }
+
+    const storedPreview = readStoredGenerationPreview(activeWorkspaceProjectId);
+    if (storedPreview) {
+      setPreviewState({
+        tasks: normalizeTasks(storedPreview.tasks),
+        active: true,
+        mode: storedPreview.mode,
+        message: storedPreview.message,
+        wave: storedPreview.wave,
+      });
+    }
+  }, [activeWorkspaceProjectId]);
 
   useEffect(() => {
     if (!pendingGanttDayMode) {
@@ -960,6 +1068,8 @@ function WorkspaceApp({
       return;
     }
 
+    writeStoredGenerationJob(activeWorkspaceProjectId, activeGenerationJob);
+
     if (activeGenerationJob.status === 'queued' || activeGenerationJob.status === 'running') {
       clearAiDoneGraceTimer();
       setAiMutationLock({
@@ -978,12 +1088,13 @@ function WorkspaceApp({
     if (activeGenerationJob.status === 'failed') {
       releaseAiMutationLock();
       setPreparedIntentChatProjectId(null);
+      const storedPreview = readStoredGenerationPreview(activeWorkspaceProjectId);
       setPreviewState((current) => ({
-        tasks: current.tasks,
-        active: true,
+        tasks: current.tasks.length > 0 ? current.tasks : normalizeTasks(storedPreview?.tasks ?? []),
+        active: current.tasks.length > 0 || Boolean(storedPreview?.tasks?.length),
         mode: 'failed',
         message: activeGenerationJob.errorMessage ?? activeGenerationJob.statusMessage ?? 'Генерация завершилась ошибкой.',
-        wave: current.wave,
+        wave: current.wave > 0 ? current.wave : (storedPreview?.wave ?? 0),
       }));
       if (lastGenerationFailureJobIdRef.current !== activeGenerationJob.id) {
         lastGenerationFailureJobIdRef.current = activeGenerationJob.id;
@@ -993,6 +1104,8 @@ function WorkspaceApp({
     }
 
     if (activeGenerationJob.status === 'succeeded' || activeGenerationJob.status === 'canceled') {
+      writeStoredGenerationJob(activeWorkspaceProjectId, null);
+      writeStoredGenerationPreview(activeWorkspaceProjectId, null);
       releaseAiMutationLock();
       setPreparedIntentChatProjectId(null);
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
@@ -1022,6 +1135,17 @@ function WorkspaceApp({
         message: null,
         wave: msg.type === 'preview_tasks_replace' ? (msg.wave ?? 1) : 1,
       });
+      if (workspace.kind === 'project') {
+        const previewJobId = activeGenerationJob?.projectId === workspace.projectId ? activeGenerationJob.id : 'unknown';
+        writeStoredGenerationPreview(workspace.projectId, {
+          jobId: previewJobId,
+          projectId: workspace.projectId,
+          tasks: normalizedPreviewTasks,
+          mode: 'rendering',
+          message: null,
+          wave: msg.type === 'preview_tasks_replace' ? (msg.wave ?? 1) : 1,
+        });
+      }
       return;
     }
     if (msg.type === 'preview_failed') {
@@ -1039,6 +1163,16 @@ function WorkspaceApp({
             message: msg.message ?? 'Предварительный график не был сохранён.',
           }
         : current);
+      if (workspace.kind === 'project') {
+        const storedPreview = readStoredGenerationPreview(workspace.projectId);
+        if (storedPreview) {
+          writeStoredGenerationPreview(workspace.projectId, {
+            ...storedPreview,
+            mode: 'failed',
+            message: msg.message ?? 'Предварительный график не был сохранён.',
+          });
+        }
+      }
       useChatStore.getState().setError(msg.message ?? 'Предварительный график не был сохранён.');
       return;
     }
@@ -1054,6 +1188,10 @@ function WorkspaceApp({
       });
       releaseAiMutationLock();
       scheduleAiDoneGraceExit();
+      if (workspace.kind === 'project') {
+        writeStoredGenerationPreview(workspace.projectId, null);
+        writeStoredGenerationJob(workspace.projectId, null);
+      }
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
       useTaskStore.getState().replaceFromSystem(normalizedTasks);
 
@@ -1083,6 +1221,10 @@ function WorkspaceApp({
       setPreparedIntentChatProjectId(null);
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
+      if (workspace.kind === 'project') {
+        writeStoredGenerationPreview(workspace.projectId, null);
+        writeStoredGenerationJob(workspace.projectId, null);
+      }
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
       setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
         ? { ...current, status: 'succeeded', stage: 'succeeded', statusMessage: 'График готов', errorCode: null, errorMessage: null }
@@ -1095,13 +1237,26 @@ function WorkspaceApp({
       setPreparedIntentChatProjectId(null);
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
+      if (workspace.kind === 'project') {
+        const storedPreview = readStoredGenerationPreview(workspace.projectId);
+        if (storedPreview) {
+          writeStoredGenerationPreview(workspace.projectId, {
+            ...storedPreview,
+            mode: 'failed',
+            message: msg.message ?? 'unknown error',
+          });
+        }
+      }
+      setPreviewState((current) => current.active
+        ? { ...current, mode: 'failed', message: msg.message ?? 'unknown error' }
+        : current);
       setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
         ? { ...current, status: 'failed', stage: 'failed', statusMessage: msg.message ?? 'unknown error', errorMessage: msg.message ?? 'unknown error' }
         : current);
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
   }, [
+    activeGenerationJob,
     armAiMutationWatchdog,
     auth.isAuthenticated,
     bumpHistoryRefreshRevision,
@@ -1110,6 +1265,7 @@ function WorkspaceApp({
     releaseAiMutationLock,
     scheduleAiDoneGraceExit,
     setAiMutationLock,
+    workspace,
   ]);
 
   const { connected, connectedToken } = useWebSocket(
@@ -1255,12 +1411,16 @@ function WorkspaceApp({
   const resetWorkspacePresentation = useCallback(() => {
     clearAiDoneGraceTimer();
     releaseAiMutationLock();
+    if (activeWorkspaceProjectId) {
+      writeStoredGenerationJob(activeWorkspaceProjectId, null);
+      writeStoredGenerationPreview(activeWorkspaceProjectId, null);
+    }
     setActiveGenerationJob(null);
     setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
     replaceTasksFromSystem([]);
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
-  }, [clearAiDoneGraceTimer, releaseAiMutationLock, replaceTasksFromSystem]);
+  }, [activeWorkspaceProjectId, clearAiDoneGraceTimer, releaseAiMutationLock, replaceTasksFromSystem]);
 
   const openCreateProjectModal = useCallback((nextIntent: PendingProjectCreation = {}) => {
     setPendingProjectCreation(nextIntent);
@@ -1362,7 +1522,29 @@ function WorkspaceApp({
           aiThinking: true,
           error: null,
         });
-        setPendingPreparedIntentStart({ intentId: options.projectIntentId, projectId: payload.project.id });
+        try {
+          const startGenerationResponse = await fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/start-generation`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${payload.accessToken}`,
+            },
+          });
+
+          if (!startGenerationResponse.ok) {
+            const startPayload = await startGenerationResponse.json().catch(() => ({ error: `HTTP ${startGenerationResponse.status}` })) as { error?: string };
+            throw new Error(startPayload.error ?? `HTTP ${startGenerationResponse.status}`);
+          }
+
+          const startPayload = await startGenerationResponse.json() as { job?: ProjectGenerationJobView | null };
+          setPendingPreparedIntentStart(null);
+          if (startPayload.job) {
+            setActiveGenerationJob(startPayload.job);
+            setPreparedIntentChatProjectId(startPayload.job.projectId ?? payload.project.id);
+          }
+        } catch (startError) {
+          console.error('Failed to start prepared project intent generation immediately:', startError);
+          setPendingPreparedIntentStart({ intentId: options.projectIntentId, projectId: payload.project.id });
+        }
       } else if (options.templatePublicationId) {
         const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
         let token = getLatestAccessToken();
@@ -1455,7 +1637,9 @@ function WorkspaceApp({
       setWorkspace({
         kind: 'project',
         projectId: newProject.id,
-        chatOpen: options.firstPrompt || options.projectIntentId ? true : readProjectChatOpenState(),
+        chatOpen: options.createEmptyChart
+          ? false
+          : (options.firstPrompt || options.projectIntentId ? true : readProjectChatOpenState()),
       });
       setPendingProjectCreation(null);
       setPendingPostAuthAction(null);
@@ -2626,6 +2810,7 @@ function WorkspaceApp({
     && !hasShareToken
     && currentProjectIsEmpty
     && !previewState.active
+    && !activeProjectGenerationRunning
     && !hasQueuedProjectPrompt
     && !projectChatOpen
     && activeEmptyProjectModeProjectId !== workspace.projectId;
@@ -2633,6 +2818,7 @@ function WorkspaceApp({
     && !hasShareToken
     && currentProjectIsEmpty
     && !previewState.active
+    && !activeProjectGenerationRunning
     && !hasQueuedProjectPrompt
     && activeEmptyProjectModeProjectId === workspace.projectId;
   const shouldRenderStartScreenProjectSettingsModal = showProjectStartScreen
