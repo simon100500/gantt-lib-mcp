@@ -397,7 +397,7 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
   const canEditGroup = group?.accessRole !== 'viewer';
   const canManageGroup = group?.accessRole === undefined || group.accessRole === 'owner';
   const canOpenMembers = Boolean(group && onManageMembers);
-  const canDeleteGroup = Boolean(group && canManageGroup && !group.isDefault && onDeleteGroup);
+  const canDeleteGroup = Boolean(group && !group.isDefault && onDeleteGroup);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -474,9 +474,9 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
         <DeleteProjectGroupModal
           groupName={group.name}
           projectCount={projectCount}
-          onDelete={projectCount === 0 ? async () => {
+          onDelete={async () => {
             await onDeleteGroup?.(group.id);
-          } : undefined}
+          }}
           onClose={() => setDeleteModalOpen(false)}
         />
       ) : null}
@@ -662,7 +662,7 @@ export function ProjectSwitcher({
                   onToggle={() => toggleGroup(group.id)}
                   usageLabel={group.isDefault ? projectsUsageLabel : null}
                   group={group}
-                  projectCount={0}
+                  projectCount={group.projectCount ?? 0}
                   onCreateProject={onCreateNew}
                   onRenameGroup={onRenameGroup}
                   onDeleteGroup={onDeleteGroup}
@@ -681,7 +681,7 @@ export function ProjectSwitcher({
                 onToggle={() => toggleGroup(group.id)}
                 usageLabel={group.isDefault ? projectsUsageLabel : null}
                 group={group}
-                projectCount={groupProjects.length}
+                projectCount={group.projectCount ?? groupProjects.length}
                 onCreateProject={onCreateNew}
                 onRenameGroup={onRenameGroup}
                 onDeleteGroup={onDeleteGroup}

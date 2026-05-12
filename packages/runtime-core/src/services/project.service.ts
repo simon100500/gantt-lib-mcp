@@ -187,14 +187,10 @@ export class ProjectService {
     return this.groupToDomain(group);
   }
 
-  async deleteGroup(groupId: string, userId: string): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'default_group' | 'not_empty' }> {
+  async deleteGroup(groupId: string, userId: string): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'default_group' }> {
     const existing = await this.prisma.projectGroup.findFirst({
       where: { id: groupId, userId },
-      include: {
-        _count: {
-          select: { projects: true },
-        },
-      },
+      select: { id: true, isDefault: true },
     });
 
     if (!existing) {
@@ -205,11 +201,17 @@ export class ProjectService {
       return { ok: false, reason: 'default_group' };
     }
 
-    if (existing._count.projects > 0) {
-      return { ok: false, reason: 'not_empty' };
-    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.project.deleteMany({
+        where: {
+          groupId,
+          userId,
+        },
+      });
 
-    await this.prisma.projectGroup.delete({ where: { id: groupId } });
+      await tx.projectGroup.delete({ where: { id: groupId } });
+    });
+
     return { ok: true };
   }
 

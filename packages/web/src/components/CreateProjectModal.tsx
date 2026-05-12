@@ -19,7 +19,7 @@ interface CreateProjectModalProps {
   submitLabel?: string;
   archiveProjectName?: string;
   onSave: (name: string, groupId: string) => Promise<{ id: string; name: string } | null>;
-  onCreateGroup: (name: string) => Promise<ProjectGroup | null>;
+  onCreateGroup?: (name: string) => Promise<ProjectGroup | null>;
   onClose: () => void;
 }
 
@@ -126,17 +126,19 @@ export function CreateProjectModal({
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor="new-project-group">Группа проектов</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setGroupModalOpen(true)}
-                  disabled={loading}
-                  className="h-8 px-2 text-xs font-medium text-slate-600 hover:text-slate-900"
-                >
-                  <FolderPlus className="h-4 w-4" />
-                  <span>Новая группа</span>
-                </Button>
+                {onCreateGroup ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setGroupModalOpen(true)}
+                    disabled={loading}
+                    className="h-8 px-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+                  >
+                    <FolderPlus className="h-4 w-4" />
+                    <span>Новая группа</span>
+                  </Button>
+                ) : null}
               </div>
               <select
                 id="new-project-group"
@@ -188,7 +190,7 @@ export function CreateProjectModal({
           </CardFooter>
         </form>
       </Card>
-      {groupModalOpen && (
+      {groupModalOpen && onCreateGroup ? (
         <ProjectGroupModal
           mode="create"
           initialName="Новая группа"
@@ -200,7 +202,7 @@ export function CreateProjectModal({
           }}
           onClose={() => setGroupModalOpen(false)}
         />
-      )}
+      ) : null}
     </div>
   );
 }

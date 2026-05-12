@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 const appSource = readFileSync(resolve(process.cwd(), 'packages/web/src/App.tsx'), 'utf8');
 const projectSwitcherSource = readFileSync(resolve(process.cwd(), 'packages/web/src/components/ProjectSwitcher.tsx'), 'utf8');
 const createProjectModalSource = readFileSync(resolve(process.cwd(), 'packages/web/src/components/CreateProjectModal.tsx'), 'utf8');
+const deleteProjectGroupModalSource = readFileSync(resolve(process.cwd(), 'packages/web/src/components/DeleteProjectGroupModal.tsx'), 'utf8');
 
 describe('landing prompt flow orchestration', () => {
   it('reads project intent text and routes it into the standard web flow', () => {
@@ -43,9 +44,11 @@ describe('landing prompt flow orchestration', () => {
 describe('project creation recovery', () => {
   it('allows one active and up to four archived projects on free plan before paywall', () => {
     assert.match(appSource, /const FREE_ARCHIVED_PROJECT_LIMIT = 4;/);
-    assert.match(appSource, /const activeProjectToReplace = auth\.projects\.find\(\(project\) => project\.status === 'active'\) \?\? null;/);
-    assert.match(appSource, /const activeProjectsCount = auth\.projects\.filter\(\(project\) => project\.status === 'active'\)\.length;/);
-    assert.match(appSource, /const archivedProjectsCount = auth\.projects\.filter\(\(project\) => project\.status === 'archived'\)\.length;/);
+    assert.match(appSource, /function mergeProjectsForLimitEvaluation\(projects: AuthProject\[\], currentProject: AuthProject \| null\): AuthProject\[\] \{/);
+    assert.match(appSource, /const projectsForLimitEvaluation = mergeProjectsForLimitEvaluation\(auth\.projects, auth\.project \?\? null\);/);
+    assert.match(appSource, /const activeProjectToReplace = projectsForLimitEvaluation\.find\(\(project\) => project\.status === 'active'\) \?\? null;/);
+    assert.match(appSource, /const activeProjectsCount = projectsForLimitEvaluation\.filter\(\(project\) => project\.status === 'active'\)\.length;/);
+    assert.match(appSource, /const archivedProjectsCount = projectsForLimitEvaluation\.filter\(\(project\) => project\.status === 'archived'\)\.length;/);
     assert.match(appSource, /const canSilentlyReplaceOnFree = isFreePlanProjectReplacementMode[\s\S]*archivedProjectsCount < FREE_ARCHIVED_PROJECT_LIMIT;/);
     assert.match(appSource, /const effectiveProjectDenial = isFreePlanProjectReplacementMode[\s\S]*\? localProjectLimitDenial[\s\S]*: proactiveProjectDenial;/);
     assert.match(appSource, /const effectiveArchiveDenial = localArchiveLimitDenial \?\? proactiveArchiveDenial;/);
@@ -107,5 +110,17 @@ describe('project groups visibility', () => {
   it('renders empty project groups instead of hiding them', () => {
     assert.match(projectSwitcherSource, /if \(groupProjects\.length === 0\) \{/);
     assert.match(projectSwitcherSource, /<div className="px-3 py-2 text-xs text-slate-400">Нет проектов<\/div>/);
+  });
+
+  it('shows destructive group deletion confirmation and keeps group creation affordances behind paywall on free', () => {
+    assert.match(projectSwitcherSource, /projectCount=\{group\.projectCount \?\? groupProjects\.length\}/);
+    assert.match(createProjectModalSource, /onCreateGroup\?: \(name: string\) => Promise<ProjectGroup \| null>;/);
+    assert.match(createProjectModalSource, /\{onCreateGroup \? \(/);
+    assert.match(deleteProjectGroupModalSource, /Вместе с ней будут удалены все проекты в группе/);
+    assert.match(appSource, /const isProjectGroupsLockedOnCurrentPlan = billingStatus == null/);
+    assert.match(appSource, /billingStatus\.plan === 'free' && billingStatus\.billingState !== 'trial_active'/);
+    assert.match(appSource, /code: 'PROJECT_GROUPS_FEATURE_LOCKED'/);
+    assert.match(appSource, /onCreateProjectGroup=\{handleCreateProjectGroup\}/);
+    assert.match(appSource, /onCreateGroup=\{async \(name\) => \{/);
   });
 });

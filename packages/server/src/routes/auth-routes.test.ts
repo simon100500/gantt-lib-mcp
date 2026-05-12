@@ -75,3 +75,20 @@ describe('project group owner transfer route', () => {
     );
   });
 });
+
+describe('project group management enforcement', () => {
+  it('blocks free users from creating additional project groups', () => {
+    assert.match(
+      authRoutesSource,
+      /fastify\.post\('\/api\/project-groups',\s*\{\s*preHandler:\s*\[authMiddleware\]\s*\},\s*async \(req, reply\) => \{[\s\S]*billingService\.getSubscriptionStatus\(req\.user!\.userId\)[\s\S]*billingStatus\.plan === 'free' && billingStatus\.billingState !== 'trial_active'[\s\S]*Project groups are not available on the free plan/,
+    );
+  });
+
+  it('deletes non-default groups without requiring them to be empty first', () => {
+    assert.match(
+      authRoutesSource,
+      /fastify\.delete<\{ Params: \{ id: string \} \}>\('\/api\/project-groups\/:id',\s*\{\s*preHandler:\s*\[authMiddleware\]\s*\},\s*async \(req, reply\) => \{[\s\S]*projectService\.deleteGroup\(req\.params\.id, req\.user!\.userId\)[\s\S]*Default project group cannot be deleted/,
+    );
+    assert.doesNotMatch(authRoutesSource, /Project group is not empty/);
+  });
+});

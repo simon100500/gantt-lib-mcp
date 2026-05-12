@@ -22,6 +22,7 @@ import {
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { isAdminEmail } from '../middleware/admin-middleware.js';
 import { requireTrackedLimit } from '../middleware/constraint-middleware.js';
+import { BillingService } from '../services/billing-service.js';
 import { YandexAuthError, YandexAuthService } from '../services/yandex-auth-service.js';
 import { resolveGroupAccess, resolveProjectAccess } from '../access-control.js';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -31,6 +32,7 @@ const requireProjectLimit = requireTrackedLimit('projects', {
   code: 'PROJECT_LIMIT_REACHED',
   upgradeHint: 'Upgrade your plan to create or restore more active projects.',
 });
+const billingService = new BillingService();
 
 type AuthSuccessResponse = {
   accessToken: string;
@@ -797,6 +799,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'name required' });
     }
 
+    const billingStatus = await billingService.getSubscriptionStatus(req.user!.userId);
+    if (billingStatus.plan === 'free' && billingStatus.billingState !== 'trial_active') {
+      return reply.status(403).send({ error: 'Project groups are not available on the free plan' });
+    }
+
     const group = await projectService.createGroup(req.user!.userId, name);
     return reply.status(201).send({ group });
   });
@@ -839,9 +846,6 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
     if (result.reason === 'default_group') {
       return reply.status(409).send({ error: 'Default project group cannot be deleted' });
-    }
-    if (result.reason === 'not_empty') {
-      return reply.status(409).send({ error: 'Project group is not empty' });
     }
     return reply.status(404).send({ error: 'Project group not found' });
   });

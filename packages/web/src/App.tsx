@@ -955,6 +955,19 @@ interface PendingProjectCreation {
 
 const FREE_ARCHIVED_PROJECT_LIMIT = 4;
 
+function mergeProjectsForLimitEvaluation(projects: AuthProject[], currentProject: AuthProject | null): AuthProject[] {
+  if (!currentProject) {
+    return projects;
+  }
+
+  const existingIndex = projects.findIndex((project) => project.id === currentProject.id);
+  if (existingIndex === -1) {
+    return [...projects, currentProject];
+  }
+
+  return projects.map((project) => (project.id === currentProject.id ? { ...project, ...currentProject } : project));
+}
+
 function WorkspaceApp({
   auth,
   localTasks,
@@ -1032,9 +1045,23 @@ function WorkspaceApp({
   const proactiveProjectDenial = buildProactiveConstraintDenial('projects', billingStatus);
   const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
   const proactiveArchiveDenial = buildProactiveConstraintDenial('archive', billingStatus);
-  const activeProjectToReplace = auth.projects.find((project) => project.status === 'active') ?? null;
-  const activeProjectsCount = auth.projects.filter((project) => project.status === 'active').length;
-  const archivedProjectsCount = auth.projects.filter((project) => project.status === 'archived').length;
+  const isProjectGroupsLockedOnCurrentPlan = billingStatus == null
+    || (billingStatus.plan === 'free' && billingStatus.billingState !== 'trial_active');
+  const projectGroupsLockedDenial: Partial<ConstraintDenialPayload> | null = isProjectGroupsLockedOnCurrentPlan
+    ? {
+        code: 'PROJECT_GROUPS_FEATURE_LOCKED',
+        limitKey: null,
+        reasonCode: 'feature_disabled',
+        remaining: null,
+        plan: ((billingStatus?.plan as PlanId | undefined) ?? 'free'),
+        planLabel: billingStatus?.planMeta.label ?? PLAN_LABELS[((billingStatus?.plan as PlanId | undefined) ?? 'free')],
+        upgradeHint: 'Расширьте тариф, чтобы создавать группы проектов.',
+      }
+    : null;
+  const projectsForLimitEvaluation = mergeProjectsForLimitEvaluation(auth.projects, auth.project ?? null);
+  const activeProjectToReplace = projectsForLimitEvaluation.find((project) => project.status === 'active') ?? null;
+  const activeProjectsCount = projectsForLimitEvaluation.filter((project) => project.status === 'active').length;
+  const archivedProjectsCount = projectsForLimitEvaluation.filter((project) => project.status === 'archived').length;
   const isFreePlanProjectReplacementMode = billingStatus?.billingState === 'free' || billingStatus == null;
   const canSilentlyReplaceOnFree = isFreePlanProjectReplacementMode
     && Boolean(activeProjectToReplace)
@@ -2604,16 +2631,31 @@ function WorkspaceApp({
   ]);
 
   const handleCreateProjectGroup = useCallback(async (name: string) => {
+    if (isProjectGroupsLockedOnCurrentPlan) {
+      await openLimitModal(projectGroupsLockedDenial);
+      return;
+    }
     await auth.createProjectGroup(name);
-  }, [auth]);
+  }, [auth, isProjectGroupsLockedOnCurrentPlan, openLimitModal, projectGroupsLockedDenial]);
 
   const handleRenameProjectGroup = useCallback(async (groupId: string, name: string) => {
     await auth.updateProjectGroup(groupId, { name });
   }, [auth]);
 
   const handleDeleteProjectGroup = useCallback(async (groupId: string) => {
+    const currentProjectId = auth.project?.id ?? null;
+    const currentProjectGroupId = auth.project?.groupId ?? null;
     await auth.deleteProjectGroup(groupId);
-  }, [auth]);
+    await auth.refreshProjects();
+    await fetchUsage();
+
+    if (currentProjectId && currentProjectGroupId === groupId) {
+      const nextProject = useAuthStore.getState().project;
+      if (nextProject && nextProject.id !== currentProjectId) {
+        await auth.switchProject(nextProject.id);
+      }
+    }
+  }, [auth, fetchUsage]);
 
   const handleCreateCurrentProjectTemplate = useCallback(() => {
     if (isScheduleReadOnlyProject) {
@@ -4091,6 +4133,10 @@ function WorkspaceApp({
           return createProjectAndActivate(name, nextOptions);
         }}
         onCreateGroup={async (name) => {
+          if (isProjectGroupsLockedOnCurrentPlan) {
+            await openLimitModal(projectGroupsLockedDenial);
+            return null;
+          }
           return auth.createProjectGroup(name);
         }}
         onClose={() => {

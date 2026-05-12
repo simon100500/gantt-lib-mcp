@@ -1,15 +1,44 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 interface DeleteProjectGroupModalProps {
   groupName: string;
   projectCount: number;
-  onDelete?: () => Promise<void>;
+  onDelete: () => Promise<void>;
   onClose: () => void;
 }
 
+const CONFIRMATION_WORD = 'УДАЛИТЬ';
+
 export function DeleteProjectGroupModal({ groupName, projectCount, onDelete, onClose }: DeleteProjectGroupModalProps) {
-  const canDelete = projectCount === 0 && Boolean(onDelete);
+  const [confirmationValue, setConfirmationValue] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isConfirmationValid = confirmationValue.trim() === CONFIRMATION_WORD;
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+
+    if (!isConfirmationValid) {
+      setError(`Введите слово ${CONFIRMATION_WORD}`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await onDelete();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить группу проектов');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -29,28 +58,56 @@ export function DeleteProjectGroupModal({ groupName, projectCount, onDelete, onC
           <CardTitle className="text-xl font-semibold">Удалить группу проектов</CardTitle>
           <CardDescription>{groupName}</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-slate-600">
-            {canDelete
-              ? 'Группа пустая. Её можно удалить.'
-              : `Группу можно удалить только когда она пустая. Сейчас в ней ${projectCount} проект${projectCount === 1 ? '' : projectCount < 5 ? 'а' : 'ов'}.`}
-          </p>
-        </CardContent>
-        <CardFooter className="flex gap-2">
-          <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-            {canDelete ? 'Отмена' : 'Понятно'}
-          </Button>
-          {canDelete ? (
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => { void onDelete?.().finally(onClose); }}
-              className="flex-1"
-            >
-              Удалить
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            <div className="space-y-3 text-sm text-slate-600">
+              <p>
+                Будет удалена группа <span className="font-medium text-slate-900">{groupName}</span>.
+              </p>
+              <p>
+                Вместе с ней будут удалены все проекты в группе: {projectCount} проект{projectCount === 1 ? '' : projectCount < 5 ? 'а' : 'ов'}.
+              </p>
+              <p className="font-medium text-red-600">Это действие необратимо.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-sm text-slate-600">
+                Введите <span className="font-mono font-semibold select-all cursor-text">{CONFIRMATION_WORD}</span> в поле ниже для подтверждения удаления
+              </p>
+              <Input
+                id="delete-project-group-confirmation"
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={CONFIRMATION_WORD}
+                className={cn(
+                  'h-11 font-mono placeholder:text-slate-300',
+                  error && 'border-destructive focus-visible:ring-destructive',
+                )}
+                value={confirmationValue}
+                onChange={(event) => setConfirmationValue(event.target.value)}
+                disabled={loading}
+                autoFocus
+              />
+              {error ? (
+                <p className="text-sm text-destructive" role="alert">{error}</p>
+              ) : null}
+            </div>
+          </CardContent>
+          <CardFooter className="flex gap-2">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1" disabled={loading}>
+              Отмена
             </Button>
-          ) : null}
-        </CardFooter>
+            <Button
+              type="submit"
+              variant="destructive"
+              className="flex-1"
+              disabled={loading || !isConfirmationValid}
+            >
+              {loading ? 'Удаление…' : 'OK'}
+            </Button>
+          </CardFooter>
+        </form>
       </Card>
     </div>
   );
