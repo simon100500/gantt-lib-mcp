@@ -28,6 +28,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
   const [activeIndex, setActiveIndex] = useState<number>(DEFAULT_TEMPLATE_INDEX);
   const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].tasks);
   const [activeTitle, setActiveTitle] = useState<string | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].title);
+  const [selectedPrompt, setSelectedPrompt] = useState<string>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].prompt);
   const ganttRef = useRef<HTMLDivElement>(null);
 
   function scrollToGantt(duration = 1200) {
@@ -70,7 +71,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
           </div>
 
           <div id="demo" className="relative min-w-0 w-full max-w-[560px] lg:translate-x-6 lg:justify-self-end lg:self-start">
-            <HomepagePromptRedirect apiBaseUrl={apiBaseUrl} />
+            <HomepagePromptRedirect apiBaseUrl={apiBaseUrl} selectedPrompt={selectedPrompt} />
           </div>
         </div>
       </section>
@@ -95,6 +96,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
                   setActiveTasks(template.tasks);
                   setActiveTitle(template.title);
                 }
+                setSelectedPrompt(template.prompt);
                 scrollToGantt(900);
               }}
               className={`rounded-full border px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${index === activeIndex

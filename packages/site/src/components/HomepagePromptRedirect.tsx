@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { buildAppProjectIntentUrl } from '../lib/utils';
 
 const MIN_TEXT_LENGTH = 10;
@@ -7,12 +7,21 @@ const PLACEHOLDER = 'Например: нужен график ремонта о
 
 interface HomepagePromptRedirectProps {
   apiBaseUrl: string;
+  selectedPrompt?: string;
 }
 
-export function HomepagePromptRedirect({ apiBaseUrl }: HomepagePromptRedirectProps) {
+export function HomepagePromptRedirect({ apiBaseUrl, selectedPrompt }: HomepagePromptRedirectProps) {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedPrompt) {
+      return;
+    }
+    setError(null);
+    setText(selectedPrompt);
+  }, [selectedPrompt]);
 
   const startRedirect = async () => {
     const trimmedText = text.trim();
