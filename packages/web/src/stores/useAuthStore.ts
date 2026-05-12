@@ -12,6 +12,19 @@ function getTokenExpMs(token: string): number | null {
   }
 }
 
+function getTokenProjectId(token: string | null): string | null {
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1])) as { projectId?: unknown };
+    return typeof payload.projectId === 'string' && payload.projectId.trim() ? payload.projectId : null;
+  } catch {
+    return null;
+  }
+}
+
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 const REFRESH_TOKEN_KEY = 'gantt_refresh_token';
 const USER_KEY = 'gantt_user';
@@ -199,11 +212,12 @@ function readStoredAuth(): StoredAuthState | null {
       archivedAt: value.archivedAt ?? null,
       deletedAt: value.deletedAt ?? null,
     });
-    const project = projectStr ? normalizeProject(JSON.parse(projectStr) as AuthProject) : null;
+    const storedProject = projectStr ? normalizeProject(JSON.parse(projectStr) as AuthProject) : null;
     const projects = projectsStr
       ? (JSON.parse(projectsStr) as AuthProject[]).map(normalizeProject)
-      : project ? [project] : [];
+      : storedProject ? [storedProject] : [];
     const projectGroups = projectGroupsStr ? JSON.parse(projectGroupsStr) as ProjectGroup[] : [];
+    const project = mergeCurrentProject(projects, storedProject, accessToken);
 
     return {
       accessToken,
@@ -391,9 +405,17 @@ function persistAuthSnapshot(state: {
   });
 }
 
-function mergeCurrentProject(projects: AuthProject[], currentProject: AuthProject | null): AuthProject | null {
+function mergeCurrentProject(projects: AuthProject[], currentProject: AuthProject | null, accessToken?: string | null): AuthProject | null {
   if (projects.length === 0) {
     return null;
+  }
+
+  const tokenProjectId = getTokenProjectId(accessToken ?? null);
+  if (tokenProjectId) {
+    const tokenProject = projects.find((project) => project.id === tokenProjectId);
+    if (tokenProject) {
+      return tokenProject;
+    }
   }
 
   if (!currentProject) {
@@ -1072,7 +1094,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
 
     const currentProject = get().project?.id === projectId ? null : get().project;
-    const nextProject = mergeCurrentProject(nextProjects, currentProject);
+    const nextProject = mergeCurrentProject(nextProjects, currentProject, accessToken);
 
     persistAuthSnapshot({
       accessToken,
@@ -1096,7 +1118,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const [projects, projectGroups] = await Promise.all([fetchProjects(token), fetchProjectGroups(token)]);
       const state = get();
       const nextProjects = projects;
-      const nextProject = mergeCurrentProject(nextProjects, state.project);
+      const nextProject = mergeCurrentProject(nextProjects, state.project, state.accessToken);
 
       persistStoredAuth({
         accessToken: state.accessToken,

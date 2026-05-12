@@ -256,6 +256,14 @@ export function ProjectMenu({
       };
     }
 
+    if (auth.isAuthenticated && workspace.kind === 'project') {
+      const selectedProject = auth.projects.find((project) => project.id === workspace.projectId)
+        ?? (auth.project?.id === workspace.projectId ? auth.project : null);
+      if (selectedProject) {
+        return { ...selectedProject, kind: 'project' as const };
+      }
+    }
+
     if (auth.isAuthenticated && auth.project) {
       return { ...auth.project, kind: 'project' as const };
     }

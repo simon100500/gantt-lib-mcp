@@ -28,4 +28,17 @@ describe('project intent routes registration', () => {
     assert.match(routeSource, /generationJob: createProjectGenerationJobTracker\(job\.id\)/);
     assert.match(routeSource, /job: serializeProjectGenerationJob\(job\)/);
   });
+
+  it('exposes a single launch endpoint that archives, switches session, and starts generation server-side', () => {
+    assert.match(routeSource, /fastify\.post\('\/api\/project-intents\/:intentId\/launch'/);
+    assert.match(routeSource, /authService\.archiveProject\(currentProject!\.id, currentAccess\.ownerUserId\)/);
+    assert.match(routeSource, /switchSessionToProject\(\{\s*req,\s*targetProjectId: prepared\.project\.id,/);
+    assert.match(routeSource, /startIntentGeneration\(\{\s*fastify,/);
+  });
+
+  it('recovers from stale intent state instead of switching to an archived prepared project', () => {
+    assert.match(routeSource, /const canReuseExistingProject = Boolean\(existingProject && existingProject\.status === 'active'\);/);
+    assert.match(routeSource, /if \(hasLaunchState && !canReuseExistingProject\) \{/);
+    assert.match(routeSource, /data: \{\s*projectId: null,\s*requestContextId: null,\s*historyGroupId: null,\s*consumedAt: null,/);
+  });
 });

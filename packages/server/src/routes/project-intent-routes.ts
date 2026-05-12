@@ -28,6 +28,8 @@ import {
   registerGenerationJobCancelHandler,
   unregisterGenerationJobCancelHandler,
 } from '../generation-job-control.js';
+import { BillingService } from '../services/billing-service.js';
+import { ConstraintService } from '../services/constraint-service.js';
 
 const DEFAULT_INTENT_TTL_HOURS = 24;
 const MIN_TEXT_LENGTH = 10;
@@ -44,6 +46,8 @@ const requireProjectLimit = requireTrackedLimit('projects', {
   code: 'PROJECT_LIMIT_REACHED',
   upgradeHint: 'Upgrade your plan to create another project.',
 });
+const billingService = new BillingService();
+const constraintService = new ConstraintService();
 
 function asNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
@@ -138,6 +142,313 @@ function mapProjectForAuth(project: any, taskCount = 0) {
     permissions: project.permissions ?? { schedule: 'edit', resources: 'edit', finance: 'edit' },
     archivedAt: project.archivedAt ?? null,
     deletedAt: project.deletedAt ?? null,
+  };
+}
+
+type ProjectIntentRecord = {
+  id: string;
+  source: string;
+  text: string;
+  templateSlug: string | null;
+  userId: string | null;
+  projectId: string | null;
+  requestContextId: string | null;
+  historyGroupId: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+  consumedAt: Date | null;
+};
+
+type PreparedIntentProject = {
+  project: any;
+  requestContextId: string | null;
+  historyGroupId: string | null;
+};
+
+type SessionSwitchResult = {
+  accessToken: string;
+  refreshToken: string;
+};
+
+type ProjectIntentGenerationStartResult = {
+  job: ReturnType<typeof serializeProjectGenerationJob> | null;
+  generationStarted: boolean;
+  alreadyStarted: boolean;
+};
+
+async function buildProjectLimitDenial(userId: string) {
+  const [status, result] = await Promise.all([
+    billingService.getSubscriptionStatus(userId),
+    constraintService.checkLimit(userId, 'projects'),
+  ]);
+
+  if (result.allowed) {
+    return null;
+  }
+
+  return {
+    code: 'PROJECT_LIMIT_REACHED',
+    limitKey: result.limitKey,
+    reasonCode: result.reasonCode,
+    remaining: result.remaining.remaining,
+    plan: status.plan,
+    planLabel: status.planMeta.label,
+    upgradeHint: 'Upgrade your plan to create another project.',
+    ...(result.usage.usageState === 'tracked' ? { used: result.usage.used } : {}),
+    ...(result.remaining.remainingState === 'tracked' || result.remaining.remainingState === 'unlimited'
+      ? { limit: result.remaining.limit }
+      : {}),
+  };
+}
+
+async function resolveIntentForUser(prisma: any, intentId: string, userId: string): Promise<ProjectIntentRecord | null> {
+  const intent = await prisma.projectCreationIntent.findUnique({
+    where: { id: intentId },
+  });
+
+  if (!intent) {
+    return null;
+  }
+
+  if (intent.userId && intent.userId !== userId) {
+    return null;
+  }
+
+  if (intent.userId) {
+    return intent as ProjectIntentRecord;
+  }
+
+  return prisma.projectCreationIntent.update({
+    where: { id: intent.id },
+    data: getIntentUserConnectUpdate(userId),
+  }) as Promise<ProjectIntentRecord>;
+}
+
+async function prepareIntentProject(input: {
+  prisma: any;
+  intent: ProjectIntentRecord;
+  userId: string;
+  projectName: string;
+  groupId: string;
+}): Promise<PreparedIntentProject> {
+  let preparedProjectId = typeof input.intent.projectId === 'string' && input.intent.projectId.trim() ? input.intent.projectId : null;
+  let preparedProject = preparedProjectId ? await authService.findProjectById(preparedProjectId) : null;
+
+  if (preparedProjectId && (!preparedProject || preparedProject.status !== 'active')) {
+    preparedProjectId = null;
+    preparedProject = null;
+  }
+
+  if (!preparedProjectId) {
+    const groupAccess = await resolveGroupAccess(input.userId, input.groupId);
+    if (!groupAccess) {
+      throw new Error('Project group not found');
+    }
+    if (!groupAccess.canEdit) {
+      throw new Error('Project group is read-only for this user');
+    }
+
+    const project = await authService.createProject(groupAccess.ownerUserId, input.projectName, input.groupId);
+    preparedProjectId = project.id;
+    preparedProject = project;
+
+    await messageService.add('user', input.intent.text, project.id, {
+      requestContextId: randomUUID(),
+      historyGroupId: 'initial',
+    });
+
+    const latestMessage = (await messageService.list(project.id, 1))[0];
+    const updatedIntent = await input.prisma.projectCreationIntent.update({
+      where: { id: input.intent.id },
+      data: {
+        ...getIntentUserConnectUpdate(input.userId),
+        projectId: project.id,
+        requestContextId: latestMessage?.requestContextId ?? null,
+        historyGroupId: latestMessage?.historyGroupId ?? null,
+      },
+    });
+
+    return {
+      project: preparedProject,
+      requestContextId: updatedIntent.requestContextId ?? null,
+      historyGroupId: updatedIntent.historyGroupId ?? null,
+    };
+  }
+
+  const preparedAccess = await resolveProjectAccess(input.userId, preparedProjectId);
+  if (!preparedAccess) {
+    throw new Error('Prepared project not found');
+  }
+
+  let requestContextId = input.intent.requestContextId;
+  let historyGroupId = input.intent.historyGroupId;
+  if (!requestContextId || !historyGroupId) {
+    await messageService.add('user', input.intent.text, preparedProjectId, {
+      requestContextId: randomUUID(),
+      historyGroupId: 'initial',
+    });
+
+    const latestMessage = (await messageService.list(preparedProjectId, 1))[0];
+    const updatedIntent = await input.prisma.projectCreationIntent.update({
+      where: { id: input.intent.id },
+      data: {
+        requestContextId: latestMessage?.requestContextId ?? null,
+        historyGroupId: latestMessage?.historyGroupId ?? null,
+      },
+    });
+    requestContextId = updatedIntent.requestContextId ?? null;
+    historyGroupId = updatedIntent.historyGroupId ?? null;
+  }
+
+  return {
+    project: preparedProject!,
+    requestContextId,
+    historyGroupId,
+  };
+}
+
+async function switchSessionToProject(input: {
+  req: any;
+  targetProjectId: string;
+}): Promise<SessionSwitchResult> {
+  const authHeader = input.req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    throw new Error('Unauthorized');
+  }
+
+  const currentAccessToken = authHeader.slice(7);
+  const currentSession = await authService.findSessionByAccessToken(currentAccessToken);
+  if (!currentSession) {
+    throw new Error('Session not found');
+  }
+
+  const newAccessToken = signAccessToken({
+    sub: input.req.user!.userId,
+    email: input.req.user!.email,
+    projectId: input.targetProjectId,
+    sessionId: input.req.user!.sessionId,
+  });
+
+  authService.clearSessionCache(currentAccessToken);
+  await authService.updateSessionTokens(input.req.user!.sessionId, newAccessToken, currentSession.refreshToken);
+  await authService.updateSessionProject(input.req.user!.sessionId, input.targetProjectId);
+
+  return {
+    accessToken: newAccessToken,
+    refreshToken: currentSession.refreshToken,
+  };
+}
+
+async function startIntentGeneration(input: {
+  fastify: FastifyInstance;
+  intent: ProjectIntentRecord & { projectId: string; requestContextId: string; historyGroupId: string };
+  user: { userId: string; sessionId: string };
+}): Promise<ProjectIntentGenerationStartResult> {
+  const latestIntentJob = await findLatestProjectGenerationJobForIntent(input.intent.id);
+  if (latestIntentJob && ['queued', 'running', 'succeeded'].includes(latestIntentJob.status)) {
+    return {
+      job: serializeProjectGenerationJob(latestIntentJob),
+      generationStarted: latestIntentJob.status === 'queued' || latestIntentJob.status === 'running',
+      alreadyStarted: true,
+    };
+  }
+
+  if (input.intent.consumedAt) {
+    return {
+      job: latestIntentJob ? serializeProjectGenerationJob(latestIntentJob) : null,
+      generationStarted: false,
+      alreadyStarted: true,
+    };
+  }
+
+  const { tasks } = await taskService.list(input.intent.projectId);
+  if (tasks.length > 0) {
+    throw new Error('Initial generation requires an empty project');
+  }
+
+  const { job, reused } = await startProjectGenerationJob({
+    projectId: input.intent.projectId,
+    intentId: input.intent.id,
+    userId: input.user.userId,
+    source: 'project_creation_intent',
+    type: 'initial_generation',
+    requestContextId: input.intent.requestContextId,
+    historyGroupId: input.intent.historyGroupId,
+    previewMode: 'ephemeral',
+  });
+
+  if (reused) {
+    return {
+      job: serializeProjectGenerationJob(job),
+      generationStarted: true,
+      alreadyStarted: true,
+    };
+  }
+
+  const prisma = getPrisma() as any;
+  await prisma.projectCreationIntent.update({
+    where: { id: input.intent.id },
+    data: {
+      consumedAt: new Date(),
+    },
+  });
+
+  const runId = input.intent.requestContextId;
+  const controller = new AbortController();
+  registerGenerationJobCancelHandler(job.id, () => {
+    controller.abort();
+  });
+  void runInitialGeneration({
+    projectId: input.intent.projectId,
+    sessionId: input.user.sessionId,
+    runId,
+    userMessage: input.intent.text,
+    tasksBefore: [],
+    baseVersion: 0,
+    interpretationQuery: executeInitialGenerationInterpretationQuery,
+    plannerQuery: executeInitialGenerationPlannerQuery,
+    routingEnv: {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
+      OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
+      OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
+      OPENAI_CHEAP_MODEL: process.env.OPENAI_CHEAP_MODEL ?? process.env.cheap_model ?? undefined,
+    },
+    services: {
+      commandService,
+      messageService,
+      taskService,
+    },
+    logger: {
+      debug(event, payload) {
+        void writeServerDebugLog(event, payload);
+      },
+    },
+    broadcastToSession,
+    generationJob: createProjectGenerationJobTracker(job.id),
+    signal: controller.signal,
+  }).catch((error: unknown) => {
+    if (controller.signal.aborted) {
+      void markProjectGenerationJobCanceled(job.id, {
+        requestContextId: runId,
+        statusMessage: 'Операция отменена пользователем.',
+      });
+    } else {
+      void markProjectGenerationJobFailed(job.id, {
+        statusMessage: 'Генерация завершилась ошибкой',
+        errorCode: 'unhandled_error',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      broadcastToSession(input.user.sessionId, { type: 'error', message: String(error) });
+      input.fastify.log.error(error, 'project intent initial generation error');
+    }
+  }).finally(() => {
+    unregisterGenerationJobCancelHandler(job.id);
+  });
+
+  return {
+    job: serializeProjectGenerationJob(job),
+    generationStarted: true,
+    alreadyStarted: false,
   };
 }
 
@@ -281,15 +592,8 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
     }
 
     const prisma = getPrisma() as any;
-    const intent = await prisma.projectCreationIntent.findUnique({
-      where: { id: intentId },
-    });
-
+    const intent = await resolveIntentForUser(prisma, intentId, req.user!.userId);
     if (!intent) {
-      return reply.status(404).send({ reason: 'not_found', error: 'Intent not found' });
-    }
-
-    if (intent.userId && intent.userId !== req.user!.userId) {
       return reply.status(404).send({ reason: 'not_found', error: 'Intent not found' });
     }
 
@@ -299,6 +603,9 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
 
     const currentProject = await authService.findProjectById(req.user!.projectId);
     const groupId = requestedGroupId || currentProject?.groupId;
+    if (!groupId) {
+      return reply.status(400).send({ reason: 'validation_error', error: 'groupId required' });
+    }
     const groupAccess = groupId ? await resolveGroupAccess(req.user!.userId, groupId) : null;
     if (!groupAccess) {
       return reply.status(404).send({ error: 'Project group not found' });
@@ -307,85 +614,198 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
       return reply.status(403).send({ error: 'Project group is read-only for this user' });
     }
 
-    let preparedProjectId = typeof intent.projectId === 'string' && intent.projectId.trim() ? intent.projectId : null;
-    const preparedProject = preparedProjectId ? await authService.findProjectById(preparedProjectId) : null;
-    if (preparedProjectId && !preparedProject) {
-      preparedProjectId = null;
+    let prepared: PreparedIntentProject;
+    try {
+      prepared = await prepareIntentProject({
+        prisma,
+        intent,
+        userId: req.user!.userId,
+        projectName,
+        groupId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message === 'Project group not found' || message === 'Prepared project not found') {
+        return reply.status(404).send({ error: message });
+      }
+      if (message === 'Project group is read-only for this user') {
+        return reply.status(403).send({ error: message });
+      }
+      throw error;
     }
 
-    if (!preparedProjectId) {
-      const project = await authService.createProject(groupAccess.ownerUserId, projectName, groupId);
-      preparedProjectId = project.id;
+    const tokens = await switchSessionToProject({
+      req,
+      targetProjectId: prepared.project.id,
+    });
 
-      await messageService.add('user', intent.text, project.id, {
-        requestContextId: randomUUID(),
-        historyGroupId: 'initial',
+    return reply.status(201).send({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      project: mapProjectForAuth(prepared.project, 0),
+      generationPrepared: true,
+    });
+  });
+
+  fastify.post('/api/project-intents/:intentId/launch', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const intentId = asNonEmptyString((req.params as { intentId?: unknown }).intentId);
+    const body = (req.body ?? {}) as { projectName?: unknown; groupId?: unknown };
+    const projectName = typeof body.projectName === 'string' && body.projectName.trim()
+      ? body.projectName.trim()
+      : 'Новый проект';
+    const requestedGroupId = typeof body.groupId === 'string' ? body.groupId.trim() : '';
+
+    if (!intentId) {
+      return reply.status(400).send({ reason: 'validation_error', error: 'intentId required' });
+    }
+
+    const prisma = getPrisma() as any;
+    const intent = await resolveIntentForUser(prisma, intentId, req.user!.userId);
+    if (!intent) {
+      return reply.status(404).send({ reason: 'not_found', error: 'Intent not found' });
+    }
+
+    const latestIntentJob = await findLatestProjectGenerationJobForIntent(intent.id);
+    const existingProject = intent.projectId ? await authService.findProjectById(intent.projectId) : null;
+    const hasLaunchState = Boolean(intent.projectId && (intent.consumedAt || (latestIntentJob && ['queued', 'running', 'succeeded'].includes(latestIntentJob.status))));
+    const canReuseExistingProject = Boolean(existingProject && existingProject.status === 'active');
+    if (hasLaunchState && canReuseExistingProject) {
+
+      const tokens = await switchSessionToProject({
+        req,
+        targetProjectId: existingProject!.id,
       });
 
-      const latestMessage = (await messageService.list(project.id, 1))[0];
+      return reply.send({
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        project: mapProjectForAuth(existingProject!, 0),
+        archivedProject: null,
+        prompt: intent.text,
+        job: latestIntentJob ? serializeProjectGenerationJob(latestIntentJob) : null,
+        generationStarted: Boolean(latestIntentJob && ['queued', 'running'].includes(latestIntentJob.status)),
+        alreadyStarted: true,
+      });
+    }
+
+    if (hasLaunchState && !canReuseExistingProject) {
       await prisma.projectCreationIntent.update({
         where: { id: intent.id },
         data: {
-          ...getIntentUserConnectUpdate(req.user!.userId),
-          projectId: project.id,
-          requestContextId: latestMessage?.requestContextId ?? null,
-          historyGroupId: latestMessage?.historyGroupId ?? null,
+          projectId: null,
+          requestContextId: null,
+          historyGroupId: null,
+          consumedAt: null,
         },
       });
-    } else {
-      const preparedAccess = await resolveProjectAccess(req.user!.userId, preparedProjectId);
-      if (!preparedAccess) {
-        return reply.status(404).send({ error: 'Prepared project not found' });
+      intent.projectId = null;
+      intent.requestContextId = null;
+      intent.historyGroupId = null;
+      intent.consumedAt = null;
+    }
+
+    if (isIntentUnavailable(intent)) {
+      return reply.status(410).send({ reason: 'expired', error: getIntentUnavailableMessage(intent) });
+    }
+
+    const currentProject = await authService.findProjectById(req.user!.projectId);
+    const groupId = requestedGroupId || currentProject?.groupId;
+    if (!groupId) {
+      return reply.status(400).send({ reason: 'validation_error', error: 'groupId required' });
+    }
+
+    let archivedProject: { id: string; name: string } | null = null;
+    const shouldArchiveCurrentProject = Boolean(
+      currentProject
+      && currentProject.status === 'active'
+      && currentProject.id !== (intent.projectId ?? null),
+    );
+
+    if (shouldArchiveCurrentProject) {
+      const currentAccess = await resolveProjectAccess(req.user!.userId, currentProject!.id);
+      if (!currentAccess) {
+        return reply.status(404).send({ error: 'Current project not found' });
+      }
+      if (!currentAccess.canEdit) {
+        return reply.status(403).send({ error: 'Current project cannot be archived' });
       }
 
-      if (!intent.requestContextId || !intent.historyGroupId) {
-        await messageService.add('user', intent.text, preparedProjectId, {
-          requestContextId: randomUUID(),
-          historyGroupId: 'initial',
-        });
+      const archived = await authService.archiveProject(currentProject!.id, currentAccess.ownerUserId);
+      if (!archived.ok) {
+        if (archived.reason === 'already_archived') {
+          return reply.status(409).send({ error: 'Current project already archived' });
+        }
+        return reply.status(404).send({ error: 'Current project not found' });
+      }
 
-        const latestMessage = (await messageService.list(preparedProjectId, 1))[0];
-        await prisma.projectCreationIntent.update({
-          where: { id: intent.id },
-          data: {
-            requestContextId: latestMessage?.requestContextId ?? null,
-            historyGroupId: latestMessage?.historyGroupId ?? null,
-          },
-        });
+      archivedProject = {
+        id: archived.project.id,
+        name: archived.project.name,
+      };
+    } else if (!intent.projectId) {
+      const denial = await buildProjectLimitDenial(req.user!.userId);
+      if (denial) {
+        return reply.status(403).send(denial);
       }
     }
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-    const currentAccessToken = authHeader.slice(7);
-    const currentSession = await authService.findSessionByAccessToken(currentAccessToken);
-    if (!currentSession) {
-      return reply.status(401).send({ error: 'Session not found' });
+    let prepared: PreparedIntentProject;
+    try {
+      prepared = await prepareIntentProject({
+        prisma,
+        intent,
+        userId: req.user!.userId,
+        projectName,
+        groupId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message === 'Project group not found' || message === 'Prepared project not found') {
+        return reply.status(404).send({ error: message });
+      }
+      if (message === 'Project group is read-only for this user') {
+        return reply.status(403).send({ error: message });
+      }
+      throw error;
     }
 
-    const nextProject = await authService.findProjectById(preparedProjectId!);
-    if (!nextProject) {
-      return reply.status(404).send({ error: 'Project not found' });
-    }
-
-    const newAccessToken = signAccessToken({
-      sub: req.user!.userId,
-      email: req.user!.email,
-      projectId: nextProject.id,
-      sessionId: req.user!.sessionId,
+    const tokens = await switchSessionToProject({
+      req,
+      targetProjectId: prepared.project.id,
     });
 
-    authService.clearSessionCache(currentAccessToken);
-    await authService.updateSessionTokens(req.user!.sessionId, newAccessToken, currentSession.refreshToken);
-    await authService.updateSessionProject(req.user!.sessionId, nextProject.id);
+    let generation: ProjectIntentGenerationStartResult;
+    try {
+      generation = await startIntentGeneration({
+        fastify,
+        intent: {
+          ...intent,
+          projectId: prepared.project.id,
+          requestContextId: prepared.requestContextId ?? '',
+          historyGroupId: prepared.historyGroupId ?? '',
+        },
+        user: {
+          userId: req.user!.userId,
+          sessionId: req.user!.sessionId,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message === 'Initial generation requires an empty project') {
+        return reply.status(409).send({ reason: 'project_not_empty', error: message });
+      }
+      throw error;
+    }
 
-    return reply.status(201).send({
-      accessToken: newAccessToken,
-      refreshToken: currentSession.refreshToken,
-      project: mapProjectForAuth(nextProject, 0),
-      generationPrepared: true,
+    return reply.send({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      project: mapProjectForAuth(prepared.project, 0),
+      archivedProject,
+      prompt: intent.text,
+      job: generation.job,
+      generationStarted: generation.generationStarted,
+      alreadyStarted: generation.alreadyStarted,
     });
   });
 
@@ -445,30 +865,9 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
     }
 
     const prisma = getPrisma() as any;
-    const intent = await prisma.projectCreationIntent.findUnique({
-      where: { id: intentId },
-    });
-
+    const intent = await resolveIntentForUser(prisma, intentId, req.user!.userId);
     if (!intent) {
       return reply.status(404).send({ reason: 'not_found', error: 'Intent not found' });
-    }
-
-    if (intent.userId && intent.userId !== req.user!.userId) {
-      return reply.status(404).send({ reason: 'not_found', error: 'Intent not found' });
-    }
-
-    const latestIntentJob = await findLatestProjectGenerationJobForIntent(intent.id);
-    if (latestIntentJob && ['queued', 'running', 'succeeded'].includes(latestIntentJob.status)) {
-      return reply.send({
-        ok: true,
-        started: latestIntentJob.status === 'queued' || latestIntentJob.status === 'running',
-        alreadyStarted: true,
-        job: serializeProjectGenerationJob(latestIntentJob),
-      });
-    }
-
-    if (intent.consumedAt) {
-      return reply.send({ ok: true, alreadyStarted: true, job: latestIntentJob ? serializeProjectGenerationJob(latestIntentJob) : null });
     }
 
     if (intent.expiresAt.getTime() <= Date.now()) {
@@ -483,91 +882,35 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
       return reply.status(409).send({ reason: 'not_prepared', error: 'Intent is not prepared for generation' });
     }
 
-    const { tasks } = await taskService.list(intent.projectId);
-    if (tasks.length > 0) {
-      return reply.status(409).send({ reason: 'project_not_empty', error: 'Initial generation requires an empty project' });
-    }
-
-    const { job, reused } = await startProjectGenerationJob({
-      projectId: intent.projectId,
-      intentId: intent.id,
-      userId: req.user!.userId,
-      source: 'project_creation_intent',
-      type: 'initial_generation',
-      requestContextId: intent.requestContextId,
-      historyGroupId: intent.historyGroupId,
-      previewMode: 'ephemeral',
-    });
-
-    if (reused) {
-      return reply.send({
-        ok: true,
-        started: true,
-        alreadyStarted: true,
-        job: serializeProjectGenerationJob(job),
-      });
-    }
-
-    await prisma.projectCreationIntent.update({
-      where: { id: intent.id },
-      data: {
-        consumedAt: new Date(),
-      },
-    });
-
-    const runId = intent.requestContextId;
-    const controller = new AbortController();
-    registerGenerationJobCancelHandler(job.id, () => {
-      controller.abort();
-    });
-    void runInitialGeneration({
-      projectId: intent.projectId,
-      sessionId: req.user!.sessionId,
-      runId,
-      userMessage: intent.text,
-      tasksBefore: [],
-      baseVersion: 0,
-      interpretationQuery: executeInitialGenerationInterpretationQuery,
-      plannerQuery: executeInitialGenerationPlannerQuery,
-      routingEnv: {
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
-        OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
-        OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
-        OPENAI_CHEAP_MODEL: process.env.OPENAI_CHEAP_MODEL ?? process.env.cheap_model ?? undefined,
-      },
-      services: {
-        commandService,
-        messageService,
-        taskService,
-      },
-      logger: {
-        debug(event, payload) {
-          void writeServerDebugLog(event, payload);
+    let generation: ProjectIntentGenerationStartResult;
+    try {
+      generation = await startIntentGeneration({
+        fastify,
+        intent: {
+          ...intent,
+          projectId: intent.projectId,
+          requestContextId: intent.requestContextId,
+          historyGroupId: intent.historyGroupId,
         },
-      },
-      broadcastToSession,
-      generationJob: createProjectGenerationJobTracker(job.id),
-      signal: controller.signal,
-    }).catch((error: unknown) => {
-      if (controller.signal.aborted) {
-        void markProjectGenerationJobCanceled(job.id, {
-          requestContextId: runId,
-          statusMessage: 'Операция отменена пользователем.',
-        });
-      } else {
-        void markProjectGenerationJobFailed(job.id, {
-          statusMessage: 'Генерация завершилась ошибкой',
-          errorCode: 'unhandled_error',
-          errorMessage: error instanceof Error ? error.message : String(error),
-        });
-        broadcastToSession(req.user!.sessionId, { type: 'error', message: String(error) });
-        fastify.log.error(error, 'project intent initial generation error');
+        user: {
+          userId: req.user!.userId,
+          sessionId: req.user!.sessionId,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message === 'Initial generation requires an empty project') {
+        return reply.status(409).send({ reason: 'project_not_empty', error: message });
       }
-    }).finally(() => {
-      unregisterGenerationJobCancelHandler(job.id);
-    });
+      throw error;
+    }
 
-    return reply.send({ ok: true, started: true, job: serializeProjectGenerationJob(job) });
+    return reply.send({
+      ok: true,
+      started: generation.generationStarted,
+      alreadyStarted: generation.alreadyStarted,
+      job: generation.job,
+    });
   });
 
   fastify.post('/api/project-intents/:intentId/consume', { preHandler: [authMiddleware] }, async (req, reply) => {

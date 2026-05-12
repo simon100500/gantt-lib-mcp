@@ -157,6 +157,19 @@ function normalizePathname(pathname: string): string {
   return pathname;
 }
 
+function getAccessTokenProjectId(accessToken: string | null): string | null {
+  if (!accessToken) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(atob(accessToken.split('.')[1])) as { projectId?: unknown };
+    return typeof payload.projectId === 'string' && payload.projectId.trim() ? payload.projectId : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseTemplateCreatePath(pathname: string): { publicationId: string } | null {
   const match = pathname.match(/^\/app\/templates\/([^/]+)\/create$/);
   if (!match) {
@@ -347,6 +360,20 @@ type ProjectGenerationJobView = {
   finishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+type LaunchProjectIntentResponse = {
+  accessToken: string;
+  refreshToken: string;
+  project: AuthProject;
+  archivedProject?: {
+    id: string;
+    name: string;
+  } | null;
+  prompt: string;
+  job: ProjectGenerationJobView | null;
+  generationStarted: boolean;
+  alreadyStarted?: boolean;
 };
 
 type NormalizedChatMessage = {
@@ -865,7 +892,6 @@ interface PendingProjectCreation {
   firstPrompt?: string;
   createEmptyChart?: boolean;
   groupId?: string;
-  projectIntentId?: string;
   templatePublicationId?: string;
   initialProjectName?: string;
   title?: string;
@@ -909,7 +935,6 @@ function WorkspaceApp({
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showPdfHelper, setShowPdfHelper] = useState(false);
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
-  const [pendingPreparedIntentStart, setPendingPreparedIntentStart] = useState<{ intentId: string; projectId: string } | null>(null);
   const [preparedIntentChatProjectId, setPreparedIntentChatProjectId] = useState<string | null>(null);
   const [activeGenerationJob, setActiveGenerationJob] = useState<ProjectGenerationJobView | null>(null);
   const [generationJobLookupPending, setGenerationJobLookupPending] = useState(false);
@@ -926,7 +951,7 @@ function WorkspaceApp({
   const [startScreenProjectSettingsPending, setStartScreenProjectSettingsPending] = useState(false);
   const [startScreenProjectSettingsError, setStartScreenProjectSettingsError] = useState<string | null>(null);
   const toastIdRef = useRef(0);
-  const projectIntentFlowRef = useRef<string | null>(null);
+  const launchingProjectIntentRef = useRef<string | null>(null);
   const [shareSelectionMode, setShareSelectionMode] = useState(false);
   const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
   const [templateSelectionMode, setTemplateSelectionMode] = useState(false);
@@ -1076,9 +1101,17 @@ function WorkspaceApp({
   const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
   const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
   const clearAiMutationLock = useUIStore((state) => state.clearAiMutationLock);
+  const syncProjectTaskCount = auth.syncProjectTaskCount;
   const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
+  const sessionProjectId = getAccessTokenProjectId(auth.accessToken);
   const activeWorkspaceProjectId = workspace.kind === 'project' ? workspace.projectId : null;
+  const selectedWorkspaceProject = workspace.kind === 'project'
+    ? (
+      auth.projects.find((project) => project.id === workspace.projectId)
+      ?? (sessionProjectId === workspace.projectId ? auth.project : null)
+    )
+    : null;
   const activeProjectGenerationRunning = Boolean(
     activeGenerationJob
     && isActiveProjectGenerationJob(activeGenerationJob)
@@ -1512,7 +1545,7 @@ function WorkspaceApp({
       return;
     }
 
-    const projectId = auth.project?.id;
+    const projectId = sessionProjectId ?? auth.project?.id;
     if (!auth.isAuthenticated || !projectId) {
       setWorkspace({ kind: 'guest' });
       return;
@@ -1538,11 +1571,11 @@ function WorkspaceApp({
           ? { kind: 'finance', projectId }
           : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
     });
-  }, [auth.isAuthenticated, auth.project?.id, getProjectState, hasShareToken, setWorkspace]);
+  }, [auth.isAuthenticated, auth.project?.id, getProjectState, hasShareToken, sessionProjectId, setWorkspace]);
 
   useEffect(() => {
     setActiveEmptyProjectModeProjectId(null);
-  }, [auth.project?.id]);
+  }, [sessionProjectId]);
 
 
   const closeProjectChat = useCallback(() => {
@@ -1611,112 +1644,7 @@ function WorkspaceApp({
     try {
       let newProject: AuthProject | null = null;
 
-      if (options.projectIntentId) {
-        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-        let token = getLatestAccessToken();
-        if (!token || !auth.user) {
-          queuedPromptRef.current = null;
-          createEmptyChartAfterActivationRef.current = false;
-          return null;
-        }
-
-        let response = await fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/create-project`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            projectName: name.trim(),
-            groupId: options.groupId ?? auth.project?.groupId,
-          }),
-        });
-
-        if (response.status === 401) {
-          const refreshedToken = await auth.refreshAccessToken();
-          if (!refreshedToken) {
-            queuedPromptRef.current = null;
-            createEmptyChartAfterActivationRef.current = false;
-            return null;
-          }
-          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-          response = await fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/create-project`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              projectName: name.trim(),
-              groupId: options.groupId ?? auth.project?.groupId,
-            }),
-          });
-        }
-
-        if (response.status === 403) {
-          try {
-            const body = await response.json() as Partial<ConstraintDenialPayload>;
-            if (isConstraintCode(body.code)) {
-              await openLimitModal(body);
-              queuedPromptRef.current = null;
-              createEmptyChartAfterActivationRef.current = false;
-              return null;
-            }
-          } catch {
-            // fall through
-          }
-        }
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const payload = await response.json() as {
-          accessToken: string;
-          refreshToken: string;
-          project: AuthProject;
-        };
-        auth.login(
-          { accessToken: payload.accessToken, refreshToken: payload.refreshToken },
-          auth.user,
-          payload.project,
-        );
-        newProject = payload.project;
-        queuedPromptRef.current = null;
-        setPreparedIntentChatProjectId(payload.project.id);
-        if (options.firstPrompt?.trim()) {
-          useChatStore.getState().addMessage({ role: 'user', content: options.firstPrompt.trim() });
-        }
-        useChatStore.setState({
-          streamingText: '',
-          pendingAssistantMeta: null,
-          aiThinking: true,
-          error: null,
-        });
-        try {
-          const startGenerationResponse = await fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/start-generation`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${payload.accessToken}`,
-            },
-          });
-
-          if (!startGenerationResponse.ok) {
-            const startPayload = await startGenerationResponse.json().catch(() => ({ error: `HTTP ${startGenerationResponse.status}` })) as { error?: string };
-            throw new Error(startPayload.error ?? `HTTP ${startGenerationResponse.status}`);
-          }
-
-          const startPayload = await startGenerationResponse.json() as { job?: ProjectGenerationJobView | null };
-          setPendingPreparedIntentStart(null);
-          if (startPayload.job) {
-            setActiveGenerationJob(startPayload.job);
-            setPreparedIntentChatProjectId(startPayload.job.projectId ?? payload.project.id);
-          }
-        } catch (startError) {
-          console.error('Failed to start prepared project intent generation immediately:', startError);
-          setPendingPreparedIntentStart({ intentId: options.projectIntentId, projectId: payload.project.id });
-        }
-      } else if (options.templatePublicationId) {
+      if (options.templatePublicationId) {
         const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
         let token = getLatestAccessToken();
         if (!token) {
@@ -1790,16 +1718,14 @@ function WorkspaceApp({
 
       await auth.refreshProjects();
 
-      if (!options.projectIntentId) {
-        await auth.switchProject(newProject.id);
-      }
+      await auth.switchProject(newProject.id);
       setSidebarState('closed');
       if (options.createEmptyChart) {
         setActiveEmptyProjectModeProjectId(newProject.id);
       } else {
         replaceTasksFromSystem([]);
       }
-      if (options.firstPrompt && !options.projectIntentId) {
+      if (options.firstPrompt) {
         useChatStore.getState().addMessage({ role: 'user', content: options.firstPrompt });
       }
       setWorkspace({
@@ -1807,7 +1733,7 @@ function WorkspaceApp({
         projectId: newProject.id,
         chatOpen: options.createEmptyChart
           ? false
-          : (options.firstPrompt || options.projectIntentId ? true : readProjectChatOpenState()),
+          : (options.firstPrompt ? true : readProjectChatOpenState()),
       });
       setPendingProjectCreation(null);
       setPendingPostAuthAction(null);
@@ -1821,27 +1747,34 @@ function WorkspaceApp({
     if (!projectCreationIntentId || !auth.isAuthenticated || hasShareToken) {
       return;
     }
-    if (projectIntentFlowRef.current === projectCreationIntentId) {
+    if (launchingProjectIntentRef.current === projectCreationIntentId) {
       return;
     }
 
     let cancelled = false;
-    projectIntentFlowRef.current = projectCreationIntentId;
+    launchingProjectIntentRef.current = projectCreationIntentId;
 
     const startProjectIntentFlow = async () => {
       try {
-        const currentProjectSnapshot = useAuthStore.getState().project;
         const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
         let token = getLatestAccessToken();
-        if (!token) {
+        if (!token || !auth.user) {
           onConsumeProjectCreationIntent();
           return;
         }
 
-        let response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
+        resetWorkspacePresentation();
+
+        let response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}/launch`, {
+          method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
+          body: JSON.stringify({
+            projectName: 'Новый проект',
+            groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
+          }),
         });
 
         if (response.status === 401) {
@@ -1851,15 +1784,34 @@ function WorkspaceApp({
             return;
           }
           token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-          response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
+          response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}/launch`, {
+            method: 'POST',
             headers: {
+              'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
+            body: JSON.stringify({
+              projectName: 'Новый проект',
+              groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
+            }),
           });
         }
 
         if (cancelled) {
           return;
+        }
+
+        if (response.status === 403) {
+          try {
+            const body = await response.json() as Partial<ConstraintDenialPayload>;
+            if (isConstraintCode(body.code)) {
+              await openLimitModal(body);
+              onConsumeProjectCreationIntent();
+              return;
+            }
+          } catch {
+            // fall through
+          }
         }
 
         if (response.status === 410) {
@@ -1869,53 +1821,44 @@ function WorkspaceApp({
         }
 
         if (!response.ok) {
-          window.alert('Не удалось подготовить запрос. Попробуйте ещё раз.');
+          const payload = await response.json().catch(() => ({ error: null })) as { error?: string | null };
+          window.alert(payload.error || 'Не удалось подготовить запрос. Попробуйте ещё раз.');
           onConsumeProjectCreationIntent();
           return;
         }
 
-        const intentPayload = await response.json() as { projectId?: string | null; text?: string | null };
-        const currentProject = currentProjectSnapshot;
-        const shouldArchiveCurrentProject = Boolean(
-          currentProject
-          && currentProject.status === 'active'
-          && currentProject.id !== (intentPayload.projectId ?? null),
+        const payload = await response.json() as LaunchProjectIntentResponse;
+        auth.login(
+          { accessToken: payload.accessToken, refreshToken: payload.refreshToken },
+          auth.user,
+          payload.project,
         );
-
-        if (shouldArchiveCurrentProject) {
-          const currentProjectToArchive = currentProject;
-          if (!currentProjectToArchive) {
-            onConsumeProjectCreationIntent();
-            return;
-          }
-          try {
-            await auth.archiveProject(currentProjectToArchive.id);
-            await fetchUsage();
-            if (cancelled) {
-              return;
-            }
-            showToast(`Проект "${currentProjectToArchive.name}" автоматически архивирован.`);
-          } catch (archiveError) {
-            if (cancelled) {
-              return;
-            }
-            window.alert(archiveError instanceof Error ? archiveError.message : 'Не удалось архивировать текущий проект.');
-            onConsumeProjectCreationIntent();
-            return;
-          }
-        }
-
-        const result = await createProjectAndActivate('Новый проект', {
-          firstPrompt: intentPayload.text?.trim() || undefined,
-          projectIntentId: projectCreationIntentId,
-          groupId: currentProject?.groupId ?? auth.projectGroups[0]?.id,
+        replaceTasksFromSystem([]);
+        setActiveEmptyProjectModeProjectId(null);
+        setActiveGenerationJob(payload.job);
+        setPreparedIntentChatProjectId(payload.generationStarted || payload.job ? (payload.job?.projectId ?? payload.project.id) : null);
+        useChatStore.getState().reset();
+        useChatStore.getState().addMessage({ role: 'user', content: payload.prompt.trim() });
+        useChatStore.setState((state) => ({
+          ...state,
+          streamingText: '',
+          pendingAssistantMeta: null,
+          aiThinking: payload.generationStarted,
+          error: null,
+        }));
+        setSidebarState('closed');
+        setWorkspace({
+          kind: 'project',
+          projectId: payload.project.id,
+          chatOpen: true,
         });
-        if (!result && !cancelled) {
-          useChatStore.getState().setError('Не удалось автоматически создать проект по вашему описанию.');
+        if (payload.archivedProject) {
+          showToast(`Проект "${payload.archivedProject.name}" автоматически архивирован.`);
+          void fetchUsage();
         }
         onConsumeProjectCreationIntent();
       } finally {
-        projectIntentFlowRef.current = null;
+        launchingProjectIntentRef.current = null;
       }
     };
 
@@ -1927,56 +1870,21 @@ function WorkspaceApp({
   }, [
     auth.accessToken,
     auth.isAuthenticated,
-    auth.archiveProject,
+    auth.project?.groupId,
     auth.projectGroups,
     auth.refreshAccessToken,
-    createProjectAndActivate,
     fetchUsage,
     hasShareToken,
     onConsumeProjectCreationIntent,
+    openLimitModal,
     projectCreationIntentId,
+    replaceTasksFromSystem,
+    resetWorkspacePresentation,
+    setWorkspace,
+    setSidebarState,
     showToast,
+    auth.user,
   ]);
-
-  useEffect(() => {
-    if (!pendingPreparedIntentStart || !auth.isAuthenticated || !auth.accessToken || workspace.kind !== 'project') {
-      return;
-    }
-    if (workspace.projectId !== pendingPreparedIntentStart.projectId) {
-      return;
-    }
-
-    const token = localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-    if (!token) {
-      return;
-    }
-
-    const currentIntentStart = pendingPreparedIntentStart;
-    setPendingPreparedIntentStart(null);
-
-    void fetch(`/api/project-intents/${encodeURIComponent(currentIntentStart.intentId)}/start-generation`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
-          throw new Error(payload.error ?? `HTTP ${response.status}`);
-        }
-        const payload = await response.json() as { job?: ProjectGenerationJobView | null };
-        if (payload.job) {
-          setActiveGenerationJob(payload.job);
-          setPreparedIntentChatProjectId(payload.job.projectId ?? currentIntentStart.projectId);
-        }
-      })
-      .catch((startError) => {
-        setPreparedIntentChatProjectId(null);
-        console.error('Failed to start prepared project intent generation:', startError);
-        useChatStore.getState().setError(String(startError));
-      });
-  }, [auth.accessToken, auth.isAuthenticated, pendingPreparedIntentStart, workspace]);
 
   useEffect(() => {
     if (!templateCreateIntentId || !auth.isAuthenticated || hasShareToken) {
@@ -2750,7 +2658,7 @@ function WorkspaceApp({
     useProjectStore.getState().clearTransientState();
     clearAiDoneGraceTimer();
     releaseAiMutationLock();
-  }, [auth.isAuthenticated, auth.project?.id, clearAiDoneGraceTimer, hasShareToken, releaseAiMutationLock]);
+  }, [auth.isAuthenticated, clearAiDoneGraceTimer, hasShareToken, releaseAiMutationLock, sessionProjectId]);
 
   useEffect(() => () => {
     clearAiDoneGraceTimer();
@@ -2762,16 +2670,16 @@ function WorkspaceApp({
     setShareSelectionMode(false);
     setSelectedTemplateTaskIds(new Set());
     setTemplateSelectionMode(false);
-  }, [auth.project?.id, hasShareToken]);
+  }, [hasShareToken, sessionProjectId]);
 
   useEffect(() => {
-    if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {
+    if (!auth.isAuthenticated || !auth.accessToken || !activeWorkspaceProjectId || hasShareToken || workspace.kind !== 'project') {
       return;
     }
 
     const hasQueuedFirstPrompt = Boolean(queuedPromptRef.current);
-    const isPreparedIntentProject = preparedIntentChatProjectId === auth.project.id
-      || (activeGenerationJob?.projectId === auth.project.id && isActiveProjectGenerationJob(activeGenerationJob));
+    const isPreparedIntentProject = preparedIntentChatProjectId === activeWorkspaceProjectId
+      || (activeGenerationJob?.projectId === activeWorkspaceProjectId && isActiveProjectGenerationJob(activeGenerationJob));
     const chatState = useChatStore.getState();
     const hasLocalOptimisticChat = chatState.aiThinking || chatState.streamingText.length > 0 || chatState.messages.length > 0;
     if (!hasQueuedFirstPrompt && !isPreparedIntentProject && !hasLocalOptimisticChat) {
@@ -2826,7 +2734,7 @@ function WorkspaceApp({
         useChatStore.getState().replaceMessages(mergedMessages);
       })
       .catch(() => {});
-  }, [activeGenerationJob, auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, preparedIntentChatProjectId, workspace.kind]);
+  }, [activeGenerationJob, activeWorkspaceProjectId, auth.accessToken, auth.isAuthenticated, hasShareToken, preparedIntentChatProjectId, workspace.kind]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || workspace.kind !== 'project') {
@@ -2887,15 +2795,15 @@ function WorkspaceApp({
   ]);
 
   useEffect(() => {
-    if (!auth.isAuthenticated || hasShareToken || workspace.kind !== 'project') {
+    if (!auth.isAuthenticated || hasShareToken || workspace.kind !== 'project' || !activeWorkspaceProjectId) {
       return;
     }
     if (loading) {
       return;
     }
 
-    auth.syncProjectTaskCount(workspace.projectId, tasks.length);
-  }, [auth, auth.isAuthenticated, hasShareToken, loading, tasks.length, workspace]);
+    syncProjectTaskCount(activeWorkspaceProjectId, tasks.length);
+  }, [activeWorkspaceProjectId, auth.isAuthenticated, hasShareToken, loading, syncProjectTaskCount, tasks.length, workspace.kind]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
 
@@ -3077,7 +2985,7 @@ function WorkspaceApp({
   const currentProjectTaskCount = workspace.kind === 'project'
     ? (
       auth.projects.find((project) => project.id === workspace.projectId)?.taskCount
-      ?? auth.project?.taskCount
+      ?? selectedWorkspaceProject?.taskCount
       ?? tasks.length
     )
     : undefined;
@@ -3088,6 +2996,7 @@ function WorkspaceApp({
   const showProjectStartScreen = workspace.kind === 'project'
     && !hasShareToken
     && currentProjectIsEmpty
+    && !projectChatOpen
     && !activeProjectGenerationRunning
     && !generationJobLookupPending
     && !hasQueuedProjectPrompt
@@ -3121,7 +3030,7 @@ function WorkspaceApp({
     : workspace.kind === 'template'
       ? (activeTemplate?.metadata.name || 'Шаблон')
     : auth.isAuthenticated
-      ? auth.project?.name
+      ? selectedWorkspaceProject?.name ?? auth.project?.name
       : (localTasks.projectName || 'Мой проект');
   const handleSaveStartScreenProjectSettings = useCallback(async (settings: {
     projectName: string;
