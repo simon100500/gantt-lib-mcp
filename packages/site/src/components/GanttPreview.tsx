@@ -118,7 +118,6 @@ function mergeChangedTasks(currentTasks: Task[], changedTasks: Task[]): Task[] {
 
 function GanttPreview({
   initialTasks,
-  title,
   fullWidth = false,
   containerHeight = '500px',
   headerNote,
@@ -353,41 +352,35 @@ function GanttPreview({
         ) : null}
         {/* Chart header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-          {/* Project name */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-700" style={{ fontFamily: 'Cascadia Mono, monospace' }}>
-              {title ?? 'Мой проект'}
-            </span>
-            <div className="flex items-center gap-1 sm:ml-3">
-              <button
-                type="button"
-                onClick={handleCollapseAll}
-                aria-label="Свернуть все"
-                title="Свернуть все родительские задачи"
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-transparent text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
-              >
-                <ChevronsDownUp className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={handleExpandAll}
-                aria-label="Развернуть все"
-                title="Развернуть все родительские задачи"
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-transparent text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
-              >
-                <ChevronsUpDown className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={handleScrollToToday}
-                aria-label="Прокрутить к сегодня"
-                title="Сегодня"
-                className="flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-transparent px-2.5 text-[12px] font-medium text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true"><path d="M6 22V2.8a.8.8 0 0 1 1.17-.71l11.38 5.69a.8.8 0 0 1 0 1.44L6 15.5" /></svg>
-                <span className="hidden sm:inline">Сегодня</span>
-              </button>
-            </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleCollapseAll}
+              aria-label="Свернуть все"
+              title="Свернуть все родительские задачи"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-transparent text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
+            >
+              <ChevronsDownUp className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={handleExpandAll}
+              aria-label="Развернуть все"
+              title="Развернуть все родительские задачи"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-transparent text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
+            >
+              <ChevronsUpDown className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={handleScrollToToday}
+              aria-label="Прокрутить к сегодня"
+              title="Сегодня"
+              className="flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-transparent px-2.5 text-[12px] font-medium text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true"><path d="M6 22V2.8a.8.8 0 0 1 1.17-.71l11.38 5.69a.8.8 0 0 1 0 1.44L6 15.5" /></svg>
+              <span className="hidden sm:inline">Сегодня</span>
+            </button>
           </div>
 
           {/* Controls */}
