@@ -45,7 +45,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
               className="mx-auto mt-6 max-w-2xl text-base leading-7 text-secondary-foreground animate-fade-up sm:text-lg sm:leading-8"
               style={{ animationDelay: '190ms' }}
             >
-              Опишите ваш проект — ИИ&nbsp;создаст план работ <wbr />с&nbsp;задачами, сроками и&nbsp;зависимостями
+              Опишите ваш проект и получите план работ <wbr />с&nbsp;задачами, сроками и&nbsp;зависимостями, используя мощь нейросети
             </p>
           </div>
 
