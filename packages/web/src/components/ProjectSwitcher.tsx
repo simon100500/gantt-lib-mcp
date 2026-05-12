@@ -707,7 +707,7 @@ export function ProjectSwitcher({
             </div>
           ) : null}
 
-          {onSwitchTemplate ? (
+          {onSwitchTemplate && templates.length > 0 ? (
             <div>
               <div className="mx-3 mb-2 border-t border-slate-200" />
               <ProjectSection
@@ -716,7 +716,7 @@ export function ProjectSwitcher({
                 open={templatesOpen}
                 onToggle={() => setTemplatesOpen((value) => !value)}
               >
-                {templates.length > 0 ? templates.map((template) => (
+                {templates.map((template) => (
                   <TemplateRow
                     key={template.id}
                     template={template}
@@ -730,9 +730,7 @@ export function ProjectSwitcher({
                     onMenuOpenChange={onMenuOpenChange}
                     setOpenMenuTemplateId={setOpenMenuTemplateId}
                   />
-                )) : (
-                  <div className="px-3 py-2 text-xs text-slate-400">Нет шаблонов</div>
-                )}
+                ))}
               </ProjectSection>
             </div>
           ) : null}

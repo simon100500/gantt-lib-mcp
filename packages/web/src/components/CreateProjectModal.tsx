@@ -106,11 +106,6 @@ export function CreateProjectModal({
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {archiveProjectName ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Проект "{archiveProjectName}" будет архивирован перед созданием нового.
-              </div>
-            ) : null}
             <div className="space-y-2">
               <Label htmlFor="new-project-name">Название проекта</Label>
               <Input
@@ -166,23 +161,30 @@ export function CreateProjectModal({
               ) : null}
             </div>
           </CardContent>
-          <CardFooter className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1"
-            >
-              Отмена
-            </Button>
-            <Button
-              type="submit"
-              className="flex-1"
-              disabled={loading || projectGroups.length === 0}
-            >
-              {loading ? 'Создание...' : submitLabel}
-            </Button>
+          <CardFooter className="flex flex-col gap-3">
+            {archiveProjectName ? (
+              <div className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Проект "{archiveProjectName}" будет архивирован перед созданием нового.
+              </div>
+            ) : null}
+            <div className="flex w-full gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                disabled={loading}
+                className="flex-1"
+              >
+                Отмена
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1"
+                disabled={loading || projectGroups.length === 0}
+              >
+                {loading ? 'Создание...' : submitLabel}
+              </Button>
+            </div>
           </CardFooter>
         </form>
       </Card>
