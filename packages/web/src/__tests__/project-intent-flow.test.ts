@@ -40,32 +40,33 @@ describe('landing prompt flow orchestration', () => {
 });
 
 describe('project creation recovery', () => {
-  it('stages archive-and-create recovery instead of dropping the prompt on project limit', () => {
-    assert.match(appSource, /stageArchiveAndCreateRecovery\(trimmedName, options\)/);
-    assert.match(appSource, /archiveProjectId: auth\.project\.id/);
-    assert.match(appSource, /archiveProjectName: auth\.project\.name/);
-    assert.match(appSource, /submitLabel=\{effectivePendingProjectCreation\?\.archiveProjectId\s*\?\s*'Архивировать и создать'/);
+  it('allows one active and up to four archived projects on free plan before paywall', () => {
+    assert.match(appSource, /const FREE_ARCHIVED_PROJECT_LIMIT = 4;/);
+    assert.match(appSource, /const activeProjectToReplace = auth\.projects\.find\(\(project\) => project\.status === 'active'\) \?\? null;/);
+    assert.match(appSource, /const archivedProjectsCount = auth\.projects\.filter\(\(project\) => project\.status === 'archived'\)\.length;/);
+    assert.match(appSource, /const canSilentlyReplaceOnFree = isFreePlanProjectReplacementMode[\s\S]*archivedProjectsCount < FREE_ARCHIVED_PROJECT_LIMIT;/);
   });
 
-  it('opens create modal in archive mode immediately for free users with an active project', () => {
-    assert.match(appSource, /const shouldStageArchiveImmediately = \(\s*\(billingStatus\?\.billingState === 'free' \|\| billingStatus == null\)/);
-    assert.match(appSource, /shouldStageArchiveImmediately\s*\|\|/);
+  it('keeps replacement quiet inside the regular create modal before the archive limit', () => {
+    assert.match(appSource, /if \(\s*constraintDenial\.code === 'PROJECT_LIMIT_REACHED' && activeProjectToReplace[\s\S]*if \(canSilentlyReplaceOnFree\) \{/);
+    assert.match(appSource, /setPendingProjectCreation\(\(current\) => \(\{[\s\S]*initialProjectName: current\?\.initialProjectName \?\? 'Новый проект',/);
+    assert.doesNotMatch(appSource, /const stagedIntent = mustShowReplacementModal/);
   });
 
   it('renders inline archive warning inside create project modal', () => {
     assert.match(createProjectModalSource, /archiveProjectName\?: string;/);
-    assert.match(createProjectModalSource, /Проект "\{archiveProjectName\}" будет архивирован перед созданием нового\./);
+    assert.match(createProjectModalSource, /Проект "\{archiveProjectName\}" при этом будет архивирован\./);
   });
 
-  it('suppresses generic create error when switching into archive recovery', () => {
-    assert.match(appSource, /throw new Error\(ARCHIVE_AND_CREATE_RECOVERY\)/);
-    assert.match(createProjectModalSource, /if \(err instanceof Error && err\.message === ARCHIVE_AND_CREATE_RECOVERY\) \{/);
+  it('silently archives the active project before creation and shows paywall only after the limit', () => {
+    assert.match(appSource, /!behavior\.skipProjectLimitRecovery[\s\S]*!options\.archiveProjectId[\s\S]*canSilentlyReplaceOnFree[\s\S]*await auth\.archiveProject\(activeProjectToReplace\.id\);/);
+    assert.match(appSource, /if \(\s*!behavior\.skipProjectLimitRecovery[\s\S]*proactiveProjectDenial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree\s*\) \{[\s\S]*await openLimitModal\(proactiveProjectDenial\);/);
   });
 
-  it('forces archive mode at render time for free users even if pending modal state was plain', () => {
-    assert.match(appSource, /const effectivePendingProjectCreation = showCreateProjectModal/);
-    assert.match(appSource, /shouldForceArchiveMode && auth\.project/);
-    assert.match(appSource, /archiveProjectName=\{effectivePendingProjectCreation\?\.archiveProjectName\}/);
+  it('prefills the start screen instead of auto-sending the first prompt to chat after project creation', () => {
+    assert.match(appSource, /setStartScreenPrefillPrompt\(options\.firstPrompt \?\? null\);/);
+    assert.doesNotMatch(appSource, /useChatStore\.getState\(\)\.addMessage\(\{ role: 'user', content: options\.firstPrompt \}\)/);
+    assert.match(appSource, /chatOpen: options\.createEmptyChart[\s\S]*: false,/);
   });
 });
 

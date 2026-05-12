@@ -164,7 +164,7 @@ export function CreateProjectModal({
           <CardFooter className="flex flex-col gap-3">
             {archiveProjectName ? (
               <div className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Проект "{archiveProjectName}" будет архивирован перед созданием нового.
+                Проект "{archiveProjectName}" при этом будет архивирован.
               </div>
             ) : null}
             <div className="flex w-full gap-2">

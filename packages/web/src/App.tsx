@@ -900,6 +900,8 @@ interface PendingProjectCreation {
   archiveProjectName?: string;
 }
 
+const FREE_ARCHIVED_PROJECT_LIMIT = 4;
+
 function WorkspaceApp({
   auth,
   localTasks,
@@ -977,7 +979,12 @@ function WorkspaceApp({
   const proactiveProjectDenial = buildProactiveConstraintDenial('projects', billingStatus);
   const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
   const proactiveArchiveDenial = buildProactiveConstraintDenial('archive', billingStatus);
-  const shouldForceArchiveMode = billingStatus?.billingState === 'free' && auth.project?.status === 'active';
+  const activeProjectToReplace = auth.projects.find((project) => project.status === 'active') ?? null;
+  const archivedProjectsCount = auth.projects.filter((project) => project.status === 'archived').length;
+  const isFreePlanProjectReplacementMode = billingStatus?.billingState === 'free' || billingStatus == null;
+  const canSilentlyReplaceOnFree = isFreePlanProjectReplacementMode
+    && Boolean(activeProjectToReplace)
+    && archivedProjectsCount < FREE_ARCHIVED_PROJECT_LIMIT;
   const projectPermissions = getProjectPermissions(auth.project?.permissions);
   const canViewSchedule = hasShareToken || projectPermissions.schedule !== 'none';
   const canEditSchedule = hasShareToken ? false : projectPermissions.schedule === 'edit';
@@ -1040,25 +1047,30 @@ function WorkspaceApp({
       return;
     }
 
-    const currentProject = auth.project;
-    if (constraintDenial.code === 'PROJECT_LIMIT_REACHED' && shouldForceArchiveMode && currentProject) {
-      setPendingProjectCreation((current) => ({
-        ...(current ?? {}),
-        groupId: current?.groupId ?? currentProject.groupId ?? auth.projectGroups[0]?.id,
-        initialProjectName: current?.initialProjectName ?? 'Новый проект',
-        archiveProjectId: current?.archiveProjectId ?? currentProject.id,
-        archiveProjectName: current?.archiveProjectName ?? currentProject.name,
-      }));
-      setShowCreateProjectModal(true);
-      setLimitModal(null);
-      useAuthStore.setState({ constraintDenial: null });
-      return;
+    if (constraintDenial.code === 'PROJECT_LIMIT_REACHED' && activeProjectToReplace) {
+      if (canSilentlyReplaceOnFree) {
+        setPendingProjectCreation((current) => ({
+          ...(current ?? {}),
+          groupId: current?.groupId ?? activeProjectToReplace.groupId ?? auth.projectGroups[0]?.id,
+          initialProjectName: current?.initialProjectName ?? 'Новый проект',
+        }));
+        setShowCreateProjectModal(true);
+        setLimitModal(null);
+        useAuthStore.setState({ constraintDenial: null });
+        return;
+      }
     }
 
     void openLimitModal(constraintDenial).finally(() => {
       useAuthStore.setState({ constraintDenial: null });
     });
-  }, [auth.project, auth.projectGroups, constraintDenial, openLimitModal, shouldForceArchiveMode]);
+  }, [
+    activeProjectToReplace,
+    auth.projectGroups,
+    canSilentlyReplaceOnFree,
+    constraintDenial,
+    openLimitModal,
+  ]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || hasShareToken) {
@@ -1631,53 +1643,9 @@ function WorkspaceApp({
   }, [activeWorkspaceProjectId, clearAiDoneGraceTimer, releaseAiMutationLock, replaceTasksFromSystem]);
 
   const openCreateProjectModal = useCallback((nextIntent: PendingProjectCreation = {}) => {
-    const currentProject = auth.project;
-    const shouldStageArchiveImmediately = (
-      (billingStatus?.billingState === 'free' || billingStatus == null)
-      && currentProject
-      && currentProject.status === 'active'
-    );
-    const stagedIntent = (
-      shouldStageArchiveImmediately
-      || (
-        proactiveProjectDenial?.code === 'PROJECT_LIMIT_REACHED'
-        && currentProject
-        && currentProject.status === 'active'
-      )
-    )
-      ? {
-          ...nextIntent,
-          groupId: nextIntent.groupId ?? currentProject!.groupId ?? auth.projectGroups[0]?.id,
-          archiveProjectId: nextIntent.archiveProjectId ?? currentProject!.id,
-          archiveProjectName: nextIntent.archiveProjectName ?? currentProject!.name,
-        }
-      : nextIntent;
-
-    setPendingProjectCreation(stagedIntent);
-    if (stagedIntent.archiveProjectId) {
-      setLimitModal(null);
-      useAuthStore.setState({ constraintDenial: null });
-    }
+    setPendingProjectCreation(nextIntent);
     setShowCreateProjectModal(true);
-  }, [auth.project, auth.projectGroups, billingStatus, proactiveProjectDenial]);
-
-  const stageArchiveAndCreateRecovery = useCallback((name: string, options: PendingProjectCreation = {}) => {
-    if (!auth.project || auth.project.status !== 'active') {
-      return false;
-    }
-
-    setPendingProjectCreation({
-      ...options,
-      groupId: options.groupId ?? auth.project.groupId ?? auth.projectGroups[0]?.id,
-      initialProjectName: name,
-      archiveProjectId: auth.project.id,
-      archiveProjectName: auth.project.name,
-    });
-    setLimitModal(null);
-    useAuthStore.setState({ constraintDenial: null });
-    setShowCreateProjectModal(true);
-    return true;
-  }, [auth.project, auth.projectGroups]);
+  }, []);
 
   const dismissToast = useCallback((toastId: number) => {
     setToasts((current) => current.filter((toast) => toast.id !== toastId));
@@ -1709,15 +1677,30 @@ function WorkspaceApp({
     if (
       !behavior.skipProjectLimitRecovery
       && proactiveProjectDenial?.code === 'PROJECT_LIMIT_REACHED'
-      && stageArchiveAndCreateRecovery(trimmedName, options)
+      && !canSilentlyReplaceOnFree
     ) {
-      throw new Error(ARCHIVE_AND_CREATE_RECOVERY);
+      await openLimitModal(proactiveProjectDenial);
+      return null;
     }
 
     activationInFlightRef.current = true;
 
     try {
       let newProject: AuthProject | null = null;
+
+      if (
+        !behavior.skipProjectLimitRecovery
+        && !options.archiveProjectId
+        && canSilentlyReplaceOnFree
+        && activeProjectToReplace
+      ) {
+        if (proactiveArchiveDenial) {
+          await openLimitModal(proactiveArchiveDenial);
+          return null;
+        }
+        await auth.archiveProject(activeProjectToReplace.id);
+        await fetchUsage();
+      }
 
       if (options.templatePublicationId) {
         const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
@@ -1768,9 +1751,10 @@ function WorkspaceApp({
               if (
                 !behavior.skipProjectLimitRecovery
                 && body.code === 'PROJECT_LIMIT_REACHED'
-                && stageArchiveAndCreateRecovery(trimmedName, options)
+                && !canSilentlyReplaceOnFree
               ) {
-                throw new Error(ARCHIVE_AND_CREATE_RECOVERY);
+                await openLimitModal(body);
+                return null;
               }
               await openLimitModal(body);
               return null;
@@ -1793,10 +1777,11 @@ function WorkspaceApp({
           if (
             !behavior.skipProjectLimitRecovery
             && denial?.code === 'PROJECT_LIMIT_REACHED'
-            && stageArchiveAndCreateRecovery(trimmedName, options)
+            && !canSilentlyReplaceOnFree
           ) {
             useAuthStore.setState({ constraintDenial: null });
-            throw new Error(ARCHIVE_AND_CREATE_RECOVERY);
+            await openLimitModal(denial);
+            return null;
           }
         }
       }
@@ -1806,7 +1791,8 @@ function WorkspaceApp({
       }
 
       createEmptyChartAfterActivationRef.current = Boolean(options.createEmptyChart);
-      queuedPromptRef.current = options.firstPrompt ?? null;
+      queuedPromptRef.current = null;
+      setStartScreenPrefillPrompt(options.firstPrompt ?? null);
       resetWorkspacePresentation();
       await auth.refreshProjects();
 
@@ -1817,15 +1803,12 @@ function WorkspaceApp({
       } else {
         replaceTasksFromSystem([]);
       }
-      if (options.firstPrompt) {
-        useChatStore.getState().addMessage({ role: 'user', content: options.firstPrompt });
-      }
       setWorkspace({
         kind: 'project',
         projectId: newProject.id,
         chatOpen: options.createEmptyChart
           ? false
-          : (options.firstPrompt ? true : readProjectChatOpenState()),
+          : false,
       });
       setPendingProjectCreation(null);
       setPendingPostAuthAction(null);
@@ -1834,16 +1817,20 @@ function WorkspaceApp({
       activationInFlightRef.current = false;
     }
   }, [
+    activeProjectToReplace,
     auth,
+    canSilentlyReplaceOnFree,
+    fetchUsage,
     hasShareToken,
     openLimitModal,
+    proactiveArchiveDenial,
     proactiveProjectDenial,
     replaceTasksFromSystem,
     resetWorkspacePresentation,
+    setStartScreenPrefillPrompt,
     setPendingPostAuthAction,
     setSidebarState,
     setWorkspace,
-    stageArchiveAndCreateRecovery,
   ]);
 
   useEffect(() => {
@@ -2460,8 +2447,11 @@ function WorkspaceApp({
     }
 
     if (auth.isAuthenticated) {
-      if (proactiveProjectDenial?.code === 'PROJECT_LIMIT_REACHED' && auth.project?.status === 'active') {
-        openCreateProjectModal({ groupId: groupId ?? auth.project.groupId });
+      if (
+        proactiveProjectDenial?.code === 'PROJECT_LIMIT_REACHED'
+        && canSilentlyReplaceOnFree
+      ) {
+        openCreateProjectModal({ groupId: groupId ?? activeProjectToReplace?.groupId ?? auth.project?.groupId });
         return;
       }
       if (proactiveProjectDenial) {
@@ -2474,7 +2464,18 @@ function WorkspaceApp({
     queuedPromptRef.current = null;
     setPendingPostAuthAction(null);
     onLoginRequired();
-  }, [auth.isAuthenticated, auth.project, hasShareToken, onLoginRequired, openCreateProjectModal, openLimitModal, proactiveProjectDenial, setPendingPostAuthAction]);
+  }, [
+    activeProjectToReplace,
+    auth.isAuthenticated,
+    auth.project,
+    canSilentlyReplaceOnFree,
+    hasShareToken,
+    onLoginRequired,
+    openCreateProjectModal,
+    openLimitModal,
+    proactiveProjectDenial,
+    setPendingPostAuthAction,
+  ]);
 
   const handleCreateProjectGroup = useCallback(async (name: string) => {
     await auth.createProjectGroup(name);
@@ -3121,18 +3122,7 @@ function WorkspaceApp({
   const currentProjectIsEmpty = workspace.kind === 'project' && currentProjectTaskCount === 0;
   const hasQueuedProjectPrompt = workspace.kind === 'project' && Boolean(queuedPromptRef.current);
   const projectChatOpen = workspace.kind === 'project' && workspace.chatOpen;
-  const effectivePendingProjectCreation = showCreateProjectModal
-    ? (
-      shouldForceArchiveMode && auth.project
-        ? {
-            ...(pendingProjectCreation ?? {}),
-            groupId: pendingProjectCreation?.groupId ?? auth.project.groupId ?? auth.projectGroups[0]?.id,
-            archiveProjectId: pendingProjectCreation?.archiveProjectId ?? auth.project.id,
-            archiveProjectName: pendingProjectCreation?.archiveProjectName ?? auth.project.name,
-          }
-        : pendingProjectCreation
-    )
-    : pendingProjectCreation;
+  const effectivePendingProjectCreation = pendingProjectCreation;
   const showProjectStartScreen = workspace.kind === 'project'
     && !hasShareToken
     && currentProjectIsEmpty
