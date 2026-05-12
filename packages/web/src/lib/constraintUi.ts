@@ -237,6 +237,9 @@ export function buildConstraintModalContent(
   if (denial.code === 'SUBSCRIPTION_EXPIRED') {
     title = 'Подписка требует продления';
     description = `${planLabel} больше не активен для изменений. ${denial.upgradeHint}`;
+  } else if (denial.code === 'RESTORE_PROJECT_LIMIT_REACHED') {
+    title = 'Нельзя вернуть проект из архива';
+    description = 'Лимит активных проектов уже исчерпан. Освободите активный слот или расширьте тариф, чтобы вернуть этот проект.';
   } else if (denial.code === 'PROJECT_GROUPS_FEATURE_LOCKED') {
     title = 'Группы проектов недоступны';
     description = 'На бесплатном тарифе группы проектов недоступны. Расширьте тариф, чтобы создавать отдельные группы и работать по командам или направлениям.';

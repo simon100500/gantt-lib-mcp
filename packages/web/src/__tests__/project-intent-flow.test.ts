@@ -83,8 +83,18 @@ describe('project creation recovery', () => {
   it('refreshes projects after archive and restore so limits update without reload', () => {
     assert.match(appSource, /function buildLocalArchiveLimitDenial\(/);
     assert.match(appSource, /const handleArchiveProject = useCallback\(async \(projectId: string\) => \{[\s\S]*if \(effectiveArchiveDenial\) \{[\s\S]*await openLimitModal\(effectiveArchiveDenial\);[\s\S]*return false;[\s\S]*await auth\.archiveProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*return true;/);
-    assert.match(appSource, /const handleRestoreProject = useCallback\(async \(projectId: string\) => \{[\s\S]*await auth\.restoreProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);/);
+    assert.match(appSource, /const handleRestoreProject = useCallback\(async \(projectId: string\) => \{[\s\S]*await auth\.restoreProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*if \(error instanceof Error && error\.message === 'RESTORE_PROJECT_LIMIT_REACHED'\)/);
     assert.match(appSource, /<DeleteProjectModal[\s\S]*await auth\.deleteProject\(deleteProjectDraft\.id\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*await fetchUsage\(\);[\s\S]*setLimitModal\(null\);/);
+  });
+
+  it('shows a dedicated paywall explanation when archived project restore hits the active-project limit', () => {
+    const constraintUiSource = readFileSync(resolve(process.cwd(), 'packages/web/src/lib/constraintUi.ts'), 'utf8');
+    const authStoreSource = readFileSync(resolve(process.cwd(), 'packages/web/src/stores/useAuthStore.ts'), 'utf8');
+    const limitModalSource = readFileSync(resolve(process.cwd(), 'packages/web/src/components/LimitReachedModal.tsx'), 'utf8');
+
+    assert.match(authStoreSource, /code: 'RESTORE_PROJECT_LIMIT_REACHED'/);
+    assert.match(constraintUiSource, /title = 'Нельзя вернуть проект из архива'/);
+    assert.match(limitModalSource, /content\.code === 'RESTORE_PROJECT_LIMIT_REACHED'/);
   });
 
   it('prefills the start screen instead of auto-sending the first prompt to chat after project creation', () => {

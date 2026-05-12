@@ -69,7 +69,7 @@ const SUPPORTED_APP_PATHS = new Set(['/', '/login', '/auth/yandex/callback', '/p
 const TRANSIENT_QUERY_PARAMS = new Set(['auth']);
 
 function isConstraintCode(code: string | undefined): code is ConstraintDenialPayload['code'] {
-  return code === 'PROJECT_LIMIT_REACHED' || code === 'AI_LIMIT_REACHED' || code === 'SUBSCRIPTION_EXPIRED' || code === 'ARCHIVE_FEATURE_LOCKED' || code === 'EXPORT_FEATURE_LOCKED';
+  return code === 'PROJECT_LIMIT_REACHED' || code === 'RESTORE_PROJECT_LIMIT_REACHED' || code === 'AI_LIMIT_REACHED' || code === 'SUBSCRIPTION_EXPIRED' || code === 'ARCHIVE_FEATURE_LOCKED' || code === 'EXPORT_FEATURE_LOCKED';
 }
 
 function buildProactiveConstraintDenial(
@@ -2821,9 +2821,16 @@ function WorkspaceApp({
   }, [createProjectAndActivate, handleArchiveProject]);
 
   const handleRestoreProject = useCallback(async (projectId: string) => {
-    await auth.restoreProject(projectId);
-    await fetchUsage();
-    await auth.refreshProjects();
+    try {
+      await auth.restoreProject(projectId);
+      await fetchUsage();
+      await auth.refreshProjects();
+    } catch (error) {
+      if (error instanceof Error && error.message === 'RESTORE_PROJECT_LIMIT_REACHED') {
+        return;
+      }
+      throw error;
+    }
   }, [auth, fetchUsage]);
 
   const handleOpenResourcePool = useCallback(async () => {

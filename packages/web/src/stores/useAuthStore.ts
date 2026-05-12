@@ -1039,6 +1039,27 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       method: 'POST',
     });
 
+    if (response.status === 403) {
+      const denial = await response.json().catch(() => null) as Partial<ConstraintDenialPayload> | null;
+      set({
+        constraintDenial: denial ? {
+          ...denial,
+          code: 'RESTORE_PROJECT_LIMIT_REACHED',
+          reasonCode: 'restore_limit_reached',
+          upgradeHint: 'Чтобы вернуть проект из архива, освободите слот активного проекта или расширьте тариф.',
+        } : {
+          code: 'RESTORE_PROJECT_LIMIT_REACHED',
+          limitKey: 'projects',
+          reasonCode: 'restore_limit_reached',
+          remaining: 0,
+          plan: 'free',
+          planLabel: 'Бесплатный',
+          upgradeHint: 'Чтобы вернуть проект из архива, освободите слот активного проекта или расширьте тариф.',
+        },
+      });
+      throw new Error('RESTORE_PROJECT_LIMIT_REACHED');
+    }
+
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
       throw new Error(data.error || 'Failed to restore project');

@@ -181,7 +181,12 @@ export function LimitReachedModal({
 
         <div className="mb-6 space-y-3 text-sm text-slate-600">
           <p>
-            {content.code === 'PROJECT_LIMIT_REACHED' && content.plan === 'free' ? (
+            {content.code === 'RESTORE_PROJECT_LIMIT_REACHED' ? (
+              <>
+                Сейчас у вас уже заполнен лимит активных проектов. Чтобы <strong className="font-semibold text-slate-700">вернуть проект из архива</strong>,
+                {' '}освободите один активный слот или расширьте тариф.
+              </>
+            ) : content.code === 'PROJECT_LIMIT_REACHED' && content.plan === 'free' ? (
               <>
                 На бесплатном тарифе доступен только <strong className="font-semibold text-slate-700">1 активный и 4 архивных проекта</strong>.{' '}
                 Архивируйте завершённые проекты и возвращайтесь к ним в любой момент.
@@ -354,7 +359,12 @@ export function LimitReachedModal({
 
         {showsUpgradeCards && (
           <p className="mt-3 text-sm text-slate-500">
-            {content.limitKey === 'projects' ? (
+            {content.code === 'RESTORE_PROJECT_LIMIT_REACHED' ? (
+              <>
+                Чтобы вернуть проект из архива на тарифе <strong className="font-semibold text-slate-700">{content.planLabel}</strong>,
+                {' '}освободите активный слот.
+              </>
+            ) : content.limitKey === 'projects' ? (
               <>
                 Чтобы создать новый проект на тарифе <strong className="font-semibold text-slate-700">{content.planLabel}</strong>,
                 {' '}архивируйте текущий проект.
