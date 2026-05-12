@@ -23,7 +23,7 @@ describe('landing prompt flow orchestration', () => {
     );
     assert.match(
       appSource,
-      /if \(\s*auth\.project[\s\S]*auth\.project\.taskCount === 0[\s\S]*setStartScreenPrefillPrompt\(prompt\)/,
+      /const reusableEmptyProject = auth\.projects\.find\(\(project\) => project\.status === 'active' && project\.taskCount === 0\) \?\? null;/,
     );
     assert.doesNotMatch(appSource, /handleSend\(prompt\)/);
   });
@@ -31,6 +31,7 @@ describe('landing prompt flow orchestration', () => {
   it('opens the regular create-project flow when the current project is not reusable', () => {
     assert.match(appSource, /openCreateProjectModal\(\{\s*firstPrompt: prompt,/);
     assert.match(appSource, /initialProjectName: 'Новый проект'/);
+    assert.match(appSource, /if \(effectiveProjectDenial\) \{[\s\S]*await openLimitModal\(effectiveProjectDenial\);/);
   });
 
   it('passes landing prompt into the start screen input instead of chat autostart', () => {
@@ -43,14 +44,18 @@ describe('project creation recovery', () => {
   it('allows one active and up to four archived projects on free plan before paywall', () => {
     assert.match(appSource, /const FREE_ARCHIVED_PROJECT_LIMIT = 4;/);
     assert.match(appSource, /const activeProjectToReplace = auth\.projects\.find\(\(project\) => project\.status === 'active'\) \?\? null;/);
+    assert.match(appSource, /const activeProjectsCount = auth\.projects\.filter\(\(project\) => project\.status === 'active'\)\.length;/);
     assert.match(appSource, /const archivedProjectsCount = auth\.projects\.filter\(\(project\) => project\.status === 'archived'\)\.length;/);
     assert.match(appSource, /const canSilentlyReplaceOnFree = isFreePlanProjectReplacementMode[\s\S]*archivedProjectsCount < FREE_ARCHIVED_PROJECT_LIMIT;/);
+    assert.match(appSource, /const effectiveProjectDenial = isFreePlanProjectReplacementMode[\s\S]*\? localProjectLimitDenial[\s\S]*: proactiveProjectDenial;/);
+    assert.match(appSource, /const effectiveArchiveDenial = localArchiveLimitDenial \?\? proactiveArchiveDenial;/);
   });
 
   it('keeps replacement quiet inside the regular create modal before the archive limit', () => {
     assert.match(appSource, /if \(\s*constraintDenial\.code === 'PROJECT_LIMIT_REACHED' && activeProjectToReplace[\s\S]*if \(canSilentlyReplaceOnFree\) \{/);
     assert.match(appSource, /setPendingProjectCreation\(\(current\) => \(\{[\s\S]*initialProjectName: current\?\.initialProjectName \?\? 'Новый проект',/);
-    assert.doesNotMatch(appSource, /const stagedIntent = mustShowReplacementModal/);
+    assert.match(appSource, /const stagedIntent = canSilentlyReplaceOnFree && activeProjectToReplace/);
+    assert.match(appSource, /archiveProjectName: nextIntent\.archiveProjectName \?\? activeProjectToReplace\.name/);
   });
 
   it('renders inline archive warning inside create project modal', () => {
@@ -60,13 +65,32 @@ describe('project creation recovery', () => {
 
   it('silently archives the active project before creation and shows paywall only after the limit', () => {
     assert.match(appSource, /!behavior\.skipProjectLimitRecovery[\s\S]*!options\.archiveProjectId[\s\S]*canSilentlyReplaceOnFree[\s\S]*await auth\.archiveProject\(activeProjectToReplace\.id\);/);
-    assert.match(appSource, /if \(\s*!behavior\.skipProjectLimitRecovery[\s\S]*proactiveProjectDenial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree\s*\) \{[\s\S]*await openLimitModal\(proactiveProjectDenial\);/);
+    assert.match(appSource, /await fetchUsage\(\);\s*await auth\.refreshProjects\(\);/);
+    assert.match(appSource, /if \(\s*!behavior\.skipProjectLimitRecovery[\s\S]*effectiveProjectDenial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree\s*\) \{[\s\S]*await openLimitModal\(effectiveProjectDenial\);/);
+  });
+
+  it('decides modal vs paywall from local project state before the create request fails', () => {
+    assert.match(appSource, /function buildLocalFreeProjectLimitDenial\(/);
+    assert.match(appSource, /const effectiveProjectDenial = isFreePlanProjectReplacementMode[\s\S]*\? localProjectLimitDenial[\s\S]*: proactiveProjectDenial;/);
+    assert.match(appSource, /if \(auth\.isAuthenticated\) \{[\s\S]*if \(\s*effectiveProjectDenial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*canSilentlyReplaceOnFree[\s\S]*openCreateProjectModal/);
+    assert.match(appSource, /if \(effectiveProjectDenial\) \{[\s\S]*await openLimitModal\(effectiveProjectDenial\);/);
+  });
+
+  it('refreshes projects after archive and restore so limits update without reload', () => {
+    assert.match(appSource, /function buildLocalArchiveLimitDenial\(/);
+    assert.match(appSource, /const handleArchiveProject = useCallback\(async \(projectId: string\) => \{[\s\S]*if \(effectiveArchiveDenial\) \{[\s\S]*await openLimitModal\(effectiveArchiveDenial\);[\s\S]*return false;[\s\S]*await auth\.archiveProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*return true;/);
+    assert.match(appSource, /const handleRestoreProject = useCallback\(async \(projectId: string\) => \{[\s\S]*await auth\.restoreProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);/);
   });
 
   it('prefills the start screen instead of auto-sending the first prompt to chat after project creation', () => {
-    assert.match(appSource, /setStartScreenPrefillPrompt\(options\.firstPrompt \?\? null\);/);
+    assert.match(appSource, /await auth\.switchProject\(newProject\.id\);[\s\S]*setStartScreenPrefillPrompt\(options\.firstPrompt \?\? null\);/);
     assert.doesNotMatch(appSource, /useChatStore\.getState\(\)\.addMessage\(\{ role: 'user', content: options\.firstPrompt \}\)/);
     assert.match(appSource, /chatOpen: options\.createEmptyChart[\s\S]*: false,/);
+  });
+
+  it('uses the standard send path from an empty project workspace after intent prefill', () => {
+    assert.match(appSource, /if \(workspace\.kind === 'project'\) \{[\s\S]*const result = handleSend\(text\);[\s\S]*return result;/);
+    assert.match(appSource, /if \(workspace\.kind !== 'project' && !auth\.project\) \{/);
   });
 });
 
