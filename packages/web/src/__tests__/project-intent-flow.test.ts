@@ -5,32 +5,67 @@ import { describe, it } from 'node:test';
 
 const appSource = readFileSync(resolve(process.cwd(), 'packages/web/src/App.tsx'), 'utf8');
 const projectSwitcherSource = readFileSync(resolve(process.cwd(), 'packages/web/src/components/ProjectSwitcher.tsx'), 'utf8');
+const createProjectModalSource = readFileSync(resolve(process.cwd(), 'packages/web/src/components/CreateProjectModal.tsx'), 'utf8');
 
 describe('landing prompt flow orchestration', () => {
-  it('launches project intent flow through a single server mutation', () => {
+  it('reads project intent text and routes it into the standard web flow', () => {
     assert.match(
       appSource,
-      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}\/launch`, \{\s*method: 'POST'/,
+      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}`,\s*\{\s*headers:/,
+    );
+    assert.doesNotMatch(
+      appSource,
+      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}\/launch`/,
     );
     assert.doesNotMatch(
       appSource,
       /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}\/create-project`/,
     );
-    assert.doesNotMatch(
+    assert.match(
       appSource,
-      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}\/start-generation`/,
+      /if \(\s*auth\.project[\s\S]*auth\.project\.taskCount === 0[\s\S]*setStartScreenPrefillPrompt\(prompt\)/,
     );
-    assert.doesNotMatch(
-      appSource,
-      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}`,\s*\{\s*headers:/,
-    );
+    assert.doesNotMatch(appSource, /handleSend\(prompt\)/);
   });
 
-  it('applies the launch payload directly to chat and generation state', () => {
-    assert.match(appSource, /useChatStore\.getState\(\)\.addMessage\(\{ role: 'user', content: payload\.prompt\.trim\(\) \}\)/);
-    assert.match(appSource, /setActiveGenerationJob\(payload\.job\)/);
-    assert.match(appSource, /setPreparedIntentChatProjectId\(payload\.generationStarted \|\| payload\.job \?/);
-    assert.match(appSource, /if \(payload\.archivedProject\) \{\s*showToast\(`Проект "\$\{payload\.archivedProject\.name\}" автоматически архивирован\.`\)/);
+  it('opens the regular create-project flow when the current project is not reusable', () => {
+    assert.match(appSource, /openCreateProjectModal\(\{\s*firstPrompt: prompt,/);
+    assert.match(appSource, /initialProjectName: 'Новый проект'/);
+  });
+
+  it('passes landing prompt into the start screen input instead of chat autostart', () => {
+    assert.match(appSource, /<DraftWorkspace[\s\S]*initialPrompt=\{startScreenPrefillPrompt \?\? undefined\}/);
+    assert.match(createProjectModalSource, /archiveProjectName\?: string;/);
+  });
+});
+
+describe('project creation recovery', () => {
+  it('stages archive-and-create recovery instead of dropping the prompt on project limit', () => {
+    assert.match(appSource, /stageArchiveAndCreateRecovery\(trimmedName, options\)/);
+    assert.match(appSource, /archiveProjectId: auth\.project\.id/);
+    assert.match(appSource, /archiveProjectName: auth\.project\.name/);
+    assert.match(appSource, /submitLabel=\{effectivePendingProjectCreation\?\.archiveProjectId\s*\?\s*'Архивировать и создать'/);
+  });
+
+  it('opens create modal in archive mode immediately for free users with an active project', () => {
+    assert.match(appSource, /const shouldStageArchiveImmediately = \(\s*\(billingStatus\?\.billingState === 'free' \|\| billingStatus == null\)/);
+    assert.match(appSource, /shouldStageArchiveImmediately\s*\|\|/);
+  });
+
+  it('renders inline archive warning inside create project modal', () => {
+    assert.match(createProjectModalSource, /archiveProjectName\?: string;/);
+    assert.match(createProjectModalSource, /Проект "\{archiveProjectName\}" будет архивирован перед созданием нового\./);
+  });
+
+  it('suppresses generic create error when switching into archive recovery', () => {
+    assert.match(appSource, /throw new Error\(ARCHIVE_AND_CREATE_RECOVERY\)/);
+    assert.match(createProjectModalSource, /if \(err instanceof Error && err\.message === ARCHIVE_AND_CREATE_RECOVERY\) \{/);
+  });
+
+  it('forces archive mode at render time for free users even if pending modal state was plain', () => {
+    assert.match(appSource, /const effectivePendingProjectCreation = showCreateProjectModal/);
+    assert.match(appSource, /shouldForceArchiveMode && auth\.project/);
+    assert.match(appSource, /archiveProjectName=\{effectivePendingProjectCreation\?\.archiveProjectName\}/);
   });
 });
 

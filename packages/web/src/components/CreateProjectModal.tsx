@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { ProjectGroupModal } from './ProjectGroupModal.tsx';
 import type { ProjectGroup } from '../types.ts';
 
+const ARCHIVE_AND_CREATE_RECOVERY = 'ARCHIVE_AND_CREATE_RECOVERY';
+
 interface CreateProjectModalProps {
   projectGroups: ProjectGroup[];
   initialGroupId?: string;
@@ -15,6 +17,7 @@ interface CreateProjectModalProps {
   title?: string;
   description?: string;
   submitLabel?: string;
+  archiveProjectName?: string;
   onSave: (name: string, groupId: string) => Promise<{ id: string; name: string } | null>;
   onCreateGroup: (name: string) => Promise<ProjectGroup | null>;
   onClose: () => void;
@@ -25,8 +28,9 @@ export function CreateProjectModal({
   initialGroupId,
   initialName,
   title = 'Новый проект',
-  description = 'Выберите группу, в которой будут жить проект и его общие ресурсы.',
+  description = '',
   submitLabel = 'Создать',
+  archiveProjectName,
   onSave,
   onCreateGroup,
   onClose,
@@ -67,10 +71,13 @@ export function CreateProjectModal({
       const result = await onSave(trimmedName, selectedGroupId);
       if (result) {
         onClose();
-      } else {
+      } else if (!archiveProjectName) {
         setError('Не удалось создать проект. Попробуйте снова.');
       }
     } catch (err) {
+      if (err instanceof Error && err.message === ARCHIVE_AND_CREATE_RECOVERY) {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to create project');
     } finally {
       setLoading(false);
@@ -99,6 +106,11 @@ export function CreateProjectModal({
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            {archiveProjectName ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Проект "{archiveProjectName}" будет архивирован перед созданием нового.
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label htmlFor="new-project-name">Название проекта</Label>
               <Input

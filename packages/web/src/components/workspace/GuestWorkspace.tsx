@@ -17,6 +17,7 @@ interface GuestWorkspaceProps {
   onEmptyChart: () => void | Promise<void>;
   onImport?: () => void;
   onLoginRequired: () => void;
+  initialPrompt?: string;
   onScrollToToday: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
@@ -39,6 +40,7 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
         onImport={props.onImport}
         isAuthenticated={props.isAuthenticated}
         onLoginRequired={props.onLoginRequired}
+        initialPrompt={props.initialPrompt}
       />
     );
   }

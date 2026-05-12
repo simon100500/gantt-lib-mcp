@@ -6,6 +6,7 @@ interface DraftWorkspaceProps {
   onEmptyChart: () => void | Promise<void>;
   onImport?: () => void;
   onLoginRequired: () => void;
+  initialPrompt?: string;
 }
 
 export function DraftWorkspace({
@@ -14,6 +15,7 @@ export function DraftWorkspace({
   onEmptyChart,
   onImport,
   onLoginRequired,
+  initialPrompt,
 }: DraftWorkspaceProps) {
   return (
     <StartScreen
@@ -22,6 +24,7 @@ export function DraftWorkspace({
       onImport={onImport}
       isAuthenticated={isAuthenticated}
       onLoginRequired={onLoginRequired}
+      initialPrompt={initialPrompt}
     />
   );
 }

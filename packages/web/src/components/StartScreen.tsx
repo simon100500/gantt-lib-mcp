@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ArrowUp, GanttChart, LoaderCircle, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +13,7 @@ export interface StartScreenProps {
   onImport?: () => void;
   isAuthenticated?: boolean;
   onLoginRequired?: () => void;
+  initialPrompt?: string;
 }
 
 type StartChip = {
@@ -54,11 +55,19 @@ const CHIPS: StartChip[] = [
   },
 ];
 
-export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = true, onLoginRequired }: StartScreenProps) {
+export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = true, onLoginRequired, initialPrompt }: StartScreenProps) {
   const [inputValue, setInputValue] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (typeof initialPrompt !== 'string') {
+      return;
+    }
+    setSubmitError(null);
+    setInputValue(initialPrompt);
+  }, [initialPrompt]);
 
   function handleTextareaInput(e: React.FormEvent<HTMLTextAreaElement>) {
     const el = e.currentTarget;
