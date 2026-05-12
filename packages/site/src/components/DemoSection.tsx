@@ -35,7 +35,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
         <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
           <div className="min-w-0 w-full">
             <h1
-              className="animate-fade-up text-[clamp(1.85rem,5.6vw,2.45rem)] font-extrabold leading-[1.04] text-foreground md:text-[2.65rem] lg:text-[2.8rem] xl:text-[3rem] 2xl:text-[3.2rem]"
+              className="animate-fade-up text-[clamp(2.5rem,6vw,2.45rem)] font-extrabold leading-[1.04] text-foreground md:text-[2.65rem] lg:text-[2.8rem] xl:text-[3rem] 2xl:text-[3.2rem]"
               style={{ animationDelay: '120ms' }}
             >
               <span className="text-primary"></span>Диаграмма Ганта за&nbsp;30&nbsp;секунд
@@ -45,7 +45,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
               className="mx-auto mt-6 max-w-2xl text-base leading-7 text-secondary-foreground animate-fade-up sm:text-lg sm:leading-8"
               style={{ animationDelay: '190ms' }}
             >
-              Опишите ваш проект — ИИ создаст план работ с задачами, сроками и зависимостями
+              Опишите ваш проект — ИИ&nbsp;создаст план работ <wbr />с&nbsp;задачами, сроками и&nbsp;зависимостями
             </p>
           </div>
 
