@@ -239,7 +239,7 @@ export function buildConstraintModalContent(
     description = `${planLabel} больше не активен для изменений. ${denial.upgradeHint}`;
   } else if (isFreeProjectLimitUpsell) {
     title = 'Пора расширяться';
-    description = `На тарифе ${planLabel} ${denial.upgradeHint.charAt(0).toLowerCase()}${denial.upgradeHint.slice(1)}`;
+    description = 'На бесплатном тарифе доступен только 1 активный и 4 архивных проекта. Архивируйте завершённые проекты и возвращайтесь к ним в любой момент.';
   } else if (denial.code === 'PROJECT_LIMIT_REACHED') {
     title = 'Пора расширяться';
     description = `На тарифе ${planLabel} ${denial.upgradeHint.charAt(0).toLowerCase()}${denial.upgradeHint.slice(1)}`;
@@ -249,7 +249,7 @@ export function buildConstraintModalContent(
   } else if (isFeatureGate) {
     if (denial.limitKey === 'archive') {
       title = 'Не теряйте доступ к проектам';
-      description = 'Архивируйте завершённые проекты и возвращайтесь к ним в любой момент. Расширьте тариф, чтобы продолжить.';
+      description = 'Архивируйте завершённые проекты и возвращайтесь к ним в любой момент.';
     } else {
       title = `${limitLabel} недоступен`;
       description = buildFeatureGateDescription(denial, planLabel);

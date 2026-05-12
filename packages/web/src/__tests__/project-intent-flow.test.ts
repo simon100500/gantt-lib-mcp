@@ -74,12 +74,14 @@ describe('project creation recovery', () => {
     assert.match(appSource, /const effectiveProjectDenial = isFreePlanProjectReplacementMode[\s\S]*\? localProjectLimitDenial[\s\S]*: proactiveProjectDenial;/);
     assert.match(appSource, /if \(auth\.isAuthenticated\) \{[\s\S]*if \(\s*effectiveProjectDenial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*canSilentlyReplaceOnFree[\s\S]*openCreateProjectModal/);
     assert.match(appSource, /if \(effectiveProjectDenial\) \{[\s\S]*await openLimitModal\(effectiveProjectDenial\);/);
+    assert.match(appSource, /const immediateDenial = normalizeConstraintDenialPayload\(denial, currentBillingStatus\);[\s\S]*setLimitModal\(\{[\s\S]*denial: immediateDenial,/);
   });
 
   it('refreshes projects after archive and restore so limits update without reload', () => {
     assert.match(appSource, /function buildLocalArchiveLimitDenial\(/);
     assert.match(appSource, /const handleArchiveProject = useCallback\(async \(projectId: string\) => \{[\s\S]*if \(effectiveArchiveDenial\) \{[\s\S]*await openLimitModal\(effectiveArchiveDenial\);[\s\S]*return false;[\s\S]*await auth\.archiveProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*return true;/);
     assert.match(appSource, /const handleRestoreProject = useCallback\(async \(projectId: string\) => \{[\s\S]*await auth\.restoreProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);/);
+    assert.match(appSource, /<DeleteProjectModal[\s\S]*await auth\.deleteProject\(deleteProjectDraft\.id\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*await fetchUsage\(\);[\s\S]*setLimitModal\(null\);/);
   });
 
   it('prefills the start screen instead of auto-sending the first prompt to chat after project creation', () => {

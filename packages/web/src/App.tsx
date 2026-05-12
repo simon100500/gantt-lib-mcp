@@ -1076,11 +1076,25 @@ function WorkspaceApp({
       return;
     }
 
-    if (auth.isAuthenticated && !hasShareToken) {
-      await Promise.all([fetchSubscription(), fetchUsage()]);
+    const currentBillingStatus = useBillingStore.getState().usage ?? useBillingStore.getState().subscription ?? billingStatus;
+    const immediateDenial = normalizeConstraintDenialPayload(denial, currentBillingStatus);
+    if (immediateDenial) {
+      setLimitModal({
+        denial: immediateDenial,
+        usage: currentBillingStatus,
+      });
     }
 
-    const nextBillingStatus = useBillingStore.getState().usage ?? useBillingStore.getState().subscription;
+    let nextBillingStatus = currentBillingStatus;
+    if (auth.isAuthenticated && !hasShareToken) {
+      try {
+        await Promise.all([fetchSubscription(), fetchUsage()]);
+        nextBillingStatus = useBillingStore.getState().usage ?? useBillingStore.getState().subscription ?? currentBillingStatus;
+      } catch {
+        nextBillingStatus = currentBillingStatus;
+      }
+    }
+
     const normalizedDenial = normalizeConstraintDenialPayload(denial, nextBillingStatus);
     if (!normalizedDenial) {
       return;
@@ -1090,7 +1104,7 @@ function WorkspaceApp({
       denial: normalizedDenial,
       usage: nextBillingStatus,
     });
-  }, [auth.isAuthenticated, fetchUsage, hasShareToken]);
+  }, [auth.isAuthenticated, billingStatus, fetchSubscription, fetchUsage, hasShareToken]);
 
   useEffect(() => {
     if (auth.isAuthenticated && !hasShareToken) {
@@ -4046,7 +4060,10 @@ function WorkspaceApp({
         projectName={deleteProjectDraft.name}
         onDelete={async () => {
           await auth.deleteProject(deleteProjectDraft.id);
+          await auth.refreshProjects();
           await fetchUsage();
+          setLimitModal(null);
+          useAuthStore.setState({ constraintDenial: null });
           setDeleteProjectDraft(null);
         }}
         onClose={() => setDeleteProjectDraft(null)}

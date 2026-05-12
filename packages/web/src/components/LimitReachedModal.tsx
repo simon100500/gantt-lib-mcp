@@ -181,7 +181,12 @@ export function LimitReachedModal({
 
         <div className="mb-6 space-y-3 text-sm text-slate-600">
           <p>
-            {content.code === 'PROJECT_LIMIT_REACHED' ? (
+            {content.code === 'PROJECT_LIMIT_REACHED' && content.plan === 'free' ? (
+              <>
+                На бесплатном тарифе доступен только <strong className="font-semibold text-slate-700">1 активный и 4 архивных проекта</strong>.{' '}
+                Архивируйте завершённые проекты и возвращайтесь к ним в любой момент.
+              </>
+            ) : content.code === 'PROJECT_LIMIT_REACHED' ? (
               <>
                 На тарифе <strong className="font-semibold text-slate-700">{content.planLabel}</strong>{' '}
                 лимит активных проектов исчерпан. Освободите слот или обновите тариф.
