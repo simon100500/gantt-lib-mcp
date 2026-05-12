@@ -32,26 +32,28 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
   return (
     <div>
       <section className="relative mx-auto max-w-[1280px] px-4 pb-8 pt-10 md:px-6 md:pt-14 lg:px-8 lg:pt-20">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-start lg:gap-16">
-          <div className="min-w-0 w-full lg:px-0">
+        <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
+          <div className="min-w-0 w-full">
             <h1
-              className="animate-fade-up text-[clamp(1.4rem,3.8vw,2.45rem)] font-extrabold leading-[1.04] text-foreground md:text-[2.65rem] lg:text-[2.8rem] xl:text-[3rem] 2xl:text-[3.2rem]"
+              className="animate-fade-up text-[clamp(1.85rem,5.6vw,2.45rem)] font-extrabold leading-[1.04] text-foreground md:text-[2.65rem] lg:text-[2.8rem] xl:text-[3rem] 2xl:text-[3.2rem]"
               style={{ animationDelay: '120ms' }}
             >
-              Из описания проекта{' '}
-              <span className="text-primary">в&nbsp;диаграмму Ганта</span>{' '}
-              за 30 секунд
+              <span className="text-primary"></span>Диаграмма Ганта за&nbsp;30&nbsp;секунд
             </h1>
 
             <p
-              className="mt-6 text-base sm:text-lg leading-7 sm:leading-8 text-secondary-foreground animate-fade-up"
+              className="mx-auto mt-6 max-w-2xl text-base leading-7 text-secondary-foreground animate-fade-up sm:text-lg sm:leading-8"
               style={{ animationDelay: '190ms' }}
             >
-              Опишите что нужно построить — ИИ создаст план работ с задачами, сроками и зависимостями
+              Опишите ваш проект — ИИ создаст план работ с задачами, сроками и зависимостями
             </p>
           </div>
 
-          <div id="demo" className="relative min-w-0 w-full max-w-[560px] lg:translate-x-6 lg:justify-self-end lg:self-start">
+          <div
+            id="demo"
+            className="relative mt-8 w-full max-w-[680px] animate-fade-up"
+            style={{ animationDelay: '260ms' }}
+          >
             <HomepagePromptRedirect apiBaseUrl={apiBaseUrl} selectedPrompt={selectedPrompt} />
           </div>
         </div>
