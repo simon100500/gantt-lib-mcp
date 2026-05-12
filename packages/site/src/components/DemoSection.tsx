@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import type { Task } from 'gantt-lib';
 import GanttPreview from './GanttPreview.js';
 import { HomepagePromptRedirect } from './HomepagePromptRedirect.js';
@@ -29,25 +29,6 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
   const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].tasks);
   const [activeTitle, setActiveTitle] = useState<string | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].title);
   const [selectedPrompt, setSelectedPrompt] = useState<string>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].prompt);
-  const ganttRef = useRef<HTMLDivElement>(null);
-
-  function scrollToGantt(duration = 1200) {
-    const el = ganttRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const targetY = window.scrollY + rect.top - (window.innerHeight - rect.height) / 2;
-    const startY = window.scrollY;
-    const distance = targetY - startY;
-    const start = performance.now();
-    const ease = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    const step = (now: number) => {
-      const t = Math.min((now - start) / duration, 1);
-      window.scrollTo(0, startY + distance * ease(t));
-      if (t < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }
-
   return (
     <div>
       <section className="relative mx-auto max-w-[1280px] px-4 pb-8 pt-10 md:px-6 md:pt-14 lg:px-8 lg:pt-20">
@@ -97,7 +78,6 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
                   setActiveTitle(template.title);
                 }
                 setSelectedPrompt(template.prompt);
-                scrollToGantt(900);
               }}
               className={`rounded-full border px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${index === activeIndex
                 ? 'border-primary bg-primary/5 font-medium text-primary'
@@ -111,7 +91,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
       </section>
 
       {/* Gantt preview */}
-      <div id="gantt-preview" ref={ganttRef}>
+      <div id="gantt-preview">
         <GanttPreview
           key={activeIndex}
           initialTasks={activeTasks}

@@ -11,7 +11,7 @@ interface HomepagePromptRedirectProps {
 }
 
 export function HomepagePromptRedirect({ apiBaseUrl, selectedPrompt }: HomepagePromptRedirectProps) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => selectedPrompt ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
