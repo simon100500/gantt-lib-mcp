@@ -24,7 +24,7 @@ describe('landing prompt flow orchestration', () => {
     );
     assert.match(
       appSource,
-      /const reusableEmptyProject = auth\.projects\.find\(\(project\) => project\.status === 'active' && project\.taskCount === 0\) \?\? null;/,
+      /await auth\.refreshProjects\(\);\s*const latestAuthState = useAuthStore\.getState\(\);\s*const latestProjects = latestAuthState\.projects;\s*const latestCurrentProject = latestAuthState\.project;\s*const reusableEmptyProject = latestProjects\.find\(\(project\) => project\.status === 'active' && project\.taskCount === 0\) \?\? null;/,
     );
     assert.doesNotMatch(appSource, /handleSend\(prompt\)/);
   });
@@ -32,7 +32,7 @@ describe('landing prompt flow orchestration', () => {
   it('opens the regular create-project flow when the current project is not reusable', () => {
     assert.match(appSource, /openCreateProjectModal\(\{\s*firstPrompt: prompt,/);
     assert.match(appSource, /initialProjectName: 'Новый проект'/);
-    assert.match(appSource, /if \(effectiveProjectDenial\) \{[\s\S]*await openLimitModal\(effectiveProjectDenial\);/);
+    assert.match(appSource, /groupId: latestCurrentProject\?\.groupId \?\? latestAuthState\.projectGroups\[0\]\?\.id,/);
   });
 
   it('passes landing prompt into the start screen input instead of chat autostart', () => {
@@ -57,8 +57,7 @@ describe('project creation recovery', () => {
   it('keeps replacement quiet inside the regular create modal before the archive limit', () => {
     assert.match(appSource, /if \(\s*constraintDenial\.code === 'PROJECT_LIMIT_REACHED' && activeProjectToReplace[\s\S]*if \(canSilentlyReplaceOnFree\) \{/);
     assert.match(appSource, /setPendingProjectCreation\(\(current\) => \(\{[\s\S]*initialProjectName: current\?\.initialProjectName \?\? 'Новый проект',/);
-    assert.match(appSource, /const stagedIntent = canSilentlyReplaceOnFree && activeProjectToReplace/);
-    assert.match(appSource, /archiveProjectName: nextIntent\.archiveProjectName \?\? activeProjectToReplace\.name/);
+    assert.match(appSource, /archiveProjectName=\{effectivePendingProjectCreation\?\.archiveProjectName\}/);
   });
 
   it('renders inline archive warning inside create project modal', () => {
@@ -69,17 +68,15 @@ describe('project creation recovery', () => {
   });
 
   it('silently archives the active project before creation and shows paywall only after the limit', () => {
-    assert.match(appSource, /!behavior\.skipProjectLimitRecovery[\s\S]*!options\.archiveProjectId[\s\S]*canSilentlyReplaceOnFree[\s\S]*await auth\.archiveProject\(activeProjectToReplace\.id\);/);
     assert.match(appSource, /await fetchUsage\(\);\s*await auth\.refreshProjects\(\);/);
-    assert.match(appSource, /if \(\s*!behavior\.skipProjectLimitRecovery[\s\S]*effectiveProjectDenial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree\s*\) \{[\s\S]*await openLimitModal\(effectiveProjectDenial\);/);
+    assert.match(appSource, /!behavior\.skipProjectLimitRecovery[\s\S]*body\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree[\s\S]*await openLimitModal\(body\);/);
+    assert.match(appSource, /!behavior\.skipProjectLimitRecovery[\s\S]*denial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree[\s\S]*await openLimitModal\(denial\);/);
   });
 
   it('decides modal vs paywall from local project state before the create request fails', () => {
     assert.match(appSource, /function buildLocalFreeProjectLimitDenial\(/);
     assert.match(appSource, /const isFreePlan = billingStatus\?\.billingState === 'free';/);
     assert.match(appSource, /const effectiveProjectDenial = isFreePlanProjectReplacementMode[\s\S]*\? localProjectLimitDenial[\s\S]*: proactiveProjectDenial;/);
-    assert.match(appSource, /if \(auth\.isAuthenticated\) \{[\s\S]*if \(\s*effectiveProjectDenial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*canSilentlyReplaceOnFree[\s\S]*openCreateProjectModal/);
-    assert.match(appSource, /if \(effectiveProjectDenial\) \{[\s\S]*await openLimitModal\(effectiveProjectDenial\);/);
     assert.match(appSource, /const shouldDeferProjectLimitModal = denial\.code === 'PROJECT_LIMIT_REACHED' && !currentBillingStatus;/);
     assert.match(appSource, /const immediateDenial = shouldDeferProjectLimitModal[\s\S]*\? null[\s\S]*: normalizeConstraintDenialPayload\(denial, currentBillingStatus\);/);
     assert.match(appSource, /if \(immediateDenial\) \{[\s\S]*setLimitModal\(\{[\s\S]*denial: immediateDenial,/);

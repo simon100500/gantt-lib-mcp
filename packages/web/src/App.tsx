@@ -52,6 +52,7 @@ import { useProjectStore } from './stores/useProjectStore.ts';
 import { normalizeTasks, type ProjectSectionPermissions, type Task, type TimelineMarker, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
+const PROJECT_CREATION_INTENT_STORAGE_KEY = 'gantt_pending_project_creation_intent';
 const GENERATION_JOB_STORAGE_KEY_PREFIX = 'gantt_generation_job:';
 const GENERATION_PREVIEW_STORAGE_KEY_PREFIX = 'gantt_generation_preview:';
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
@@ -555,6 +556,28 @@ function getGenerationPreviewStorageKey(projectId: string): string {
   return `${GENERATION_PREVIEW_STORAGE_KEY_PREFIX}${projectId}`;
 }
 
+function readPendingProjectCreationIntentId(): string | null {
+  if (!canUseSessionStorage()) {
+    return null;
+  }
+
+  const value = window.sessionStorage.getItem(PROJECT_CREATION_INTENT_STORAGE_KEY)?.trim() ?? '';
+  return value || null;
+}
+
+function writePendingProjectCreationIntentId(intentId: string | null): void {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+
+  if (!intentId) {
+    window.sessionStorage.removeItem(PROJECT_CREATION_INTENT_STORAGE_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(PROJECT_CREATION_INTENT_STORAGE_KEY, intentId);
+}
+
 function readStoredGenerationJob(projectId: string): ProjectGenerationJobView | null {
   if (!canUseSessionStorage()) {
     return null;
@@ -627,7 +650,7 @@ export default function App() {
     search: window.location.search,
   }));
   const [workspaceTemplateCreateIntentId, setWorkspaceTemplateCreateIntentId] = useState<string | null>(null);
-  const [workspaceProjectCreationIntentId, setWorkspaceProjectCreationIntentId] = useState<string | null>(null);
+  const [workspaceProjectCreationIntentId, setWorkspaceProjectCreationIntentId] = useState<string | null>(() => readPendingProjectCreationIntentId());
   const [workspaceProjectOpenIntentId, setWorkspaceProjectOpenIntentId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -837,9 +860,12 @@ export default function App() {
       return;
     }
 
+    writePendingProjectCreationIntentId(projectCreationIntentRoute.intentId);
     setWorkspaceProjectCreationIntentId(projectCreationIntentRoute.intentId);
     navigate('/');
   }, [auth.isAuthenticated, navigate, projectCreationIntentRoute, route.pathname, route.search]);
+
+  const effectiveWorkspaceProjectCreationIntentId = workspaceProjectCreationIntentId ?? readPendingProjectCreationIntentId();
 
   useEffect(() => {
     if (!projectOpenRoute) {
@@ -909,8 +935,11 @@ export default function App() {
           onLoginRequired={() => setShowOtpModal(true)}
           templateCreateIntentId={workspaceTemplateCreateIntentId}
           onConsumeTemplateCreateIntent={() => setWorkspaceTemplateCreateIntentId(null)}
-          projectCreationIntentId={workspaceProjectCreationIntentId}
-          onConsumeProjectCreationIntent={() => setWorkspaceProjectCreationIntentId(null)}
+          projectCreationIntentId={effectiveWorkspaceProjectCreationIntentId}
+          onConsumeProjectCreationIntent={() => {
+            writePendingProjectCreationIntentId(null);
+            setWorkspaceProjectCreationIntentId(null);
+          }}
           projectOpenIntentId={workspaceProjectOpenIntentId}
           onConsumeProjectOpenIntent={() => setWorkspaceProjectOpenIntentId(null)}
         />
@@ -1260,6 +1289,7 @@ function WorkspaceApp({
   const aiMutationWatchdogRef = useRef<number | null>(null);
   const lastGenerationFailureJobIdRef = useRef<string | null>(null);
   const preserveStartScreenPrefillOnNextSessionRef = useRef(false);
+  const forceProjectWorkspaceOnNextSessionRef = useRef<string | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
   const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
   const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
@@ -1718,6 +1748,10 @@ function WorkspaceApp({
       if (current.kind === 'template') {
         return current;
       }
+      if (forceProjectWorkspaceOnNextSessionRef.current === projectId) {
+        forceProjectWorkspaceOnNextSessionRef.current = null;
+        return { kind: 'project', projectId, chatOpen: false };
+      }
       if (current.kind === 'project' && current.projectId === projectId) {
         return current;
       }
@@ -1909,6 +1943,7 @@ function WorkspaceApp({
       await auth.refreshProjects();
 
       preserveStartScreenPrefillOnNextSessionRef.current = true;
+      forceProjectWorkspaceOnNextSessionRef.current = newProject.id;
       await auth.switchProject(newProject.id);
       setSidebarState('closed');
       if (options.createEmptyChart) {
@@ -2402,11 +2437,16 @@ function WorkspaceApp({
           return;
         }
 
-        const reusableEmptyProject = auth.projects.find((project) => project.status === 'active' && project.taskCount === 0) ?? null;
+        await auth.refreshProjects();
+        const latestAuthState = useAuthStore.getState();
+        const latestProjects = latestAuthState.projects;
+        const latestCurrentProject = latestAuthState.project;
+        const reusableEmptyProject = latestProjects.find((project) => project.status === 'active' && project.taskCount === 0) ?? null;
         if (reusableEmptyProject && !isScheduleReadOnlyProject) {
           setActiveEmptyProjectModeProjectId(null);
-          if (auth.project?.id !== reusableEmptyProject.id) {
+          if (latestCurrentProject?.id !== reusableEmptyProject.id) {
             preserveStartScreenPrefillOnNextSessionRef.current = true;
+            forceProjectWorkspaceOnNextSessionRef.current = reusableEmptyProject.id;
             await auth.switchProject(reusableEmptyProject.id);
           }
           setStartScreenPrefillPrompt(prompt);
@@ -2417,7 +2457,7 @@ function WorkspaceApp({
 
         openCreateProjectModal({
           firstPrompt: prompt,
-          groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
+          groupId: latestCurrentProject?.groupId ?? latestAuthState.projectGroups[0]?.id,
           initialProjectName: 'Новый проект',
         });
         onConsumeProjectCreationIntent();
@@ -2430,6 +2470,9 @@ function WorkspaceApp({
 
     return () => {
       cancelled = true;
+      if (resolvingProjectIntentRef.current === projectCreationIntentId) {
+        resolvingProjectIntentRef.current = null;
+      }
     };
   }, [
     auth.accessToken,
