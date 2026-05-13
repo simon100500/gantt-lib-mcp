@@ -49,6 +49,7 @@ describe('project creation recovery', () => {
     assert.match(appSource, /const activeProjectToReplace = projectsForLimitEvaluation\.find\(\(project\) => project\.status === 'active'\) \?\? null;/);
     assert.match(appSource, /const activeProjectsCount = projectsForLimitEvaluation\.filter\(\(project\) => project\.status === 'active'\)\.length;/);
     assert.match(appSource, /const archivedProjectsCount = projectsForLimitEvaluation\.filter\(\(project\) => project\.status === 'archived'\)\.length;/);
+    assert.match(appSource, /const isFreePlanProjectReplacementMode = billingStatus\?\.plan === 'free';/);
     assert.match(appSource, /const canSilentlyReplaceOnFree = isFreePlanProjectReplacementMode[\s\S]*archivedProjectsCount < FREE_ARCHIVED_PROJECT_LIMIT;/);
     assert.match(appSource, /const effectiveProjectDenial = isFreePlanProjectReplacementMode[\s\S]*\? localProjectLimitDenial[\s\S]*: proactiveProjectDenial;/);
     assert.match(appSource, /const effectiveArchiveDenial = localArchiveLimitDenial \?\? proactiveArchiveDenial;/);
@@ -75,7 +76,7 @@ describe('project creation recovery', () => {
 
   it('decides modal vs paywall from local project state before the create request fails', () => {
     assert.match(appSource, /function buildLocalFreeProjectLimitDenial\(/);
-    assert.match(appSource, /const isFreePlan = billingStatus\?\.billingState === 'free';/);
+    assert.match(appSource, /const isFreePlan = plan === 'free';/);
     assert.match(appSource, /const effectiveProjectDenial = isFreePlanProjectReplacementMode[\s\S]*\? localProjectLimitDenial[\s\S]*: proactiveProjectDenial;/);
     assert.match(appSource, /const shouldDeferProjectLimitModal = denial\.code === 'PROJECT_LIMIT_REACHED' && !currentBillingStatus;/);
     assert.match(appSource, /const immediateDenial = shouldDeferProjectLimitModal[\s\S]*\? null[\s\S]*: normalizeConstraintDenialPayload\(denial, currentBillingStatus\);/);
@@ -84,6 +85,7 @@ describe('project creation recovery', () => {
 
   it('refreshes projects after archive and restore so limits update without reload', () => {
     assert.match(appSource, /function buildLocalArchiveLimitDenial\(/);
+    assert.match(appSource, /const isFreePlan = plan === 'free';/);
     assert.match(appSource, /const handleArchiveProject = useCallback\(async \(projectId: string\) => \{[\s\S]*if \(effectiveArchiveDenial\) \{[\s\S]*await openLimitModal\(effectiveArchiveDenial\);[\s\S]*return false;[\s\S]*await auth\.archiveProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*return true;/);
     assert.match(appSource, /const handleRestoreProject = useCallback\(async \(projectId: string\) => \{[\s\S]*await auth\.restoreProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*if \(error instanceof Error && error\.message === 'RESTORE_PROJECT_LIMIT_REACHED'\)/);
     assert.match(appSource, /<DeleteProjectModal[\s\S]*await auth\.deleteProject\(deleteProjectDraft\.id\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*await fetchUsage\(\);[\s\S]*setLimitModal\(null\);/);

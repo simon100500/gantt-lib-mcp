@@ -160,7 +160,7 @@ function buildLocalFreeProjectLimitDenial(params: {
   const { billingStatus, activeProjectCount, archivedProjectsCount, archivedProjectLimit } = params;
   const plan = ((billingStatus?.plan as PlanId | undefined) ?? 'free');
   const planLabel = billingStatus?.planMeta.label ?? PLAN_LABELS[plan];
-  const isFreePlan = billingStatus?.billingState === 'free';
+  const isFreePlan = plan === 'free';
 
   if (!isFreePlan || activeProjectCount === 0 || archivedProjectsCount < archivedProjectLimit) {
     return null;
@@ -187,7 +187,7 @@ function buildLocalArchiveLimitDenial(params: {
   const { billingStatus, archivedProjectsCount, archivedProjectLimit } = params;
   const plan = ((billingStatus?.plan as PlanId | undefined) ?? 'free');
   const planLabel = billingStatus?.planMeta.label ?? PLAN_LABELS[plan];
-  const isFreePlan = billingStatus?.billingState === 'free';
+  const isFreePlan = plan === 'free';
 
   if (!isFreePlan || archivedProjectsCount < archivedProjectLimit) {
     return null;
@@ -1109,7 +1109,7 @@ function WorkspaceApp({
   const activeProjectToReplace = projectsForLimitEvaluation.find((project) => project.status === 'active') ?? null;
   const activeProjectsCount = projectsForLimitEvaluation.filter((project) => project.status === 'active').length;
   const archivedProjectsCount = projectsForLimitEvaluation.filter((project) => project.status === 'archived').length;
-  const isFreePlanProjectReplacementMode = billingStatus?.billingState === 'free';
+  const isFreePlanProjectReplacementMode = billingStatus?.plan === 'free';
   const canSilentlyReplaceOnFree = isFreePlanProjectReplacementMode
     && Boolean(activeProjectToReplace)
     && archivedProjectsCount < FREE_ARCHIVED_PROJECT_LIMIT;
