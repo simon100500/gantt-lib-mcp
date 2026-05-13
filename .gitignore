@@ -76,3 +76,4 @@ target/
 vendor/
 .cache/
 tmp/
+.artifacts/prompt-transfer-e2e/*
