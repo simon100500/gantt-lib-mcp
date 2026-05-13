@@ -5,8 +5,8 @@ import type { ResourceTableColumnWidthMap, ResourceTimelineMove, ResourceTimelin
 
 import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceScope, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import { replayProjectCommand } from '../../lib/projectCommandReplay.ts';
-import { buildCustomDays } from '../../lib/projectScheduleOptions.ts';
-import type { CalendarDay, FrontendProjectCommand } from '../../types.ts';
+import { buildCustomDays, DEFAULT_CALENDAR_WEEKLY_PATTERN, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
+import type { CalendarDay, CalendarWeeklyPattern, FrontendProjectCommand } from '../../types.ts';
 import { useCommandCommit } from '../../hooks/useCommandCommit.ts';
 import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
 import { normalizeDateOnly } from '../../lib/scheduleMutationUtils.ts';
@@ -40,6 +40,7 @@ interface ResourcePlannerWorkspaceProps {
   accessToken?: string | null;
   projectId: string;
   ganttDayMode?: 'business' | 'calendar';
+  calendarWeeklyPattern?: CalendarWeeklyPattern;
   calendarDays?: CalendarDay[];
   readonly?: boolean;
   onBackToProject: () => void;
@@ -315,6 +316,7 @@ export function ResourcePlannerWorkspace({
   accessToken = null,
   projectId,
   ganttDayMode = 'calendar',
+  calendarWeeklyPattern = DEFAULT_CALENDAR_WEEKLY_PATTERN,
   calendarDays = [],
   readonly = false,
   onOpenTask,
@@ -1218,6 +1220,10 @@ export function ResourcePlannerWorkspace({
   );
   const displayedPlannerData = state.data;
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
+  const weekendPredicate = useMemo(
+    () => getProjectWeekendPredicate(calendarWeeklyPattern, calendarDays),
+    [calendarDays, calendarWeeklyPattern],
+  );
   const timelineResources = useMemo(
     () => (
       buildCurrentProjectResourceTimeline(
@@ -1753,6 +1759,7 @@ export function ResourcePlannerWorkspace({
                     allowVerticalPan
                     businessDays={ganttDayMode !== 'calendar'}
                     customDays={customDays}
+                    isWeekend={weekendPredicate}
                     readonly={effectiveReadonly}
                     disableResourceReassignment={false}
                     resourceGrouping="type"

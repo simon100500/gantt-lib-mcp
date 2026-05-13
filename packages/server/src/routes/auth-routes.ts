@@ -26,7 +26,7 @@ import { BillingService } from '../services/billing-service.js';
 import { YandexAuthError, YandexAuthService } from '../services/yandex-auth-service.js';
 import { resolveGroupAccess, resolveProjectAccess } from '../access-control.js';
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { ProjectSectionAccessLevel, ProjectSectionPermissions } from '@gantt/runtime-core/types';
+import type { CalendarWeeklyPattern, ProjectSectionAccessLevel, ProjectSectionPermissions } from '@gantt/runtime-core/types';
 
 const requireProjectLimit = requireTrackedLimit('projects', {
   code: 'PROJECT_LIMIT_REACHED',
@@ -45,6 +45,7 @@ type AuthSuccessResponse = {
     status: 'active' | 'archived' | 'deleted';
     ganttDayMode: 'business' | 'calendar';
     calendarId: string | null;
+    calendarWeeklyPattern: CalendarWeeklyPattern;
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
     timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
     hiddenTaskListColumnsDefault: string[] | null;
@@ -111,6 +112,51 @@ function normalizeHiddenTaskListColumnsInput(value: unknown): string[] | null {
   ));
 }
 
+function normalizeCalendarWeeklyPatternInput(value: unknown): CalendarWeeklyPattern | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const pattern = value as Record<string, unknown>;
+  const entries = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+  const normalized = {} as CalendarWeeklyPattern;
+  for (const entry of entries) {
+    if (typeof pattern[entry] !== 'boolean') {
+      return null;
+    }
+    normalized[entry] = pattern[entry];
+  }
+
+  return normalized;
+}
+
+function normalizeCalendarDaysInput(
+  value: unknown,
+): Array<{ date: string; kind: 'working' | 'non_working' }> | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const normalized = new Map<string, 'working' | 'non_working'>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return null;
+    }
+
+    const day = entry as { date?: unknown; kind?: unknown };
+    const date = typeof day.date === 'string' ? day.date.trim().slice(0, 10) : '';
+    if (!date || (day.kind !== 'working' && day.kind !== 'non_working')) {
+      return null;
+    }
+
+    normalized.set(date, day.kind);
+  }
+
+  return Array.from(normalized.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, kind]) => ({ date, kind }));
+}
+
 async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse> {
   const user = await authService.findOrCreateUser(email);
   await authService.syncPendingGroupInvitesForUser(user.id, user.email);
@@ -140,6 +186,7 @@ async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse
       status: project.status,
       ganttDayMode: project.ganttDayMode,
       calendarId: project.calendarId,
+      calendarWeeklyPattern: project.calendarWeeklyPattern,
       calendarDays: project.calendarDays,
       timelineMarkers: project.timelineMarkers,
       hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
@@ -577,6 +624,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         status: project.status,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
+        calendarWeeklyPattern: project.calendarWeeklyPattern,
         calendarDays: project.calendarDays,
         timelineMarkers: project.timelineMarkers,
         hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
@@ -653,6 +701,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         status: project.status,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
+        calendarWeeklyPattern: project.calendarWeeklyPattern,
         calendarDays: project.calendarDays,
         timelineMarkers: project.timelineMarkers,
         hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
@@ -744,6 +793,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         status: project.status,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
+        calendarWeeklyPattern: project.calendarWeeklyPattern,
         calendarDays: project.calendarDays,
         timelineMarkers: project.timelineMarkers,
         hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
@@ -790,6 +840,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         groupId: project.groupId,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
+        calendarWeeklyPattern: project.calendarWeeklyPattern,
         calendarDays: project.calendarDays,
         timelineMarkers: project.timelineMarkers,
         hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
@@ -1304,6 +1355,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       name?: string;
       ganttDayMode?: 'business' | 'calendar';
       calendarId?: string | null;
+      calendarWeeklyPattern?: CalendarWeeklyPattern;
+      calendarDays?: Array<{ date: string; kind: 'working' | 'non_working' }>;
       groupId?: string;
       timelineMarkers?: Array<{ date: string; color?: string | null; name?: string | null }>;
       hiddenTaskListColumnsDefault?: string[] | null;
@@ -1312,15 +1365,19 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const groupId = body.groupId?.trim();
     const hasName = body.name !== undefined;
     const hasGanttDayMode = body.ganttDayMode === 'business' || body.ganttDayMode === 'calendar';
+    const hasCalendarWeeklyPattern = body.calendarWeeklyPattern !== undefined;
+    const hasCalendarDays = body.calendarDays !== undefined;
     const hasGroupId = body.groupId !== undefined;
     const hasTimelineMarkers = body.timelineMarkers !== undefined;
     const hasHiddenTaskListColumnsDefault = body.hiddenTaskListColumnsDefault !== undefined;
+    const normalizedCalendarWeeklyPattern = hasCalendarWeeklyPattern ? normalizeCalendarWeeklyPatternInput(body.calendarWeeklyPattern) : undefined;
+    const normalizedCalendarDays = hasCalendarDays ? normalizeCalendarDaysInput(body.calendarDays) : undefined;
     const normalizedTimelineMarkers = hasTimelineMarkers ? normalizeTimelineMarkersInput(body.timelineMarkers) : undefined;
     const normalizedHiddenTaskListColumnsDefault = hasHiddenTaskListColumnsDefault
       ? (body.hiddenTaskListColumnsDefault === null ? null : normalizeHiddenTaskListColumnsInput(body.hiddenTaskListColumnsDefault))
       : undefined;
 
-    if (!hasName && body.ganttDayMode === undefined && body.calendarId === undefined && !hasGroupId && !hasTimelineMarkers && !hasHiddenTaskListColumnsDefault) {
+    if (!hasName && body.ganttDayMode === undefined && body.calendarId === undefined && !hasCalendarWeeklyPattern && !hasCalendarDays && !hasGroupId && !hasTimelineMarkers && !hasHiddenTaskListColumnsDefault) {
       return reply.status(400).send({ error: 'No project fields provided' });
     }
 
@@ -1330,6 +1387,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     if (body.ganttDayMode !== undefined && !hasGanttDayMode) {
       return reply.status(400).send({ error: 'Invalid ganttDayMode' });
+    }
+
+    if (hasCalendarWeeklyPattern && normalizedCalendarWeeklyPattern === null) {
+      return reply.status(400).send({ error: 'Invalid calendarWeeklyPattern' });
+    }
+
+    if (hasCalendarDays && normalizedCalendarDays === null) {
+      return reply.status(400).send({ error: 'Invalid calendarDays' });
     }
 
     if (hasGroupId && !groupId) {
@@ -1362,6 +1427,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       ...(hasName ? { name } : {}),
       ...(hasGanttDayMode ? { ganttDayMode: body.ganttDayMode } : {}),
       ...(body.calendarId !== undefined ? { calendarId: body.calendarId } : {}),
+      ...(hasCalendarWeeklyPattern ? { calendarWeeklyPattern: normalizedCalendarWeeklyPattern! } : {}),
+      ...(hasCalendarDays ? { calendarDays: normalizedCalendarDays! } : {}),
       ...(hasGroupId ? { groupId } : {}),
       ...(hasTimelineMarkers ? { timelineMarkers: normalizedTimelineMarkers ?? [] } : {}),
       ...(hasHiddenTaskListColumnsDefault ? { hiddenTaskListColumnsDefault: normalizedHiddenTaskListColumnsDefault } : {}),

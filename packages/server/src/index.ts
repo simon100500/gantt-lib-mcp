@@ -140,6 +140,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     status: 'active' | 'archived' | 'deleted';
     ganttDayMode: 'business' | 'calendar';
     calendarId: string | null;
+    calendarWeeklyPattern: { mon: boolean; tue: boolean; wed: boolean; thu: boolean; fri: boolean; sat: boolean; sun: boolean };
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
     timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
     hiddenTaskListColumnsDefault: string[] | null;
@@ -206,6 +207,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
       status: accessibleProject?.status ?? 'deleted',
       ganttDayMode: projectCalendar.ganttDayMode,
       calendarId: projectCalendar.calendarId,
+      calendarWeeklyPattern: projectCalendar.calendarWeeklyPattern,
       calendarDays: projectCalendar.calendarDays,
       timelineMarkers: accessibleProject?.timelineMarkers ?? [],
       hiddenTaskListColumnsDefault: accessibleProject?.hiddenTaskListColumnsDefault ?? null,

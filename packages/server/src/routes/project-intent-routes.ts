@@ -135,6 +135,7 @@ function mapProjectForAuth(project: any, taskCount = 0) {
     status: project.status,
     ganttDayMode: project.ganttDayMode,
     calendarId: project.calendarId ?? null,
+    calendarWeeklyPattern: project.calendarWeeklyPattern,
     calendarDays: Array.isArray(project.calendarDays) ? project.calendarDays : [],
     timelineMarkers: Array.isArray(project.timelineMarkers) ? project.timelineMarkers : [],
     taskCount,

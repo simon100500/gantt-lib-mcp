@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useRef } from 'react';
-import type { CalendarDay, Task, FrontendProjectCommand } from '../types';
+import type { CalendarDay, CalendarWeeklyPattern, Task, FrontendProjectCommand } from '../types';
 import { replayProjectCommand } from '../lib/projectCommandReplay';
 import { deriveOptimisticSnapshot, deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStore';
 import { useUIStore, type SavingState } from '../stores/useUIStore';
 import { useProjectCommands, type TaskCommandResult, buildCommandsFromDiff } from './useProjectCommands';
 import { useCommandCommit } from './useCommandCommit';
-import { getProjectScheduleOptions } from '../lib/projectScheduleOptions';
+import { DEFAULT_CALENDAR_WEEKLY_PATTERN, getProjectScheduleOptions } from '../lib/projectScheduleOptions';
 import { useAuthStore } from '../stores/useAuthStore';
 import { createHistoryGroup, resolveApplyChangesTitle } from './useProjectCommands';
 
@@ -153,6 +153,7 @@ export interface UseBatchTaskUpdateOptions {
   setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   accessToken: string | null;
   ganttDayMode: 'business' | 'calendar';
+  calendarWeeklyPattern?: CalendarWeeklyPattern;
   calendarDays?: CalendarDay[];
   onCascade?: (tasks: Task[]) => void;
 }
@@ -181,6 +182,7 @@ export function useBatchTaskUpdate({
   setTasks,
   accessToken,
   ganttDayMode,
+  calendarWeeklyPattern = DEFAULT_CALENDAR_WEEKLY_PATTERN,
   calendarDays = EMPTY_CALENDAR_DAYS,
   onCascade,
 }: UseBatchTaskUpdateOptions): UseBatchTaskUpdateResult {
@@ -192,8 +194,8 @@ export function useBatchTaskUpdate({
   const isAuthenticatedMode = Boolean(accessToken);
   const effectiveCalendarDays = calendarDays.length > 0 ? calendarDays : EMPTY_CALENDAR_DAYS;
   const scheduleOptions = useMemo(
-    () => getProjectScheduleOptions(ganttDayMode, effectiveCalendarDays),
-    [effectiveCalendarDays, ganttDayMode],
+    () => getProjectScheduleOptions(ganttDayMode, calendarWeeklyPattern, effectiveCalendarDays),
+    [calendarWeeklyPattern, effectiveCalendarDays, ganttDayMode],
   );
 
   const toDateString = useCallback((value: Task['startDate']) => (

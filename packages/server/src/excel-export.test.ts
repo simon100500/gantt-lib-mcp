@@ -88,6 +88,7 @@ describe('buildProjectExcelExportBuffer', () => {
     const workbook = await loadWorkbook({
       projectName: 'Demo',
       ganttDayMode: 'business',
+      calendarWeeklyPattern: { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false },
       calendarDays: [
         {
           date: toIsoDate(weekendDate),
@@ -256,6 +257,7 @@ describe('buildProjectExcelExportBuffer', () => {
     const workbook = await loadWorkbook({
       projectName: 'Empty',
       ganttDayMode: 'business',
+      calendarWeeklyPattern: { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false },
       calendarDays: [],
       tasks: [],
     });

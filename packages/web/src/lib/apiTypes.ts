@@ -208,6 +208,7 @@ export interface TemplatePublicationDetail extends TemplatePublicationListItem {
     tasks: Task[];
     dependencies: ProjectDependency[];
     ganttDayMode: 'business' | 'calendar';
+    calendarWeeklyPattern: { mon: boolean; tue: boolean; wed: boolean; thu: boolean; fri: boolean; sat: boolean; sun: boolean };
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
     timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
   };

@@ -14,6 +14,15 @@ const validBackup = {
   project: {
     name: 'Backup Demo',
     ganttDayMode: 'business',
+    calendarWeeklyPattern: {
+      mon: true,
+      tue: true,
+      wed: true,
+      thu: true,
+      fri: true,
+      sat: false,
+      sun: false,
+    },
     calendarDays: [
       { date: '2026-05-08', kind: 'working' },
     ],

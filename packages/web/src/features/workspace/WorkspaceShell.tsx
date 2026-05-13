@@ -51,6 +51,7 @@ import { isActiveProjectGenerationJob } from '../project-generation/model.ts';
 import { useProjectGenerationController } from '../project-generation/useProjectGenerationController.ts';
 import { useShareTemplateSelectionController } from '../share/useShareTemplateSelectionController.ts';
 import { useExportImportController } from '../export-import/useExportImportController.ts';
+import { DEFAULT_CALENDAR_WEEKLY_PATTERN } from '../../lib/projectScheduleOptions.ts';
 
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
 
@@ -291,6 +292,7 @@ export function WorkspaceShell({
     hasShareToken ? null : auth.accessToken,
     auth.refreshAccessToken,
     auth.project?.ganttDayMode ?? 'calendar',
+    auth.project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN,
     auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS,
   );
   const { tasks, setTasks, loading, error } = hasShareToken
@@ -309,6 +311,9 @@ export function WorkspaceShell({
     setTasks,
     accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
     ganttDayMode: hasShareToken ? (sharedProject.project?.ganttDayMode ?? 'calendar') : (auth.project?.ganttDayMode ?? 'calendar'),
+    calendarWeeklyPattern: hasShareToken
+      ? (sharedProject.project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN)
+      : (auth.project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN),
     calendarDays: hasShareToken
       ? (sharedProject.project?.calendarDays ?? EMPTY_CALENDAR_DAYS)
       : (auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS),
@@ -905,6 +910,8 @@ export function WorkspaceShell({
   const handleSaveStartScreenProjectSettings = useCallback(async (settings: {
     projectName: string;
     ganttDayMode: 'business' | 'calendar';
+    calendarWeeklyPattern: { mon: boolean; tue: boolean; wed: boolean; thu: boolean; fri: boolean; sat: boolean; sun: boolean };
+    calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
     timelineMarkers: TimelineMarker[];
     hiddenTaskListColumnsDefault: string[] | null;
   }) => {
@@ -913,12 +920,16 @@ export function WorkspaceShell({
     }
 
     const projectNameChanged = settings.projectName.trim() !== (auth.project.name ?? '').trim();
+    const calendarWeeklyPatternChanged = JSON.stringify(settings.calendarWeeklyPattern)
+      !== JSON.stringify(auth.project.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN);
+    const calendarDaysChanged = JSON.stringify(settings.calendarDays)
+      !== JSON.stringify(auth.project.calendarDays ?? EMPTY_CALENDAR_DAYS);
     const markersChanged = JSON.stringify(settings.timelineMarkers) !== JSON.stringify(auth.project.timelineMarkers ?? []);
     const dayModeChanged = settings.ganttDayMode !== effectiveAuthGanttDayMode;
     const hiddenColumnsDefaultChanged = JSON.stringify(settings.hiddenTaskListColumnsDefault ?? null)
       !== JSON.stringify(auth.project.hiddenTaskListColumnsDefault ?? null);
 
-    if (!projectNameChanged && !markersChanged && !dayModeChanged && !hiddenColumnsDefaultChanged) {
+    if (!projectNameChanged && !calendarWeeklyPatternChanged && !calendarDaysChanged && !markersChanged && !dayModeChanged && !hiddenColumnsDefaultChanged) {
       setShowProjectSettingsModal(false);
       setStartScreenProjectSettingsError(null);
       return;
@@ -929,6 +940,12 @@ export function WorkspaceShell({
     try {
       if (projectNameChanged) {
         await handleSaveProjectName(settings.projectName.trim());
+      }
+      if (calendarWeeklyPatternChanged || calendarDaysChanged) {
+        await auth.updateProject(auth.project.id, {
+          calendarWeeklyPattern: settings.calendarWeeklyPattern,
+          calendarDays: settings.calendarDays,
+        });
       }
       if (dayModeChanged) {
         await handleGanttDayModeChange(settings.ganttDayMode);
@@ -1037,6 +1054,7 @@ export function WorkspaceShell({
           accessToken={auth.accessToken}
           projectId={workspace.projectId}
           ganttDayMode={effectiveAuthGanttDayMode}
+          calendarWeeklyPattern={auth.project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}
           calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
           readonly={isArchivedProject || !canEditResources}
           onResourceLimitReached={() => openLimitModal(buildResourceCreationLimitDenial(billingStatus))}
@@ -1135,6 +1153,7 @@ export function WorkspaceShell({
               onConfirmTemplateSelection={handleConfirmTemplateSelection}
               ganttDayMode={effectiveAuthGanttDayMode}
               displayGanttDayMode={effectiveAuthGanttDayMode}
+              calendarWeeklyPattern={auth.project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}
               calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
               timelineMarkers={auth.project?.timelineMarkers ?? []}
               readOnly={isScheduleReadOnlyProject}
@@ -1204,6 +1223,8 @@ export function WorkspaceShell({
       <ProjectSettingsModal
         projectName={auth.project.name ?? 'Мой проект'}
         ganttDayMode={effectiveAuthGanttDayMode}
+        calendarWeeklyPattern={auth.project.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}
+        calendarDays={auth.project.calendarDays ?? EMPTY_CALENDAR_DAYS}
         timelineMarkers={auth.project.timelineMarkers ?? []}
         hiddenTaskListColumnsDefault={auth.project.hiddenTaskListColumnsDefault ?? null}
         taskListColumnRows={TASK_LIST_COLUMN_ROWS}

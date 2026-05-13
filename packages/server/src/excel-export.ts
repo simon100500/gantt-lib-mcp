@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { getPrisma } from '@gantt/runtime-core/prisma';
 import { getProjectCalendarSettings } from '@gantt/mcp/services';
-import type { DependencyType } from '@gantt/mcp/types';
+import type { CalendarWeeklyPattern, DependencyType } from '@gantt/mcp/types';
 
 type ExportDependency = {
   predecessorTaskId: string;
@@ -25,6 +25,7 @@ type ExportTask = {
 export type ProjectExcelExportData = {
   projectName: string;
   ganttDayMode: 'business' | 'calendar';
+  calendarWeeklyPattern: CalendarWeeklyPattern;
   calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
   tasks: ExportTask[];
 };
@@ -59,7 +60,7 @@ const PARENT_TIMELINE_FILLS = ['FF475569', 'FF6B7280', 'FF94A3B8'] as const;
 const GROUP_SEPARATOR_BORDER = 'FF4B5563';
 const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
-const STATIC_COLUMN_WIDTHS = [8, 44, 14, 14, 12, 8, 14];
+const STATIC_COLUMN_WIDTHS = [8, 44, 14, 14, 12, 8, 20];
 const DAY_WIDTH = 21 / 7;
 const A4_PAPER_SIZE = 9;
 const GETGANTT_THEME_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -515,8 +516,30 @@ function isWeekendFallback(dateIso: string): boolean {
   return weekday === 0 || weekday === 6;
 }
 
+function isPatternWeekend(dateIso: string, pattern: CalendarWeeklyPattern): boolean {
+  switch (parseIsoDate(dateIso).getUTCDay()) {
+    case 0:
+      return !pattern.sun;
+    case 1:
+      return !pattern.mon;
+    case 2:
+      return !pattern.tue;
+    case 3:
+      return !pattern.wed;
+    case 4:
+      return !pattern.thu;
+    case 5:
+      return !pattern.fri;
+    case 6:
+      return !pattern.sat;
+    default:
+      return isWeekendFallback(dateIso);
+  }
+}
+
 function buildNonWorkingSet(
   ganttDayMode: 'business' | 'calendar',
+  calendarWeeklyPattern: CalendarWeeklyPattern,
   calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>,
   timelineDates: string[],
 ): Set<string> {
@@ -531,7 +554,7 @@ function buildNonWorkingSet(
     if (override === 'working' || override === 'shortened') {
       continue;
     }
-    if (ganttDayMode === 'business' && isWeekendFallback(date)) {
+    if (ganttDayMode === 'business' && isPatternWeekend(date, calendarWeeklyPattern)) {
       result.add(date);
     }
   }
@@ -579,6 +602,7 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
   return {
     projectName: project.name,
     ganttDayMode: projectCalendar.ganttDayMode,
+    calendarWeeklyPattern: projectCalendar.calendarWeeklyPattern,
     calendarDays: projectCalendar.calendarDays,
     tasks: project.tasks.map((task) => ({
       id: task.id,
@@ -617,7 +641,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
   const timelineDates = buildTimelineRange(data.tasks);
   const monthHeaders = suppressRepeatedLabels(timelineDates.map(formatMonthLabel));
   const totalColumnCount = STATIC_COLUMN_COUNT + timelineDates.length;
-  const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarDays, timelineDates);
+  const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarWeeklyPattern, data.calendarDays, timelineDates);
   const approximateWidth = STATIC_COLUMN_WIDTHS.reduce((sum, width) => sum + width, 0) + timelineDates.length * DAY_WIDTH;
   const useLandscape = approximateWidth > 170 || timelineDates.length > 32;
 

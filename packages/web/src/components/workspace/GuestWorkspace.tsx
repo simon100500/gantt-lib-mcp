@@ -4,6 +4,7 @@ import type { GanttChartRef } from '../GanttChart.tsx';
 import { StartScreen, type StartScreenSendResult } from '../StartScreen.tsx';
 import { ProjectWorkspace } from './ProjectWorkspace.tsx';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
+import { DEFAULT_CALENDAR_WEEKLY_PATTERN } from '../../lib/projectScheduleOptions.ts';
 import type { Task, ValidationResult } from '../../types.ts';
 
 interface GuestWorkspaceProps {
@@ -67,6 +68,7 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
       onValidation={props.onValidation}
       onCascade={props.onCascade}
       ganttDayMode={props.ganttDayMode}
+      calendarWeeklyPattern={DEFAULT_CALENDAR_WEEKLY_PATTERN}
       calendarDays={[]}
       timelineMarkers={[]}
       showChat={false}

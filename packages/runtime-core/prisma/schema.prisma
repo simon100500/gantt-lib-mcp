@@ -447,15 +447,22 @@ model BaselineDependency {
 }
 
 model WorkCalendar {
-  id         String        @id @default(uuid())
-  code       String?       @unique
-  name       String
-  scope      CalendarScope @default(system)
-  timezone   String?
-  isDefault  Boolean       @default(false) @map("is_default")
-  projectId  String?       @map("project_id")
-  createdAt  DateTime      @default(now()) @map("created_at")
-  updatedAt  DateTime      @updatedAt @map("updated_at")
+  id            String        @id @default(uuid())
+  code          String?       @unique
+  name          String
+  scope         CalendarScope @default(system)
+  timezone      String?
+  isDefault     Boolean       @default(false) @map("is_default")
+  mondayWorking Boolean       @default(true) @map("monday_working")
+  tuesdayWorking Boolean      @default(true) @map("tuesday_working")
+  wednesdayWorking Boolean    @default(true) @map("wednesday_working")
+  thursdayWorking Boolean     @default(true) @map("thursday_working")
+  fridayWorking Boolean       @default(true) @map("friday_working")
+  saturdayWorking Boolean     @default(false) @map("saturday_working")
+  sundayWorking Boolean       @default(false) @map("sunday_working")
+  projectId     String?       @map("project_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
   project            Project?      @relation("ProjectOwnedCalendars", fields: [projectId], references: [id], onDelete: Cascade)
   selectedByProjects Project[]     @relation("ProjectSelectedCalendar")

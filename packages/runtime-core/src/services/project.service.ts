@@ -6,9 +6,24 @@
  */
 
 import { Prisma, getPrisma } from '../prisma.js';
-import type { Project, ProjectGroup, ProjectSectionPermissions, ProjectViewPreference, TimelineMarker } from '../types.js';
+import type {
+  CalendarDayKind,
+  CalendarWeeklyPattern,
+  EffectiveCalendarDay,
+  Project,
+  ProjectGroup,
+  ProjectSectionPermissions,
+  ProjectViewPreference,
+  TimelineMarker,
+} from '../types.js';
 import { randomUUID } from 'node:crypto';
-import { ensureSystemDefaultCalendar, loadEffectiveCalendarDays } from './projectScheduleOptions.js';
+import {
+  calendarWeeklyPatternEquals,
+  ensureSystemDefaultCalendar,
+  loadCalendarWeeklyPattern,
+  loadEffectiveCalendarDays,
+  normalizeCalendarWeeklyPattern,
+} from './projectScheduleOptions.js';
 
 export type ArchiveProjectResult =
   | { ok: true; project: Project }
@@ -48,6 +63,27 @@ function normalizeHiddenTaskListColumns(value: unknown): string[] {
     const normalized = entry.trim();
     return normalized && KNOWN_TASK_LIST_COLUMN_IDS.has(normalized) ? [normalized] : [];
   });
+}
+
+function normalizeCalendarDays(days: EffectiveCalendarDay[]): EffectiveCalendarDay[] {
+  const normalizedByDate = new Map<string, CalendarDayKind>();
+  for (const day of days) {
+    const date = day.date.trim().slice(0, 10);
+    if (!date) {
+      continue;
+    }
+    normalizedByDate.set(date, day.kind);
+  }
+
+  return Array.from(normalizedByDate.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, kind]) => ({ date, kind }));
+}
+
+function calendarDaysEqual(left: EffectiveCalendarDay[], right: EffectiveCalendarDay[]): boolean {
+  const normalizedLeft = normalizeCalendarDays(left);
+  const normalizedRight = normalizeCalendarDays(right);
+  return JSON.stringify(normalizedLeft) === JSON.stringify(normalizedRight);
 }
 
 export class ProjectService {
@@ -262,7 +298,10 @@ export class ProjectService {
    * Handles DateTime → string conversion for createdAt
    */
   private async projectToDomain(project: any): Promise<Project> {
-    const calendarDays = await loadEffectiveCalendarDays(this.prisma, project.calendarId ?? null);
+    const [calendarWeeklyPattern, calendarDays] = await Promise.all([
+      loadCalendarWeeklyPattern(this.prisma, project.calendarId ?? null),
+      loadEffectiveCalendarDays(this.prisma, project.calendarId ?? null),
+    ]);
     return {
       id: project.id,
       userId: project.userId,
@@ -271,6 +310,7 @@ export class ProjectService {
       status: project.status,
       ganttDayMode: project.ganttDayMode,
       calendarId: project.calendarId ?? null,
+      calendarWeeklyPattern,
       calendarDays,
       timelineMarkers: this.normalizeTimelineMarkers(project.timelineMarkers),
       hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault == null
@@ -413,6 +453,8 @@ export class ProjectService {
       name?: string;
       ganttDayMode?: 'business' | 'calendar';
       calendarId?: string | null;
+      calendarWeeklyPattern?: CalendarWeeklyPattern;
+      calendarDays?: EffectiveCalendarDay[];
       groupId?: string;
       timelineMarkers?: TimelineMarker[];
       hiddenTaskListColumnsDefault?: string[] | null;
@@ -421,15 +463,16 @@ export class ProjectService {
     // Verify ownership
     const existing = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { userId: true, status: true },
+      select: { userId: true, status: true, name: true, calendarId: true },
     });
 
     if (!existing || existing.userId !== userId || existing.status === 'deleted') {
       return null;
     }
 
+    const updatesCalendarShape = updates.calendarWeeklyPattern !== undefined || updates.calendarDays !== undefined;
     let resolvedCalendarId = updates.calendarId;
-    if (updates.calendarId !== undefined && updates.calendarId !== null) {
+    if (!updatesCalendarShape && updates.calendarId !== undefined && updates.calendarId !== null) {
       const calendar = await this.prisma.workCalendar.findUnique({
         where: { id: updates.calendarId },
         select: { id: true, scope: true, projectId: true },
@@ -444,6 +487,33 @@ export class ProjectService {
       }
 
       resolvedCalendarId = calendar.id;
+    }
+
+    if (updatesCalendarShape) {
+      const systemCalendarId = await ensureSystemDefaultCalendar(this.prisma);
+      const [currentWeeklyPattern, currentCalendarDays, systemWeeklyPattern, systemCalendarDays] = await Promise.all([
+        loadCalendarWeeklyPattern(this.prisma, existing.calendarId ?? systemCalendarId),
+        loadEffectiveCalendarDays(this.prisma, existing.calendarId ?? systemCalendarId),
+        loadCalendarWeeklyPattern(this.prisma, systemCalendarId),
+        loadEffectiveCalendarDays(this.prisma, systemCalendarId),
+      ]);
+
+      const nextWeeklyPattern = normalizeCalendarWeeklyPattern(updates.calendarWeeklyPattern ?? currentWeeklyPattern);
+      const nextCalendarDays = normalizeCalendarDays(updates.calendarDays ?? currentCalendarDays);
+      const matchesSystemCalendar = calendarWeeklyPatternEquals(nextWeeklyPattern, systemWeeklyPattern)
+        && calendarDaysEqual(nextCalendarDays, systemCalendarDays);
+
+      if (matchesSystemCalendar) {
+        await this.deleteOwnedProjectCalendars(projectId);
+        resolvedCalendarId = systemCalendarId;
+      } else {
+        resolvedCalendarId = await this.replaceProjectCalendar(
+          projectId,
+          updates.name?.trim() || existing.name,
+          nextWeeklyPattern,
+          nextCalendarDays,
+        );
+      }
     }
 
     let resolvedGroupId = updates.groupId;
@@ -483,6 +553,85 @@ export class ProjectService {
     });
 
     return this.projectToDomain(updated);
+  }
+
+  private async deleteOwnedProjectCalendars(projectId: string): Promise<void> {
+    const ownedCalendars = await this.prisma.workCalendar.findMany({
+      where: { projectId },
+      select: { id: true },
+    });
+
+    if (ownedCalendars.length === 0) {
+      return;
+    }
+
+    const ownedCalendarIds = ownedCalendars.map((calendar) => calendar.id);
+    await this.prisma.calendarDay.deleteMany({ where: { calendarId: { in: ownedCalendarIds } } });
+    await this.prisma.workCalendar.deleteMany({ where: { id: { in: ownedCalendarIds } } });
+  }
+
+  private async replaceProjectCalendar(
+    projectId: string,
+    projectName: string,
+    weeklyPattern: CalendarWeeklyPattern,
+    calendarDays: EffectiveCalendarDay[],
+  ): Promise<string> {
+    const ownedCalendars = await this.prisma.workCalendar.findMany({
+      where: { projectId },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const calendarId = ownedCalendars[0]?.id ?? randomUUID();
+    const calendarData = {
+      name: `${projectName} working calendar`,
+      scope: 'project' as const,
+      timezone: 'UTC',
+      isDefault: false,
+      mondayWorking: weeklyPattern.mon,
+      tuesdayWorking: weeklyPattern.tue,
+      wednesdayWorking: weeklyPattern.wed,
+      thursdayWorking: weeklyPattern.thu,
+      fridayWorking: weeklyPattern.fri,
+      saturdayWorking: weeklyPattern.sat,
+      sundayWorking: weeklyPattern.sun,
+    };
+
+    if (ownedCalendars[0]) {
+      await this.prisma.workCalendar.update({
+        where: { id: calendarId },
+        data: calendarData,
+      });
+      await this.prisma.calendarDay.deleteMany({ where: { calendarId } });
+    } else {
+      await this.prisma.workCalendar.create({
+        data: {
+          id: calendarId,
+          ...calendarData,
+          projectId,
+        },
+      });
+    }
+
+    if (calendarDays.length > 0) {
+      await this.prisma.calendarDay.createMany({
+        data: calendarDays.map((day) => ({
+          id: randomUUID(),
+          calendarId,
+          date: new Date(`${day.date}T00:00:00.000Z`),
+          kind: day.kind,
+          source: 'manual',
+        })),
+      });
+    }
+
+    if (ownedCalendars.length > 1) {
+      const staleIds = ownedCalendars.slice(1).map((calendar) => calendar.id);
+      await this.prisma.calendarDay.deleteMany({ where: { calendarId: { in: staleIds } } });
+      await this.prisma.workCalendar.deleteMany({ where: { id: { in: staleIds } } });
+    }
+
+    return calendarId;
   }
 
   async archive(projectId: string, userId: string): Promise<ArchiveProjectResult> {

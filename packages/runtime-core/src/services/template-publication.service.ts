@@ -7,6 +7,7 @@ import type {
   CreateTaskInput,
   CreateTemplatePublicationFromProjectInput,
   CreateTemplatePublicationFromSelectionInput,
+  CalendarWeeklyPattern,
   DependencyType,
   EffectiveCalendarDay,
   GetTemplatePublicationBySlugInput,
@@ -33,7 +34,7 @@ import type {
 import { commandService, type CommandService } from './command.service.js';
 import { projectService, type ProjectService } from './project.service.js';
 import { dateToDomain, domainToDate } from './types.js';
-import { getProjectCalendarSettings } from './projectScheduleOptions.js';
+import { DEFAULT_CALENDAR_WEEKLY_PATTERN, getProjectCalendarSettings, normalizeCalendarWeeklyPattern } from './projectScheduleOptions.js';
 
 type TemplatePublicationServiceDeps = {
   prisma?: TemplatePublicationPrismaClient;
@@ -307,6 +308,7 @@ function normalizeTimelineMarkers(value: unknown): TimelineMarker[] {
 function buildPublicationSnapshot(
   tasks: ProjectTaskRow[],
   ganttDayMode: GanttDayMode,
+  calendarWeeklyPattern: CalendarWeeklyPattern,
   calendarDays: EffectiveCalendarDay[],
   timelineMarkers: TimelineMarker[],
 ): TemplatePublicationSnapshot {
@@ -353,6 +355,7 @@ function buildPublicationSnapshot(
     })),
     dependencies,
     ganttDayMode,
+    calendarWeeklyPattern,
     calendarDays,
     timelineMarkers,
   };
@@ -367,6 +370,8 @@ function parseSnapshot(value: unknown): TemplatePublicationSnapshot {
   if (!Array.isArray(snapshot.tasks) || !Array.isArray(snapshot.dependencies) || !Array.isArray(snapshot.calendarDays) || !Array.isArray(snapshot.timelineMarkers)) {
     throw new TemplatePublicationValidationError('Publication snapshot is invalid');
   }
+
+  snapshot.calendarWeeklyPattern = normalizeCalendarWeeklyPattern(snapshot.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN);
 
   return snapshot;
 }
@@ -878,6 +883,7 @@ export class TemplatePublicationService {
       snapshot: buildPublicationSnapshot(
         tasks,
         projectCalendar.ganttDayMode,
+        projectCalendar.calendarWeeklyPattern,
         projectCalendar.calendarDays,
         normalizeTimelineMarkers(project.timelineMarkers),
       ),
@@ -917,6 +923,7 @@ export class TemplatePublicationService {
       snapshot: buildPublicationSnapshot(
         selectedTasks,
         projectCalendar.ganttDayMode,
+        projectCalendar.calendarWeeklyPattern,
         projectCalendar.calendarDays,
         normalizeTimelineMarkers(project.timelineMarkers),
       ),
@@ -944,7 +951,13 @@ export class TemplatePublicationService {
 
   private async applyPublicationProjectSettings(projectId: string, projectName: string, snapshot: TemplatePublicationSnapshot): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const calendarId = await this.replaceProjectCalendar(tx, projectId, projectName, snapshot.calendarDays);
+      const calendarId = await this.replaceProjectCalendar(
+        tx,
+        projectId,
+        projectName,
+        snapshot.calendarWeeklyPattern,
+        snapshot.calendarDays,
+      );
       await tx.project.update({
         where: { id: projectId },
         data: {
@@ -960,6 +973,7 @@ export class TemplatePublicationService {
     tx: TemplatePublicationPrismaClient,
     projectId: string,
     projectName: string,
+    weeklyPattern: CalendarWeeklyPattern,
     calendarDays: EffectiveCalendarDay[],
   ): Promise<string | null> {
     const ownedCalendars = await tx.workCalendar.findMany({
@@ -986,6 +1000,13 @@ export class TemplatePublicationService {
           scope: 'project',
           timezone: 'UTC',
           isDefault: false,
+          mondayWorking: weeklyPattern.mon,
+          tuesdayWorking: weeklyPattern.tue,
+          wednesdayWorking: weeklyPattern.wed,
+          thursdayWorking: weeklyPattern.thu,
+          fridayWorking: weeklyPattern.fri,
+          saturdayWorking: weeklyPattern.sat,
+          sundayWorking: weeklyPattern.sun,
         },
       });
       await tx.calendarDay.deleteMany({ where: { calendarId } });
@@ -997,6 +1018,13 @@ export class TemplatePublicationService {
           scope: 'project',
           timezone: 'UTC',
           isDefault: false,
+          mondayWorking: weeklyPattern.mon,
+          tuesdayWorking: weeklyPattern.tue,
+          wednesdayWorking: weeklyPattern.wed,
+          thursdayWorking: weeklyPattern.thu,
+          fridayWorking: weeklyPattern.fri,
+          saturdayWorking: weeklyPattern.sat,
+          sundayWorking: weeklyPattern.sun,
           projectId,
         },
       });

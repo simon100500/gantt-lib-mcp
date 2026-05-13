@@ -570,6 +570,16 @@ export type CalendarScope = 'system' | 'project';
 export type CalendarDayKind = 'working' | 'non_working' | 'shortened';
 export type CalendarDaySource = 'system_seed' | 'manual' | 'import';
 
+export interface CalendarWeeklyPattern {
+  mon: boolean;
+  tue: boolean;
+  wed: boolean;
+  thu: boolean;
+  fri: boolean;
+  sat: boolean;
+  sun: boolean;
+}
+
 export interface EffectiveCalendarDay {
   date: string;
   kind: CalendarDayKind;
@@ -630,6 +640,7 @@ export interface Project {
   permissions?: ProjectSectionPermissions;
   ganttDayMode: GanttDayMode;
   calendarId: string | null;
+  calendarWeeklyPattern: CalendarWeeklyPattern;
   calendarDays: EffectiveCalendarDay[];
   timelineMarkers: TimelineMarker[];
   hiddenTaskListColumnsDefault: string[] | null;
@@ -657,6 +668,7 @@ export interface WorkCalendar {
   scope: CalendarScope;
   timezone?: string | null;
   isDefault: boolean;
+  calendarWeeklyPattern: CalendarWeeklyPattern;
   projectId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -823,6 +835,7 @@ export interface TemplatePublicationSnapshot {
   tasks: Task[];
   dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: DependencyType; lag: number }>;
   ganttDayMode: GanttDayMode;
+  calendarWeeklyPattern: CalendarWeeklyPattern;
   calendarDays: EffectiveCalendarDay[];
   timelineMarkers: TimelineMarker[];
 }

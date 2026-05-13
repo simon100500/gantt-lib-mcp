@@ -17,7 +17,7 @@ import { createTaskStatusColumn } from './TaskStatusColumn.tsx';
 import { createTaskWorkColumns } from './TaskWorkColumns.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
-import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
+import { buildCustomDays, DEFAULT_CALENDAR_WEEKLY_PATTERN, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
 import { useFilterPersistence } from '../../hooks/useFilterPersistence';
 import { useProjectHistory } from '../../hooks/useProjectHistory.ts';
@@ -32,10 +32,11 @@ import { useUIStore } from '../../stores/useUIStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { cn } from '../../lib/utils.ts';
 import { buildDefaultBaselineName } from '../../lib/baselineNaming.ts';
+import { calendarDaysEqual, calendarWeeklyPatternEqual } from '../../lib/projectCalendar.ts';
 import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
 import type { BaselineSnapshotResponse, ProjectResource, ResourceScope, ResourceType, TaskAssignmentRecord, TaskProgressEntry } from '../../lib/apiTypes.ts';
 import type { ConstraintDenialPayload } from '../../lib/constraintUi.ts';
-import type { CalendarDay, Task, TimelineMarker, ValidationResult } from '../../types.ts';
+import type { CalendarDay, CalendarWeeklyPattern, Task, TimelineMarker, ValidationResult } from '../../types.ts';
 import {
   KNOWN_TASK_LIST_COLUMN_IDS,
   normalizeHiddenTaskListColumns,
@@ -100,6 +101,7 @@ interface ProjectWorkspaceProps {
   onConfirmTemplateSelection?: () => void | Promise<void>;
   ganttDayMode: 'business' | 'calendar';
   displayGanttDayMode?: 'business' | 'calendar';
+  calendarWeeklyPattern?: CalendarWeeklyPattern;
   calendarDays?: CalendarDay[];
   timelineMarkers?: TimelineMarker[];
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
@@ -537,6 +539,7 @@ export function ProjectWorkspace({
   onConfirmTemplateSelection,
   ganttDayMode,
   displayGanttDayMode,
+  calendarWeeklyPattern = DEFAULT_CALENDAR_WEEKLY_PATTERN,
   calendarDays = [],
   timelineMarkers = [],
   onGanttDayModeChange,
@@ -1025,8 +1028,8 @@ export function ProjectWorkspace({
   }, [baselineItems, selectedBaselineState]);
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
-    () => getProjectWeekendPredicate(calendarDays) ?? (() => false),
-    [calendarDays],
+    () => getProjectWeekendPredicate(calendarWeeklyPattern, calendarDays),
+    [calendarDays, calendarWeeklyPattern],
   );
 
   useEffect(() => {
@@ -2104,12 +2107,18 @@ export function ProjectWorkspace({
   const handleSaveProjectSettings = useCallback(async (settings: {
     projectName: string;
     ganttDayMode: 'business' | 'calendar';
+    calendarWeeklyPattern: CalendarWeeklyPattern;
+    calendarDays: CalendarDay[];
     timelineMarkers: TimelineMarker[];
     hiddenTaskListColumnsDefault: string[] | null;
   }) => {
     const currentProjectHiddenTaskListColumnsDefault = persistedProjectId && authProject?.id === persistedProjectId
       ? (authProject.hiddenTaskListColumnsDefault ?? null)
       : null;
+    const calendarWeeklyPatternChanged = Boolean(persistedProjectId && authProject?.id === persistedProjectId)
+      && !calendarWeeklyPatternEqual(settings.calendarWeeklyPattern, authProject?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN);
+    const calendarDaysChanged = Boolean(persistedProjectId && authProject?.id === persistedProjectId)
+      && !calendarDaysEqual(settings.calendarDays, authProject?.calendarDays ?? []);
     const projectNameChanged = Boolean(onProjectNameChange)
       && settings.projectName.trim() !== projectName.trim();
     const markersChanged = Boolean(onTimelineMarkersChange)
@@ -2120,7 +2129,7 @@ export function ProjectWorkspace({
       && authProject?.id === persistedProjectId
       && JSON.stringify(settings.hiddenTaskListColumnsDefault ?? null) !== JSON.stringify(currentProjectHiddenTaskListColumnsDefault);
 
-    if (!projectNameChanged && !markersChanged && !dayModeChanged && !hiddenColumnsDefaultChanged) {
+    if (!projectNameChanged && !calendarWeeklyPatternChanged && !calendarDaysChanged && !markersChanged && !dayModeChanged && !hiddenColumnsDefaultChanged) {
       setProjectSettingsOpen(false);
       setProjectSettingsError(null);
       return;
@@ -2131,6 +2140,17 @@ export function ProjectWorkspace({
     try {
       if (projectNameChanged && onProjectNameChange) {
         await onProjectNameChange(settings.projectName.trim());
+      }
+      if ((calendarWeeklyPatternChanged || calendarDaysChanged) && persistedProjectId && authProject?.id === persistedProjectId) {
+        await useAuthStore.getState().updateProject(persistedProjectId, {
+          calendarWeeklyPattern: settings.calendarWeeklyPattern,
+          calendarDays: settings.calendarDays,
+        });
+        if (settings.ganttDayMode === 'business' && !dayModeChanged && guardedBatchUpdate) {
+          const nextWeekendPredicate = getProjectWeekendPredicate(settings.calendarWeeklyPattern, settings.calendarDays);
+          const reflowedTasks = reflowTasksOnModeSwitch(tasks, true, nextWeekendPredicate) as Task[];
+          await guardedBatchUpdate.handleTasksChange(reflowedTasks);
+        }
       }
       if (dayModeChanged && onGanttDayModeChange) {
         await onGanttDayModeChange(settings.ganttDayMode);
@@ -2150,7 +2170,7 @@ export function ProjectWorkspace({
     } finally {
       setProjectSettingsPending(false);
     }
-  }, [authProject, ganttDayMode, onGanttDayModeChange, onProjectNameChange, onTimelineMarkersChange, persistedProjectId, projectName, setProjectSettingsOpen, timelineMarkers]);
+  }, [authProject, ganttDayMode, guardedBatchUpdate, onGanttDayModeChange, onProjectNameChange, onTimelineMarkersChange, persistedProjectId, projectName, setProjectSettingsOpen, tasks, timelineMarkers]);
 
   useEffect(() => {
     // Block history shortcuts while preview/read-only modes are active.
@@ -2486,6 +2506,8 @@ export function ProjectWorkspace({
               <ProjectSettingsModal
                 projectName={projectName}
                 ganttDayMode={displayGanttDayMode ?? ganttDayMode}
+                calendarWeeklyPattern={calendarWeeklyPattern}
+                calendarDays={calendarDays}
                 timelineMarkers={timelineMarkers}
                 hiddenTaskListColumnsDefault={persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault ?? null : null}
                 taskListColumnRows={TASK_LIST_COLUMN_ROWS}
@@ -2668,6 +2690,7 @@ export function ProjectWorkspace({
                   onSelectedTaskIdsChange={shareSelectionActive ? onSelectedShareTaskIdsChange : templateSelectionActive ? onSelectedTemplateTaskIdsChange : undefined}
                   filterMode={filterMode}
                   businessDays={ganttDayMode !== 'calendar'}
+                  isWeekend={weekendPredicate}
                   timelineMarkers={timelineMarkers}
                 />
               )}

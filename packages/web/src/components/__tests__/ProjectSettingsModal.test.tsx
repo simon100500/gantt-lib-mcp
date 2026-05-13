@@ -13,6 +13,8 @@ let root: Root | null = null;
 function renderModal(onSave: (settings: {
   projectName: string;
   ganttDayMode: 'business' | 'calendar';
+  calendarWeeklyPattern: { mon: boolean; tue: boolean; wed: boolean; thu: boolean; fri: boolean; sat: boolean; sun: boolean };
+  calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
   timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
   hiddenTaskListColumnsDefault: string[] | null;
 }) => void | Promise<void>, hiddenTaskListColumnsDefault: string[] | null) {
@@ -25,6 +27,8 @@ function renderModal(onSave: (settings: {
       <ProjectSettingsModal
         projectName="Проект"
         ganttDayMode="calendar"
+        calendarWeeklyPattern={{ mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false }}
+        calendarDays={[]}
         timelineMarkers={[]}
         hiddenTaskListColumnsDefault={hiddenTaskListColumnsDefault}
         taskListColumnRows={[

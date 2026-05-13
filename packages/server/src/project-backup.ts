@@ -5,6 +5,7 @@ import { normalizeStoredTaskStatus } from '@gantt/runtime-core/services/task-sta
 import type {
   BaselineSource,
   CalendarDayKind,
+  CalendarWeeklyPattern,
   DependencyType,
   GanttDayMode,
   ResourceScope,
@@ -14,6 +15,7 @@ import type {
   TaskType,
   TimelineMarker,
 } from '@gantt/mcp/types';
+import { DEFAULT_CALENDAR_WEEKLY_PATTERN, normalizeCalendarWeeklyPattern } from '@gantt/runtime-core/services/projectScheduleOptions';
 
 const BACKUP_FILE_KIND = 'gantt-project-backup';
 const BACKUP_FILE_VERSION = 1;
@@ -126,6 +128,7 @@ export type ProjectBackupFile = {
   project: {
     name: string;
     ganttDayMode: GanttDayMode;
+    calendarWeeklyPattern: CalendarWeeklyPattern;
     calendarDays: Array<{ date: string; kind: CalendarDayKind }>;
     timelineMarkers: TimelineMarker[];
   };
@@ -560,6 +563,9 @@ export function parseProjectBackupFile(input: unknown): ProjectBackupFile {
       kind: assertEnum(entry.kind, calendarDayKindValues, 'calendar day kind'),
     };
   });
+  const calendarWeeklyPattern = normalizeCalendarWeeklyPattern(
+    (isRecord(project.calendarWeeklyPattern) ? project.calendarWeeklyPattern : DEFAULT_CALENDAR_WEEKLY_PATTERN) as Partial<CalendarWeeklyPattern>,
+  );
 
   const timelineMarkers = normalizeTimelineMarkersInput(project.timelineMarkers);
   if (timelineMarkers === null) {
@@ -578,6 +584,7 @@ export function parseProjectBackupFile(input: unknown): ProjectBackupFile {
     project: {
       name: asTrimmedString(project.name) ?? (() => { throw new Error('Invalid project name'); })(),
       ganttDayMode: assertEnum(project.ganttDayMode, ganttDayModeValues, 'gantt day mode'),
+      calendarWeeklyPattern,
       calendarDays,
       timelineMarkers,
     },
@@ -670,6 +677,7 @@ export async function buildProjectBackup(projectId: string): Promise<ProjectBack
     project: {
       name: project.name,
       ganttDayMode: project.ganttDayMode as GanttDayMode,
+      calendarWeeklyPattern: projectCalendar.calendarWeeklyPattern,
       calendarDays: projectCalendar.calendarDays,
       timelineMarkers,
     },
@@ -766,6 +774,7 @@ async function replaceProjectCalendar(
   tx: any,
   projectId: string,
   projectName: string,
+  weeklyPattern: CalendarWeeklyPattern,
   calendarDays: Array<{ date: string; kind: CalendarDayKind }>,
 ): Promise<string | null> {
   const ownedCalendars = await tx.workCalendar.findMany({
@@ -792,6 +801,13 @@ async function replaceProjectCalendar(
         scope: 'project',
         timezone: 'UTC',
         isDefault: false,
+        mondayWorking: weeklyPattern.mon,
+        tuesdayWorking: weeklyPattern.tue,
+        wednesdayWorking: weeklyPattern.wed,
+        thursdayWorking: weeklyPattern.thu,
+        fridayWorking: weeklyPattern.fri,
+        saturdayWorking: weeklyPattern.sat,
+        sundayWorking: weeklyPattern.sun,
       },
     });
     await tx.calendarDay.deleteMany({ where: { calendarId } });
@@ -803,6 +819,13 @@ async function replaceProjectCalendar(
         scope: 'project',
         timezone: 'UTC',
         isDefault: false,
+        mondayWorking: weeklyPattern.mon,
+        tuesdayWorking: weeklyPattern.tue,
+        wednesdayWorking: weeklyPattern.wed,
+        thursdayWorking: weeklyPattern.thu,
+        fridayWorking: weeklyPattern.fri,
+        saturdayWorking: weeklyPattern.sat,
+        sundayWorking: weeklyPattern.sun,
         projectId,
       },
     });
@@ -849,7 +872,13 @@ export async function importProjectBackup(projectId: string, backup: ProjectBack
     await tx.task.deleteMany({ where: { projectId } });
     await tx.resource.deleteMany({ where: { projectId } });
 
-    const calendarId = await replaceProjectCalendar(tx, projectId, backup.project.name, backup.project.calendarDays);
+    const calendarId = await replaceProjectCalendar(
+      tx,
+      projectId,
+      backup.project.name,
+      backup.project.calendarWeeklyPattern,
+      backup.project.calendarDays,
+    );
 
     await tx.project.update({
       where: { id: projectId },

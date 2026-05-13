@@ -811,6 +811,7 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
         status: projectRecord.status,
         ganttDayMode: projectRecord.ganttDayMode,
         calendarId: projectCalendar.calendarId,
+        calendarWeeklyPattern: projectCalendar.calendarWeeklyPattern,
         calendarDays: projectCalendar.calendarDays,
         archivedAt: projectRecord.archivedAt,
         deletedAt: projectRecord.deletedAt,

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ConstraintDenialPayload } from '../lib/constraintUi';
-import type { CalendarDay, ProjectGroup, ProjectGroupMembersPayload, ProjectSectionPermissions, TimelineMarker } from '../types';
+import type { CalendarDay, CalendarWeeklyPattern, ProjectGroup, ProjectGroupMembersPayload, ProjectSectionPermissions, TimelineMarker } from '../types';
 
 function getTokenExpMs(token: string): number | null {
   try {
@@ -41,6 +41,15 @@ export interface AuthUser {
 
 export type GanttDayMode = 'business' | 'calendar';
 export type ProjectStatus = 'active' | 'archived';
+const DEFAULT_CALENDAR_WEEKLY_PATTERN: CalendarWeeklyPattern = {
+  mon: true,
+  tue: true,
+  wed: true,
+  thu: true,
+  fri: true,
+  sat: false,
+  sun: false,
+};
 
 export interface AuthProject {
   id: string;
@@ -51,6 +60,7 @@ export interface AuthProject {
   permissions?: ProjectSectionPermissions;
   ganttDayMode: GanttDayMode;
   calendarId?: string | null;
+  calendarWeeklyPattern?: CalendarWeeklyPattern;
   calendarDays?: CalendarDay[];
   timelineMarkers?: TimelineMarker[];
   hiddenTaskListColumnsDefault?: string[] | null;
@@ -99,6 +109,8 @@ export interface UseAuthResult extends AuthState {
     name?: string;
     ganttDayMode?: GanttDayMode;
     calendarId?: string | null;
+    calendarWeeklyPattern?: CalendarWeeklyPattern;
+    calendarDays?: CalendarDay[];
     groupId?: string;
     timelineMarkers?: TimelineMarker[];
     hiddenTaskListColumnsDefault?: string[] | null;
@@ -216,6 +228,7 @@ function readStoredAuth(): StoredAuthState | null {
       status: value.status ?? 'active',
       accessRole: value.accessRole ?? 'owner',
       permissions: value.permissions ?? { schedule: 'edit', resources: 'edit', finance: 'edit' },
+      calendarWeeklyPattern: value.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN,
       timelineMarkers: Array.isArray(value.timelineMarkers) ? value.timelineMarkers : [],
       hiddenTaskListColumnsDefault: Array.isArray(value.hiddenTaskListColumnsDefault) ? value.hiddenTaskListColumnsDefault : null,
       archivedAt: value.archivedAt ?? null,

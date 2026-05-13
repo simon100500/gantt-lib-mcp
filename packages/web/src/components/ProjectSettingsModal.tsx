@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { CalendarClock, ChevronDown, Columns3Cog, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react';
 
-import type { TimelineMarker } from '../types.ts';
+import type { CalendarDay, CalendarWeeklyPattern, TimelineMarker } from '../types.ts';
+import { ProjectCalendarModal } from './ProjectCalendarModal.tsx';
+import { formatCalendarDayKind, getWeeklyPatternLabel } from '../lib/projectCalendar.ts';
 import type { ToolbarTaskListColumnRow } from './layout/Toolbar.tsx';
 import { DEFAULT_HIDDEN_TASK_LIST_COLUMNS } from '../lib/taskListColumns.ts';
 import {
@@ -60,6 +62,8 @@ function createEditableMarker(marker?: TimelineMarker, index = 0): EditableTimel
 interface ProjectSettingsModalProps {
   projectName: string;
   ganttDayMode: 'business' | 'calendar';
+  calendarWeeklyPattern: CalendarWeeklyPattern;
+  calendarDays: CalendarDay[];
   timelineMarkers: TimelineMarker[];
   hiddenTaskListColumnsDefault: string[] | null;
   taskListColumnRows: ToolbarTaskListColumnRow[];
@@ -75,6 +79,8 @@ interface ProjectSettingsModalProps {
   onSave: (settings: {
     projectName: string;
     ganttDayMode: 'business' | 'calendar';
+    calendarWeeklyPattern: CalendarWeeklyPattern;
+    calendarDays: CalendarDay[];
     timelineMarkers: TimelineMarker[];
     hiddenTaskListColumnsDefault: string[] | null;
   }) => void | Promise<void>;
@@ -83,6 +89,8 @@ interface ProjectSettingsModalProps {
 export function ProjectSettingsModal({
   projectName,
   ganttDayMode,
+  calendarWeeklyPattern,
+  calendarDays,
   timelineMarkers,
   hiddenTaskListColumnsDefault,
   taskListColumnRows,
@@ -99,21 +107,27 @@ export function ProjectSettingsModal({
 }: ProjectSettingsModalProps) {
   const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [draftMode, setDraftMode] = useState<'business' | 'calendar'>(ganttDayMode);
+  const [draftCalendarWeeklyPattern, setDraftCalendarWeeklyPattern] = useState<CalendarWeeklyPattern>(calendarWeeklyPattern);
+  const [draftCalendarDays, setDraftCalendarDays] = useState<CalendarDay[]>(calendarDays);
   const [draftMarkers, setDraftMarkers] = useState<EditableTimelineMarker[]>([]);
   const [draftHiddenTaskListColumnsDefault, setDraftHiddenTaskListColumnsDefault] = useState<string[] | null>(null);
+  const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraftProjectName(projectName);
     setDraftMode(ganttDayMode);
+    setDraftCalendarWeeklyPattern(calendarWeeklyPattern);
+    setDraftCalendarDays(calendarDays);
     setDraftMarkers(
       timelineMarkers.length > 0
         ? timelineMarkers.map((marker, index) => createEditableMarker(marker, index))
         : [],
     );
     setDraftHiddenTaskListColumnsDefault(hiddenTaskListColumnsDefault);
+    setCalendarModalOpen(false);
     setLocalError(null);
-  }, [ganttDayMode, hiddenTaskListColumnsDefault, projectName, timelineMarkers]);
+  }, [calendarDays, calendarWeeklyPattern, ganttDayMode, hiddenTaskListColumnsDefault, projectName, timelineMarkers]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -149,12 +163,15 @@ export function ProjectSettingsModal({
     await onSave({
       projectName: normalizedProjectName,
       ganttDayMode: draftMode,
+      calendarWeeklyPattern: draftCalendarWeeklyPattern,
+      calendarDays: draftCalendarDays,
       timelineMarkers: normalizedMarkers,
       hiddenTaskListColumnsDefault: draftHiddenTaskListColumnsDefault,
     });
   };
 
   const currentDayModeLabel = draftMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни';
+  const calendarPreview = draftCalendarDays.slice(0, 3);
 
   return (
     <div
@@ -267,6 +284,36 @@ export function ProjectSettingsModal({
                 >
                   <CalendarClock className="h-4 w-4" />
                   Сдвинуть проект...
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 sm:max-w-[55%]">
+                <h3 className="text-sm font-semibold text-slate-900">Рабочий календарь</h3>
+                <p className="text-sm text-slate-500">
+                  {getWeeklyPatternLabel(draftCalendarWeeklyPattern)}
+                  {draftCalendarDays.length > 0 ? `, исключений: ${draftCalendarDays.length}.` : ', без исключений.'}
+                </p>
+                {calendarPreview.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {calendarPreview.map((day) => (
+                      <span key={day.date} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
+                        {day.date}{' -> '}{formatCalendarDayKind(day.kind)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setCalendarModalOpen(true)}
+                  disabled={pending}
+                  className="inline-flex h-10 min-w-[220px] items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  Настроить календарь...
                 </button>
               </div>
             </div>
@@ -466,6 +513,20 @@ export function ProjectSettingsModal({
             </div>
           </section>
         </div>
+
+        {calendarModalOpen && (
+          <ProjectCalendarModal
+            calendarWeeklyPattern={draftCalendarWeeklyPattern}
+            calendarDays={draftCalendarDays}
+            pending={pending}
+            onClose={() => setCalendarModalOpen(false)}
+            onApply={({ calendarWeeklyPattern: nextPattern, calendarDays: nextDays }) => {
+              setDraftCalendarWeeklyPattern(nextPattern);
+              setDraftCalendarDays(nextDays);
+              setCalendarModalOpen(false);
+            }}
+          />
+        )}
 
         <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
           <button

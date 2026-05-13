@@ -188,6 +188,16 @@ export interface CalendarDay {
   kind: 'working' | 'non_working' | 'shortened';
 }
 
+export interface CalendarWeeklyPattern {
+  mon: boolean;
+  tue: boolean;
+  wed: boolean;
+  thu: boolean;
+  fri: boolean;
+  sat: boolean;
+  sun: boolean;
+}
+
 export interface TimelineMarker {
   date: string;
   color?: string | null;

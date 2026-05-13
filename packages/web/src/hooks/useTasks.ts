@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react';
-import type { CalendarDay, Task } from '../types.ts';
+import type { CalendarDay, CalendarWeeklyPattern, Task } from '../types.ts';
 import { useTaskStore } from '../stores/useTaskStore.ts';
 import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStore.ts';
-import { getProjectScheduleOptions } from '../lib/projectScheduleOptions.ts';
+import { DEFAULT_CALENDAR_WEEKLY_PATTERN, getProjectScheduleOptions } from '../lib/projectScheduleOptions.ts';
 
 const EMPTY_CALENDAR_DAYS: CalendarDay[] = [];
 
@@ -17,6 +17,7 @@ export function useTasks(
   accessToken: string | null,
   refreshAccessToken: () => Promise<string | null>,
   ganttDayMode: 'business' | 'calendar',
+  calendarWeeklyPattern: CalendarWeeklyPattern = DEFAULT_CALENDAR_WEEKLY_PATTERN,
   calendarDays: CalendarDay[] = EMPTY_CALENDAR_DAYS,
 ): UseTasksResult {
   const shareToken = new URLSearchParams(window.location.search).get('share');
@@ -32,8 +33,8 @@ export function useTasks(
   const setScheduleOptions = useProjectStore((state) => state.setScheduleOptions);
   const effectiveCalendarDays = calendarDays.length > 0 ? calendarDays : EMPTY_CALENDAR_DAYS;
   const scheduleOptions = useMemo(
-    () => getProjectScheduleOptions(ganttDayMode, effectiveCalendarDays),
-    [effectiveCalendarDays, ganttDayMode],
+    () => getProjectScheduleOptions(ganttDayMode, calendarWeeklyPattern, effectiveCalendarDays),
+    [calendarWeeklyPattern, effectiveCalendarDays, ganttDayMode],
   );
 
   useEffect(() => {

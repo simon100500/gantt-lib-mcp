@@ -4,6 +4,7 @@ import type { GanttChartRef } from '../GanttChart.tsx';
 import { ProjectWorkspace } from './ProjectWorkspace.tsx';
 import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
 import type { Task, ValidationResult } from '../../types.ts';
+import { DEFAULT_CALENDAR_WEEKLY_PATTERN } from '../../lib/projectScheduleOptions.ts';
 
 interface SharedWorkspaceProps {
   ganttRef: RefObject<GanttChartRef | null>;
@@ -51,6 +52,7 @@ export function SharedWorkspace({
       onExpandAll={onExpandAll}
       onValidation={onValidation}
       ganttDayMode={ganttDayMode}
+      calendarWeeklyPattern={sharedProject?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}
       calendarDays={sharedProject?.calendarDays ?? []}
       timelineMarkers={sharedProject?.timelineMarkers ?? []}
       readOnly

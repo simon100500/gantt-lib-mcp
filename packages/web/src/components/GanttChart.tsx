@@ -58,6 +58,7 @@ export interface GanttChartProps {
   onSelectedTaskIdsChange?: (taskIds: Set<string>) => void;
   filterMode?: 'highlight' | 'hide';
   businessDays?: boolean;
+  isWeekend?: (date: Date) => boolean;
   timelineMarkers?: AppTimelineMarker[];
   taskListMenuCommands?: TaskListMenuCommand<Task>[];
   additionalColumns?: TaskListColumn<Task>[];
@@ -121,6 +122,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onSelectedTaskIdsChange,
   filterMode,
   businessDays,
+  isWeekend,
   timelineMarkers,
   taskListMenuCommands,
   additionalColumns,
@@ -188,6 +190,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onSelectedTaskIdsChange={onSelectedTaskIdsChange}
       filterMode={filterMode}
       businessDays={businessDays}
+      isWeekend={isWeekend}
       timelineMarkers={timelineMarkers?.map((marker): GanttTimelineMarker => ({
         date: marker.date,
         ...(marker.color ? { color: marker.color } : {}),
