@@ -36,6 +36,24 @@ This runs optimized builds:
 - Compiled TypeScript server
 - No hot reload, optimized for performance
 
+### Build And Push Deployment Image
+
+Build and push the exact image used by CapRover:
+
+```bash
+npm run deploy:image
+```
+
+By default it pushes:
+- `reg.volobuev.keenetic.pro/getgantt:latest`
+- `reg.volobuev.keenetic.pro/getgantt:sha-<git-sha>`
+
+You can override the target with environment variables:
+
+```bash
+DEPLOY_REGISTRY=reg.example.com DEPLOY_IMAGE=myapp npm run deploy:image
+```
+
 ### Environment Variables
 
 Create `.env` file:
