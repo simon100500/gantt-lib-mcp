@@ -65,6 +65,14 @@ RUN apk add --no-cache nodejs npm openssl
 
 WORKDIR /app
 
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+ARG IMAGE_SOURCE=https://github.com/unknown/unknown
+
+LABEL org.opencontainers.image.revision=$VCS_REF \
+      org.opencontainers.image.created=$BUILD_DATE \
+      org.opencontainers.image.source=$IMAGE_SOURCE
+
 # Copy static web build
 COPY --from=build-web /build/packages/web/dist /usr/share/nginx/html
 
@@ -121,7 +129,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Startup script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
 
