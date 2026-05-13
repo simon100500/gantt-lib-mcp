@@ -13,14 +13,13 @@ import { ProjectSettingsModal } from '../../components/ProjectSettingsModal.tsx'
 import type { GanttChartRef } from '../../components/GanttChart.tsx';
 import { ProjectMenu } from '../../components/layout/ProjectMenu.tsx';
 import { DraftWorkspace } from '../../components/workspace/DraftWorkspace.tsx';
-import type { StartScreenSendResult } from '../../components/StartScreen.tsx';
 import { GuestWorkspace } from '../../components/workspace/GuestWorkspace.tsx';
 import { ProjectWorkspace } from '../../components/workspace/ProjectWorkspace.tsx';
 import { FinanceWorkspace } from '../../components/workspace/FinanceWorkspace.tsx';
 import { ResourcePlannerWorkspace } from '../../components/workspace/ResourcePlannerWorkspace.tsx';
 import { SharedWorkspace } from '../../components/workspace/SharedWorkspace.tsx';
 import { TemplateWorkspace } from '../../components/workspace/TemplateWorkspace.tsx';
-import type { AuthProject, UseAuthResult } from '../../hooks/useAuth.ts';
+import type { UseAuthResult } from '../../hooks/useAuth.ts';
 import { useBatchTaskUpdate } from '../../hooks/useBatchTaskUpdate.ts';
 import { useAppUpdateCheck } from '../../hooks/useAppUpdateCheck.ts';
 import { useLocalTasks } from '../../hooks/useLocalTasks.ts';
@@ -28,14 +27,12 @@ import { useSharedProject } from '../../hooks/useSharedProject.ts';
 import { useTasks } from '../../hooks/useTasks.ts';
 import { useTemplateBatchUpdate } from '../../hooks/useTemplateBatchUpdate.ts';
 import { useTemplates } from '../../hooks/useTemplates.ts';
-import type { TemplatePublicationDetail } from '../../lib/apiTypes.ts';
 import { PLAN_LABELS, type PlanId } from '../../lib/billing.ts';
 import { normalizeConstraintDenialPayload, type ConstraintDenialPayload } from '../../lib/constraintUi.ts';
 import { TASK_LIST_COLUMN_ROWS } from '../../lib/taskListColumns.ts';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
 import { useBillingStore } from '../../stores/useBillingStore.ts';
 import { useChatStore } from '../../stores/useChatStore.ts';
-import { useTaskStore } from '../../stores/useTaskStore.ts';
 import { useTemplateStore } from '../../stores/useTemplateStore.ts';
 import { readProjectChatOpenState, useUIStore } from '../../stores/useUIStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
@@ -48,21 +45,14 @@ import {
   buildResourceCreationLimitDenial,
   type BillingConstraintStatus,
 } from '../billing/policy.ts';
-import { FREE_ARCHIVED_PROJECT_LIMIT, mergeProjectsForLimitEvaluation, type PendingProjectCreation } from '../project-lifecycle/model.ts';
+import { useProjectLifecycleController } from '../project-lifecycle/controller.ts';
+import { FREE_ARCHIVED_PROJECT_LIMIT, mergeProjectsForLimitEvaluation } from '../project-lifecycle/model.ts';
 import { isActiveProjectGenerationJob } from '../project-generation/model.ts';
 import { useProjectGenerationController } from '../project-generation/useProjectGenerationController.ts';
 import { useShareTemplateSelectionController } from '../share/useShareTemplateSelectionController.ts';
 import { useExportImportController } from '../export-import/useExportImportController.ts';
 
-const ACCESS_TOKEN_KEY = 'gantt_access_token';
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
-const AI_DONE_GRACE_PERIOD_MS = 10000;
-const AI_MUTATION_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
-const ARCHIVE_AND_CREATE_RECOVERY = 'ARCHIVE_AND_CREATE_RECOVERY';
-
-function isConstraintCode(code: string | undefined): code is ConstraintDenialPayload['code'] {
-  return code === 'PROJECT_LIMIT_REACHED' || code === 'RESTORE_PROJECT_LIMIT_REACHED' || code === 'AI_LIMIT_REACHED' || code === 'SUBSCRIPTION_EXPIRED' || code === 'ARCHIVE_FEATURE_LOCKED' || code === 'EXPORT_FEATURE_LOCKED';
-}
 
 function getAccessTokenProjectId(accessToken: string | null): string | null {
   if (!accessToken) {
@@ -95,19 +85,6 @@ function getProjectPermissions(permissions: ProjectSectionPermissions | undefine
 type WorkspaceToast = {
   id: number;
   message: string;
-};
-
-type ProjectIntentReadResponse = {
-  id: string;
-  text: string;
-  source: string;
-  projectId: string | null;
-  requestContextId: string | null;
-  historyGroupId: string | null;
-  templateSlug: string | null;
-  createdAt: string;
-  expiresAt: string;
-  consumedAt: string | null;
 };
 
 type NormalizedChatMessage = {
@@ -164,16 +141,11 @@ export function WorkspaceShell({
   const activeTemplate = useTemplateStore((state) => state.activeTemplate);
   const setActiveTemplate = useTemplateStore((state) => state.setActiveTemplate);
   const updateActiveTemplateTasks = useTemplateStore((state) => state.updateActiveTemplateTasks);
-  const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
-  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
-  const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
   const [toasts, setToasts] = useState<WorkspaceToast[]>([]);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const [startScreenProjectSettingsPending, setStartScreenProjectSettingsPending] = useState(false);
   const [startScreenProjectSettingsError, setStartScreenProjectSettingsError] = useState<string | null>(null);
-  const [startScreenPrefillPrompt, setStartScreenPrefillPrompt] = useState<string | null>(null);
   const toastIdRef = useRef(0);
-  const resolvingProjectIntentRef = useRef<string | null>(null);
   const refreshProjects = auth.refreshProjects;
   const [limitModal, setLimitModal] = useState<{
     denial: ConstraintDenialPayload;
@@ -300,36 +272,6 @@ export function WorkspaceShell({
   } = useTemplates(hasShareToken ? null : auth.accessToken);
 
   useEffect(() => {
-    if (!constraintDenial) {
-      return;
-    }
-
-    if (constraintDenial.code === 'PROJECT_LIMIT_REACHED' && activeProjectToReplace) {
-      if (canSilentlyReplaceOnFree) {
-        setPendingProjectCreation((current) => ({
-          ...(current ?? {}),
-          groupId: current?.groupId ?? activeProjectToReplace.groupId ?? auth.projectGroups[0]?.id,
-          initialProjectName: current?.initialProjectName ?? 'Новый проект',
-        }));
-        setShowCreateProjectModal(true);
-        setLimitModal(null);
-        useAuthStore.setState({ constraintDenial: null });
-        return;
-      }
-    }
-
-    void openLimitModal(constraintDenial).finally(() => {
-      useAuthStore.setState({ constraintDenial: null });
-    });
-  }, [
-    activeProjectToReplace,
-    auth.projectGroups,
-    canSilentlyReplaceOnFree,
-    constraintDenial,
-    openLimitModal,
-  ]);
-
-  useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || hasShareToken) {
       return;
     }
@@ -380,7 +322,6 @@ export function WorkspaceShell({
     saveTemplateSnapshot,
   });
   const ganttRef = useRef<GanttChartRef>(null);
-  const activationInFlightRef = useRef(false);
   const syncProjectTaskCount = auth.syncProjectTaskCount;
   const sessionProjectId = getAccessTokenProjectId(auth.accessToken);
   const activeWorkspaceProjectId = workspace.kind === 'project' ? workspace.projectId : null;
@@ -467,6 +408,69 @@ export function WorkspaceShell({
     handleCreateTemplateFromTask,
     handleSubmitPartialShareSelection,
   } = selectionController;
+  const lifecycleController = useProjectLifecycleController({
+    auth,
+    workspace,
+    localTaskCount: localTasks.tasks.length,
+    hasShareToken,
+    isScheduleReadOnlyProject,
+    sessionProjectId,
+    proactiveChatDenial,
+    constraintDenial,
+    activeProjectToReplace,
+    canSilentlyReplaceOnFree,
+    effectiveArchiveDenial,
+    isProjectGroupsLockedOnCurrentPlan,
+    projectGroupsLockedDenial,
+    templateCreateIntentId,
+    onConsumeTemplateCreateIntent,
+    projectCreationIntentId,
+    onConsumeProjectCreationIntent,
+    projectOpenIntentId,
+    onConsumeProjectOpenIntent,
+    plannerCorrectionTarget,
+    consumePlannerCorrectionTarget,
+    pendingPostAuthAction,
+    setPendingPostAuthAction,
+    onLoginRequired,
+    openLimitModal,
+    fetchUsage,
+    getProjectState,
+    setWorkspace,
+    setSidebarState,
+    replaceTasksFromSystem,
+    openTemplate,
+    resetWorkspacePresentation,
+    handleSend,
+    submitChatMessage,
+    queuedPromptRef,
+    createEmptyChartAfterActivationRef,
+    preserveStartScreenPrefillOnNextSessionRef,
+    forceProjectWorkspaceOnNextSessionRef,
+    setActiveEmptyProjectModeProjectId,
+  });
+  const {
+    deleteProjectDraft,
+    showCreateProjectModal,
+    pendingProjectCreation,
+    startScreenPrefillPrompt,
+    closeCreateProjectModal,
+    hideDeleteProjectModal,
+    handleConfirmDeleteProject,
+    handleStartScreenSend,
+    handleEmptyChart,
+    handleCreateProject,
+    handleSwitchProject,
+    handleSwitchTemplate,
+    handleArchiveProject,
+    handleRestoreProject,
+    handleDeleteProject,
+    handleCreateProjectGroup,
+    handleCreateProjectModalGroup,
+    handleRenameProjectGroup,
+    handleDeleteProjectGroup,
+    handleCreateProjectModalSave,
+  } = lifecycleController;
 
   useEffect(() => {
     if (!pendingGanttDayMode) {
@@ -478,57 +482,6 @@ export function WorkspaceShell({
     }
   }, [auth.project?.ganttDayMode, pendingGanttDayMode]);
   const displayConnected = hasShareToken ? true : auth.isAuthenticated ? connected : true;
-
-  useEffect(() => {
-    if (hasShareToken) {
-      setWorkspace({ kind: 'shared' });
-      return;
-    }
-
-    const projectId = sessionProjectId ?? auth.project?.id;
-    if (!auth.isAuthenticated || !projectId) {
-      setWorkspace({ kind: 'guest' });
-      return;
-    }
-
-    setWorkspace((current) => {
-      if (current.kind === 'template') {
-        return current;
-      }
-      if (forceProjectWorkspaceOnNextSessionRef.current === projectId) {
-        forceProjectWorkspaceOnNextSessionRef.current = null;
-        return { kind: 'project', projectId, chatOpen: false };
-      }
-      if (current.kind === 'project' && current.projectId === projectId) {
-        return current;
-      }
-      if (current.kind === 'finance' && current.projectId === projectId) {
-        return current;
-      }
-      if (current.kind === 'planner' && current.projectId === projectId) {
-        return current;
-      }
-      const activeWorkspace = getProjectState(projectId)?.activeWorkspace ?? 'project';
-      return activeWorkspace === 'planner'
-        ? { kind: 'planner', projectId }
-        : activeWorkspace === 'finance'
-          ? { kind: 'finance', projectId }
-          : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
-    });
-  }, [auth.isAuthenticated, auth.project?.id, getProjectState, hasShareToken, sessionProjectId, setWorkspace]);
-
-  useEffect(() => {
-    setActiveEmptyProjectModeProjectId(null);
-    if (preserveStartScreenPrefillOnNextSessionRef.current) {
-      preserveStartScreenPrefillOnNextSessionRef.current = false;
-      return;
-    }
-    setStartScreenPrefillPrompt(null);
-  }, [sessionProjectId]);
-  const openCreateProjectModal = useCallback((nextIntent: PendingProjectCreation = {}) => {
-    setPendingProjectCreation(nextIntent);
-    setShowCreateProjectModal(true);
-  }, []);
 
   const dismissToast = useCallback((toastId: number) => {
     setToasts((current) => current.filter((toast) => toast.id !== toastId));
@@ -543,400 +496,6 @@ export function WorkspaceShell({
     }, 4000);
   }, []);
 
-  const createProjectAndActivate = useCallback(async (
-    name: string,
-    options: PendingProjectCreation = {},
-    behavior: { skipProjectLimitRecovery?: boolean } = {},
-  ): Promise<{ id: string; name: string } | null> => {
-    if (hasShareToken || !auth.isAuthenticated || activationInFlightRef.current) {
-      return null;
-    }
-
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      return null;
-    }
-
-    activationInFlightRef.current = true;
-
-    try {
-      let newProject: AuthProject | null = null;
-
-      if (options.templatePublicationId) {
-        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-        let token = getLatestAccessToken();
-        if (!token) {
-          queuedPromptRef.current = null;
-          createEmptyChartAfterActivationRef.current = false;
-          return null;
-        }
-
-        let response = await fetch(`/api/template-publications/${encodeURIComponent(options.templatePublicationId)}/create-project`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            projectName: trimmedName,
-            groupId: options.groupId ?? auth.project?.groupId,
-          }),
-        });
-
-        if (response.status === 401) {
-          const refreshedToken = await auth.refreshAccessToken();
-          if (!refreshedToken) {
-            queuedPromptRef.current = null;
-            createEmptyChartAfterActivationRef.current = false;
-            return null;
-          }
-          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-          response = await fetch(`/api/template-publications/${encodeURIComponent(options.templatePublicationId)}/create-project`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              projectName: trimmedName,
-              groupId: options.groupId ?? auth.project?.groupId,
-            }),
-          });
-        }
-
-        if (response.status === 403) {
-          try {
-            const body = await response.json() as Partial<ConstraintDenialPayload>;
-            if (isConstraintCode(body.code)) {
-              if (
-                !behavior.skipProjectLimitRecovery
-                && body.code === 'PROJECT_LIMIT_REACHED'
-                && !canSilentlyReplaceOnFree
-              ) {
-                await openLimitModal(body);
-                return null;
-              }
-              await openLimitModal(body);
-              return null;
-            }
-          } catch {
-            // fall through to generic error below
-          }
-        }
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const payload = await response.json() as { project: AuthProject };
-        newProject = payload.project;
-      } else {
-        newProject = await auth.createProject(trimmedName, options.groupId ?? auth.project?.groupId);
-        if (!newProject) {
-          const denial = useAuthStore.getState().constraintDenial;
-          if (
-            !behavior.skipProjectLimitRecovery
-            && denial?.code === 'PROJECT_LIMIT_REACHED'
-            && !canSilentlyReplaceOnFree
-          ) {
-            useAuthStore.setState({ constraintDenial: null });
-            await openLimitModal(denial);
-            return null;
-          }
-        }
-      }
-
-      if (!newProject) {
-        return null;
-      }
-
-      createEmptyChartAfterActivationRef.current = Boolean(options.createEmptyChart);
-      queuedPromptRef.current = null;
-      resetWorkspacePresentation();
-      await auth.refreshProjects();
-
-      preserveStartScreenPrefillOnNextSessionRef.current = true;
-      forceProjectWorkspaceOnNextSessionRef.current = newProject.id;
-      await auth.switchProject(newProject.id);
-      setSidebarState('closed');
-      if (options.createEmptyChart) {
-        setActiveEmptyProjectModeProjectId(newProject.id);
-      } else {
-        replaceTasksFromSystem([]);
-      }
-      setWorkspace({
-        kind: 'project',
-        projectId: newProject.id,
-        chatOpen: options.createEmptyChart
-          ? false
-          : false,
-      });
-      setStartScreenPrefillPrompt(options.firstPrompt ?? null);
-      setPendingProjectCreation(null);
-      setPendingPostAuthAction(null);
-      return { id: newProject.id, name: newProject.name };
-    } finally {
-      activationInFlightRef.current = false;
-    }
-  }, [
-    auth,
-    canSilentlyReplaceOnFree,
-    hasShareToken,
-    openLimitModal,
-    replaceTasksFromSystem,
-    resetWorkspacePresentation,
-    setStartScreenPrefillPrompt,
-    setPendingPostAuthAction,
-    setSidebarState,
-    setWorkspace,
-  ]);
-
-  useEffect(() => {
-    if (!templateCreateIntentId || !auth.isAuthenticated || hasShareToken) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const openTemplateCreateModal = async () => {
-      const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-      let token = getLatestAccessToken();
-      let publication: TemplatePublicationDetail | null = null;
-
-      if (token) {
-        let response = await fetch(`/api/template-publications/${encodeURIComponent(templateCreateIntentId)}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.status === 401) {
-          const refreshedToken = await auth.refreshAccessToken();
-          if (refreshedToken) {
-            token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-            response = await fetch(`/api/template-publications/${encodeURIComponent(templateCreateIntentId)}`, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            });
-          }
-        }
-
-        if (response.ok) {
-          publication = await response.json() as TemplatePublicationDetail;
-        }
-      }
-
-      if (cancelled) {
-        return;
-      }
-
-      const briefParts = [
-        publication?.taskCount ? `${publication.taskCount} задач` : null,
-        publication?.category?.trim() ? publication.category.trim() : null,
-        publication?.industry?.trim() ? publication.industry.trim() : null,
-      ].filter(Boolean);
-
-      openCreateProjectModal({
-        templatePublicationId: templateCreateIntentId,
-        initialProjectName: publication?.title ?? 'Новый проект',
-        groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
-        title: publication?.title ? `Новый проект из шаблона «${publication.title}»` : 'Новый проект из шаблона',
-        description: publication
-          ? [
-              publication.summary?.trim() || 'Шаблон уже выбран. Укажите название проекта и группу, где он будет создан.',
-              briefParts.length > 0 ? briefParts.join(' • ') : null,
-            ].filter(Boolean).join(' ')
-          : 'Шаблон уже выбран. Укажите название проекта и группу, где он будет создан.',
-      });
-      onConsumeTemplateCreateIntent();
-    };
-
-    void openTemplateCreateModal();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    auth.accessToken,
-    auth.isAuthenticated,
-    auth.project?.groupId,
-    auth.projectGroups,
-    hasShareToken,
-    onConsumeTemplateCreateIntent,
-    openCreateProjectModal,
-    templateCreateIntentId,
-  ]);
-
-  const handleStartScreenSend = useCallback(async (text: string): Promise<StartScreenSendResult> => {
-    if (hasShareToken) {
-      return { accepted: false };
-    }
-    if (!auth.isAuthenticated) {
-      setPendingPostAuthAction({
-        kind: 'send_prompt',
-        prompt: text,
-        sourceProjectState: localTasks.tasks.length === 0 ? 'empty' : 'non_empty',
-      });
-      onLoginRequired();
-      return { accepted: true };
-    }
-    if (isScheduleReadOnlyProject) {
-      return {
-        accepted: false,
-        message: 'Проект доступен только для чтения.',
-      };
-    }
-    if (workspace.kind === 'project') {
-      const result = handleSend(text);
-      if (result.accepted) {
-        setStartScreenPrefillPrompt(null);
-      }
-      return result;
-    }
-    if (!auth.project) {
-      openCreateProjectModal({ firstPrompt: text });
-      return { accepted: true };
-    }
-    const result = handleSend(text);
-    if (result.accepted) {
-      setStartScreenPrefillPrompt(null);
-    }
-    return result;
-  }, [auth.isAuthenticated, auth.project, handleSend, hasShareToken, isScheduleReadOnlyProject, localTasks.tasks.length, onLoginRequired, openCreateProjectModal, setPendingPostAuthAction, workspace.kind]);
-
-  useEffect(() => {
-    if (!projectCreationIntentId || !auth.isAuthenticated || hasShareToken) {
-      return;
-    }
-    if (resolvingProjectIntentRef.current === projectCreationIntentId) {
-      return;
-    }
-
-    let cancelled = false;
-    resolvingProjectIntentRef.current = projectCreationIntentId;
-
-    const startProjectIntentFlow = async () => {
-      try {
-        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-        let token = getLatestAccessToken();
-        if (!token || !auth.user) {
-          onConsumeProjectCreationIntent();
-          return;
-        }
-
-        let response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.status === 401) {
-          const refreshedToken = await auth.refreshAccessToken();
-          if (!refreshedToken) {
-            onConsumeProjectCreationIntent();
-            return;
-          }
-          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-          response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        if (response.status === 403) {
-          try {
-            const body = await response.json() as Partial<ConstraintDenialPayload>;
-            if (isConstraintCode(body.code)) {
-              await openLimitModal(body);
-              onConsumeProjectCreationIntent();
-              return;
-            }
-          } catch {
-            // fall through
-          }
-        }
-
-        if (response.status === 410) {
-          window.alert('Черновик запроса устарел. Опишите проект ещё раз.');
-          onConsumeProjectCreationIntent();
-          return;
-        }
-
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({ error: null })) as { error?: string | null };
-          window.alert(payload.error || 'Не удалось подготовить запрос. Попробуйте ещё раз.');
-          onConsumeProjectCreationIntent();
-          return;
-        }
-
-        const payload = await response.json() as ProjectIntentReadResponse;
-        const prompt = payload.text.trim();
-        if (!prompt) {
-          onConsumeProjectCreationIntent();
-          return;
-        }
-
-        await auth.refreshProjects();
-        const latestAuthState = useAuthStore.getState();
-        const latestProjects = latestAuthState.projects;
-        const latestCurrentProject = latestAuthState.project;
-        const reusableEmptyProject = latestProjects.find((project) => project.status === 'active' && project.taskCount === 0) ?? null;
-        if (reusableEmptyProject && !isScheduleReadOnlyProject) {
-          setActiveEmptyProjectModeProjectId(null);
-          if (latestCurrentProject?.id !== reusableEmptyProject.id) {
-            preserveStartScreenPrefillOnNextSessionRef.current = true;
-            forceProjectWorkspaceOnNextSessionRef.current = reusableEmptyProject.id;
-            await auth.switchProject(reusableEmptyProject.id);
-          }
-          setStartScreenPrefillPrompt(prompt);
-          setWorkspace({ kind: 'project', projectId: reusableEmptyProject.id, chatOpen: false });
-          onConsumeProjectCreationIntent();
-          return;
-        }
-
-        openCreateProjectModal({
-          firstPrompt: prompt,
-          groupId: latestCurrentProject?.groupId ?? latestAuthState.projectGroups[0]?.id,
-          initialProjectName: 'Новый проект',
-        });
-        onConsumeProjectCreationIntent();
-      } finally {
-        resolvingProjectIntentRef.current = null;
-      }
-    };
-
-    void startProjectIntentFlow();
-
-    return () => {
-      cancelled = true;
-      if (resolvingProjectIntentRef.current === projectCreationIntentId) {
-        resolvingProjectIntentRef.current = null;
-      }
-    };
-  }, [
-    auth.accessToken,
-    auth.isAuthenticated,
-    auth.project,
-    auth.projects,
-    auth.projectGroups,
-    auth.refreshAccessToken,
-    auth.switchProject,
-    auth.user,
-    hasShareToken,
-    isScheduleReadOnlyProject,
-    onConsumeProjectCreationIntent,
-    openCreateProjectModal,
-    projectCreationIntentId,
-    setWorkspace,
-    workspace,
-  ]);
-
   const handleValidation = useCallback((result: ValidationResult) => {
     setValidationErrors(result.isValid ? [] : result.errors);
     if (!result.isValid && result.errors.length > 0) {
@@ -950,161 +509,6 @@ export function WorkspaceShell({
     }
     void batchUpdate.handleTasksChange(shiftedTasks);
   }, [batchUpdate, isScheduleReadOnlyProject]);
-
-  const handleEmptyChart = useCallback(async () => {
-    if (hasShareToken) {
-      return;
-    }
-    if (!auth.isAuthenticated) {
-      onLoginRequired();
-      return;
-    }
-    if (!auth.project) {
-      openCreateProjectModal({ createEmptyChart: true });
-      return;
-    }
-    if (workspace.kind === 'project') {
-      setActiveEmptyProjectModeProjectId(workspace.projectId);
-    }
-  }, [auth.isAuthenticated, auth.project, hasShareToken, onLoginRequired, openCreateProjectModal, workspace]);
-
-  const handleSwitchProject = useCallback(async (projectId: string) => {
-    createEmptyChartAfterActivationRef.current = false;
-    queuedPromptRef.current = null;
-    useTaskStore.setState({ loading: true, error: null });
-    useProjectStore.getState().clearTransientState();
-    await auth.switchProject(projectId);
-    const activeWorkspace = getProjectState(projectId)?.activeWorkspace ?? 'project';
-    setWorkspace(
-      activeWorkspace === 'planner'
-        ? { kind: 'planner', projectId }
-        : activeWorkspace === 'finance'
-          ? { kind: 'finance', projectId }
-          : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() }
-    );
-  }, [auth, getProjectState, setWorkspace]);
-
-  const handleSwitchTemplate = useCallback(async (templateId: string) => {
-    createEmptyChartAfterActivationRef.current = false;
-    queuedPromptRef.current = null;
-    await openTemplate(templateId);
-    setWorkspace({ kind: 'template', templateId });
-  }, [openTemplate, setWorkspace]);
-
-  useEffect(() => {
-    if (!projectOpenIntentId || !auth.isAuthenticated) {
-      return;
-    }
-
-    if (auth.project?.id === projectOpenIntentId) {
-      const activeWorkspace = getProjectState(projectOpenIntentId)?.activeWorkspace ?? 'project';
-      setWorkspace(
-        activeWorkspace === 'planner'
-          ? { kind: 'planner', projectId: projectOpenIntentId }
-          : activeWorkspace === 'finance'
-            ? { kind: 'finance', projectId: projectOpenIntentId }
-            : { kind: 'project', projectId: projectOpenIntentId, chatOpen: readProjectChatOpenState() },
-      );
-      onConsumeProjectOpenIntent();
-      return;
-    }
-
-    void handleSwitchProject(projectOpenIntentId)
-      .finally(() => {
-        onConsumeProjectOpenIntent();
-      });
-  }, [
-    auth.isAuthenticated,
-    auth.project?.id,
-    getProjectState,
-    handleSwitchProject,
-    onConsumeProjectOpenIntent,
-    projectOpenIntentId,
-    setWorkspace,
-  ]);
-
-  useEffect(() => {
-    if (!auth.isAuthenticated || hasShareToken || !auth.project?.id || !plannerCorrectionTarget) {
-      return;
-    }
-
-    const { projectId, taskId } = plannerCorrectionTarget;
-    if (!projectId || !taskId) {
-      consumePlannerCorrectionTarget();
-      return;
-    }
-
-    if (workspace.kind === 'project' && workspace.projectId === projectId) {
-      return;
-    }
-
-    if (auth.project.id !== projectId) {
-      void handleSwitchProject(projectId).catch(() => {
-        consumePlannerCorrectionTarget();
-      });
-      return;
-    }
-
-    setWorkspace({ kind: 'project', projectId, chatOpen: readProjectChatOpenState() });
-  }, [
-    auth.isAuthenticated,
-    auth.project?.id,
-    consumePlannerCorrectionTarget,
-    handleSwitchProject,
-    hasShareToken,
-    plannerCorrectionTarget,
-    setWorkspace,
-    workspace,
-  ]);
-
-  const handleCreateProject = useCallback(async (groupId?: string) => {
-    if (hasShareToken) {
-      window.location.assign(window.location.origin);
-      return;
-    }
-
-    if (auth.isAuthenticated) {
-      openCreateProjectModal({ groupId: groupId ?? auth.project?.groupId });
-      return;
-    }
-    queuedPromptRef.current = null;
-    setPendingPostAuthAction(null);
-    onLoginRequired();
-  }, [
-    auth.isAuthenticated,
-    auth.project,
-    hasShareToken,
-    onLoginRequired,
-    openCreateProjectModal,
-    setPendingPostAuthAction,
-  ]);
-
-  const handleCreateProjectGroup = useCallback(async (name: string) => {
-    if (isProjectGroupsLockedOnCurrentPlan) {
-      await openLimitModal(projectGroupsLockedDenial);
-      return;
-    }
-    await auth.createProjectGroup(name);
-  }, [auth, isProjectGroupsLockedOnCurrentPlan, openLimitModal, projectGroupsLockedDenial]);
-
-  const handleRenameProjectGroup = useCallback(async (groupId: string, name: string) => {
-    await auth.updateProjectGroup(groupId, { name });
-  }, [auth]);
-
-  const handleDeleteProjectGroup = useCallback(async (groupId: string) => {
-    const currentProjectId = auth.project?.id ?? null;
-    const currentProjectGroupId = auth.project?.groupId ?? null;
-    await auth.deleteProjectGroup(groupId);
-    await auth.refreshProjects();
-    await fetchUsage();
-
-    if (currentProjectId && currentProjectGroupId === groupId) {
-      const nextProject = useAuthStore.getState().project;
-      if (nextProject && nextProject.id !== currentProjectId) {
-        await auth.switchProject(nextProject.id);
-      }
-    }
-  }, [auth, fetchUsage]);
 
   const handleCreateCurrentProjectTemplate = useCallback(() => {
     if (isScheduleReadOnlyProject) {
@@ -1222,64 +626,6 @@ export function WorkspaceShell({
     }
   }, [auth.project?.id, insertTemplateIntoProject, isScheduleReadOnlyProject, visibleTasks, workspace.kind]);
 
-  const handleArchiveProject = useCallback(async (projectId: string) => {
-    if (effectiveArchiveDenial) {
-      await openLimitModal(effectiveArchiveDenial);
-      return false;
-    }
-    await auth.archiveProject(projectId);
-    await fetchUsage();
-    await auth.refreshProjects();
-    return true;
-  }, [auth, effectiveArchiveDenial, fetchUsage, openLimitModal]);
-
-  const handleArchiveAndCreateProject = useCallback(async (
-    name: string,
-    groupId: string | undefined,
-    options: PendingProjectCreation = {},
-  ): Promise<{ id: string; name: string } | null> => {
-    const archiveProjectId = options.archiveProjectId;
-    if (!archiveProjectId) {
-      return createProjectAndActivate(name, { ...options, groupId }, { skipProjectLimitRecovery: true });
-    }
-
-    try {
-      const archived = await handleArchiveProject(archiveProjectId);
-      if (!archived) {
-        return null;
-      }
-    } catch (error) {
-      if (error instanceof Error && error.message === 'ARCHIVE_FEATURE_LOCKED') {
-        return null;
-      }
-      throw error;
-    }
-
-    return createProjectAndActivate(
-      name,
-      {
-        ...options,
-        groupId,
-        archiveProjectId: undefined,
-        archiveProjectName: undefined,
-      },
-      { skipProjectLimitRecovery: true },
-    );
-  }, [createProjectAndActivate, handleArchiveProject]);
-
-  const handleRestoreProject = useCallback(async (projectId: string) => {
-    try {
-      await auth.restoreProject(projectId);
-      await fetchUsage();
-      await auth.refreshProjects();
-    } catch (error) {
-      if (error instanceof Error && error.message === 'RESTORE_PROJECT_LIMIT_REACHED') {
-        return;
-      }
-      throw error;
-    }
-  }, [auth, fetchUsage]);
-
   const handleOpenResourcePool = useCallback(async () => {
     if (!canViewResources) {
       return;
@@ -1341,17 +687,6 @@ export function WorkspaceShell({
       setProjectState(workspace.projectId, { activeWorkspace: 'finance' });
     }
   }, [setProjectState, workspace]);
-
-  const handleDeleteProject = useCallback(async (projectId: string) => {
-    const project = auth.projects.find((item) => item.id === projectId);
-    if (!project) {
-      throw new Error('Project not found');
-    }
-    setDeleteProjectDraft({
-      id: projectId,
-      name: project.name,
-    });
-  }, [auth]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
     if (!auth.isAuthenticated) {
@@ -1481,58 +816,6 @@ export function WorkspaceShell({
       })
       .catch(() => {});
   }, [activeGenerationJob, activeWorkspaceProjectId, auth.accessToken, auth.isAuthenticated, hasShareToken, preparedIntentChatProjectId, workspace.kind]);
-
-  useEffect(() => {
-    if (!auth.isAuthenticated || workspace.kind !== 'project') {
-      return;
-    }
-    const promptToSend = queuedPromptRef.current;
-    if (!promptToSend) {
-      return;
-    }
-    queuedPromptRef.current = null;
-    void submitChatMessage(promptToSend).catch((submitError) => {
-      useChatStore.getState().setError(String(submitError));
-    });
-  }, [auth.isAuthenticated, submitChatMessage, workspace.kind]);
-
-  useEffect(() => {
-    if (!auth.isAuthenticated || hasShareToken || pendingPostAuthAction?.kind !== 'send_prompt') {
-      return;
-    }
-
-    if (pendingPostAuthAction.sourceProjectState === 'non_empty') {
-      openCreateProjectModal({ firstPrompt: pendingPostAuthAction.prompt });
-      setPendingPostAuthAction(null);
-      return;
-    }
-
-    if (proactiveChatDenial || !auth.project || workspace.kind !== 'project') {
-      if (proactiveChatDenial) {
-        void openLimitModal(proactiveChatDenial);
-        setPendingPostAuthAction(null);
-      }
-      return;
-    }
-
-    queuedPromptRef.current = pendingPostAuthAction.prompt;
-    resetWorkspacePresentation();
-    useChatStore.getState().addMessage({ role: 'user', content: pendingPostAuthAction.prompt });
-    setWorkspace({ kind: 'project', projectId: auth.project.id, chatOpen: true });
-    setPendingPostAuthAction(null);
-  }, [
-    auth.isAuthenticated,
-    auth.project,
-    hasShareToken,
-    openCreateProjectModal,
-    openLimitModal,
-    pendingPostAuthAction,
-    proactiveChatDenial,
-    resetWorkspacePresentation,
-    setPendingPostAuthAction,
-    setWorkspace,
-    workspace.kind,
-  ]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken || workspace.kind !== 'project' || !activeWorkspaceProjectId) {
@@ -2087,14 +1370,10 @@ export function WorkspaceShell({
       <DeleteProjectModal
         projectName={deleteProjectDraft.name}
         onDelete={async () => {
-          await auth.deleteProject(deleteProjectDraft.id);
-          await auth.refreshProjects();
-          await fetchUsage();
+          await handleConfirmDeleteProject();
           setLimitModal(null);
-          useAuthStore.setState({ constraintDenial: null });
-          setDeleteProjectDraft(null);
         }}
-        onClose={() => setDeleteProjectDraft(null)}
+        onClose={hideDeleteProjectModal}
       />
     )}
 
@@ -2111,25 +1390,9 @@ export function WorkspaceShell({
             ? 'Создать проект'
             : undefined}
         archiveProjectName={effectivePendingProjectCreation?.archiveProjectName}
-        onSave={async (name, groupId) => {
-          const nextOptions = { ...(effectivePendingProjectCreation ?? {}), groupId };
-          if (effectivePendingProjectCreation?.archiveProjectId) {
-            return handleArchiveAndCreateProject(name, groupId, nextOptions);
-          }
-          return createProjectAndActivate(name, nextOptions);
-        }}
-        onCreateGroup={async (name) => {
-          if (isProjectGroupsLockedOnCurrentPlan) {
-            await openLimitModal(projectGroupsLockedDenial);
-            return null;
-          }
-          return auth.createProjectGroup(name);
-        }}
-        onClose={() => {
-          setPendingProjectCreation(null);
-          setPendingPostAuthAction(null);
-          setShowCreateProjectModal(false);
-        }}
+        onSave={handleCreateProjectModalSave}
+        onCreateGroup={handleCreateProjectModalGroup}
+        onClose={closeCreateProjectModal}
       />
     )}
 

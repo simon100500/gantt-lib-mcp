@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 
 const appSource = readFileSync(resolve(process.cwd(), 'packages/web/src/App.tsx'), 'utf8');
 const workspaceSource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/workspace/WorkspaceShell.tsx'), 'utf8');
+const lifecycleControllerSource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/project-lifecycle/controller.ts'), 'utf8');
 const generationSource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/project-generation/useProjectGenerationController.ts'), 'utf8');
 const routeControllerSource = readFileSync(resolve(process.cwd(), 'packages/web/src/app/useAppRouteController.ts'), 'utf8');
 const appRoutesSource = readFileSync(resolve(process.cwd(), 'packages/web/src/app/appRoutes.ts'), 'utf8');
@@ -17,28 +18,28 @@ const deleteProjectGroupModalSource = readFileSync(resolve(process.cwd(), 'packa
 describe('landing prompt flow orchestration', () => {
   it('reads project intent text and routes it into the standard web flow', () => {
     assert.match(
-      workspaceSource,
+      lifecycleControllerSource,
       /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}`,\s*\{\s*headers:/,
     );
     assert.doesNotMatch(
-      workspaceSource,
+      lifecycleControllerSource,
       /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}\/launch`/,
     );
     assert.doesNotMatch(
-      workspaceSource,
+      lifecycleControllerSource,
       /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}\/create-project`/,
     );
     assert.match(
-      workspaceSource,
+      lifecycleControllerSource,
       /await auth\.refreshProjects\(\);\s*const latestAuthState = useAuthStore\.getState\(\);\s*const latestProjects = latestAuthState\.projects;\s*const latestCurrentProject = latestAuthState\.project;\s*const reusableEmptyProject = latestProjects\.find\(\(project\) => project\.status === 'active' && project\.taskCount === 0\) \?\? null;/,
     );
-    assert.doesNotMatch(workspaceSource, /handleSend\(prompt\)/);
+    assert.doesNotMatch(lifecycleControllerSource, /handleSend\(prompt\)/);
   });
 
   it('opens the regular create-project flow when the current project is not reusable', () => {
-    assert.match(workspaceSource, /openCreateProjectModal\(\{\s*firstPrompt: prompt,/);
-    assert.match(workspaceSource, /initialProjectName: 'Новый проект'/);
-    assert.match(workspaceSource, /groupId: latestCurrentProject\?\.groupId \?\? latestAuthState\.projectGroups\[0\]\?\.id,/);
+    assert.match(lifecycleControllerSource, /openCreateProjectModal\(\{\s*firstPrompt: prompt,/);
+    assert.match(lifecycleControllerSource, /initialProjectName: 'Новый проект'/);
+    assert.match(lifecycleControllerSource, /groupId: latestCurrentProject\?\.groupId \?\? latestAuthState\.projectGroups\[0\]\?\.id,/);
   });
 
   it('passes landing prompt into the start screen input instead of chat autostart', () => {
@@ -62,8 +63,8 @@ describe('project creation recovery', () => {
   });
 
   it('keeps replacement quiet inside the regular create modal before the archive limit', () => {
-    assert.match(workspaceSource, /if \(\s*constraintDenial\.code === 'PROJECT_LIMIT_REACHED' && activeProjectToReplace[\s\S]*if \(canSilentlyReplaceOnFree\) \{/);
-    assert.match(workspaceSource, /setPendingProjectCreation\(\(current\) => \(\{[\s\S]*initialProjectName: current\?\.initialProjectName \?\? 'Новый проект',/);
+    assert.match(lifecycleControllerSource, /if \(\s*constraintDenial\.code === 'PROJECT_LIMIT_REACHED' && activeProjectToReplace[\s\S]*if \(canSilentlyReplaceOnFree\) \{/);
+    assert.match(lifecycleControllerSource, /type: 'open_create_project_modal'[\s\S]*initialProjectName: state\.pendingProjectCreation\?\.initialProjectName \?\? 'Новый проект',/);
     assert.match(workspaceSource, /archiveProjectName=\{effectivePendingProjectCreation\?\.archiveProjectName\}/);
   });
 
@@ -75,9 +76,9 @@ describe('project creation recovery', () => {
   });
 
   it('silently archives the active project before creation and shows paywall only after the limit', () => {
-    assert.match(workspaceSource, /await fetchUsage\(\);\s*await auth\.refreshProjects\(\);/);
-    assert.match(workspaceSource, /!behavior\.skipProjectLimitRecovery[\s\S]*body\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree[\s\S]*await openLimitModal\(body\);/);
-    assert.match(workspaceSource, /!behavior\.skipProjectLimitRecovery[\s\S]*denial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree[\s\S]*await openLimitModal\(denial\);/);
+    assert.match(lifecycleControllerSource, /await fetchUsage\(\);\s*await auth\.refreshProjects\(\);/);
+    assert.match(lifecycleControllerSource, /!behavior\.skipProjectLimitRecovery[\s\S]*body\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree[\s\S]*await openLimitModal\(body\);/);
+    assert.match(lifecycleControllerSource, /!behavior\.skipProjectLimitRecovery[\s\S]*denial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree[\s\S]*await openLimitModal\(denial\);/);
   });
 
   it('decides modal vs paywall from local project state before the create request fails', () => {
@@ -92,9 +93,10 @@ describe('project creation recovery', () => {
   it('refreshes projects after archive and restore so limits update without reload', () => {
     assert.match(billingPolicySource, /export function buildLocalArchiveLimitDenial\(/);
     assert.match(billingPolicySource, /const isFreePlan = plan === 'free';/);
-    assert.match(workspaceSource, /const handleArchiveProject = useCallback\(async \(projectId: string\) => \{[\s\S]*if \(effectiveArchiveDenial\) \{[\s\S]*await openLimitModal\(effectiveArchiveDenial\);[\s\S]*return false;[\s\S]*await auth\.archiveProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*return true;/);
-    assert.match(workspaceSource, /const handleRestoreProject = useCallback\(async \(projectId: string\) => \{[\s\S]*await auth\.restoreProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*if \(error instanceof Error && error\.message === 'RESTORE_PROJECT_LIMIT_REACHED'\)/);
-    assert.match(workspaceSource, /<DeleteProjectModal[\s\S]*await auth\.deleteProject\(deleteProjectDraft\.id\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*await fetchUsage\(\);[\s\S]*setLimitModal\(null\);/);
+    assert.match(lifecycleControllerSource, /const handleArchiveProject = useCallback\(async \(projectId: string\) => \{[\s\S]*if \(effectiveArchiveDenial\) \{[\s\S]*await openLimitModal\(effectiveArchiveDenial\);[\s\S]*return false;[\s\S]*await auth\.archiveProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*return true;/);
+    assert.match(lifecycleControllerSource, /const handleRestoreProject = useCallback\(async \(projectId: string\) => \{[\s\S]*await auth\.restoreProject\(projectId\);[\s\S]*await fetchUsage\(\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*if \(error instanceof Error && error\.message === 'RESTORE_PROJECT_LIMIT_REACHED'\)/);
+    assert.match(lifecycleControllerSource, /const handleConfirmDeleteProject = useCallback\(async \(\) => \{[\s\S]*await auth\.deleteProject\(state\.deleteProjectDraft\.id\);[\s\S]*await auth\.refreshProjects\(\);[\s\S]*await fetchUsage\(\);/);
+    assert.match(workspaceSource, /<DeleteProjectModal[\s\S]*await handleConfirmDeleteProject\(\);[\s\S]*setLimitModal\(null\);/);
   });
 
   it('shows a dedicated paywall explanation when archived project restore hits the active-project limit', () => {
@@ -108,14 +110,14 @@ describe('project creation recovery', () => {
   });
 
   it('prefills the start screen instead of auto-sending the first prompt to chat after project creation', () => {
-    assert.match(workspaceSource, /await auth\.switchProject\(newProject\.id\);[\s\S]*setStartScreenPrefillPrompt\(options\.firstPrompt \?\? null\);/);
-    assert.doesNotMatch(workspaceSource, /useChatStore\.getState\(\)\.addMessage\(\{ role: 'user', content: options\.firstPrompt \}\)/);
-    assert.match(workspaceSource, /chatOpen: options\.createEmptyChart[\s\S]*: false,/);
+    assert.match(lifecycleControllerSource, /await auth\.switchProject\(newProject\.id\);[\s\S]*dispatch\(\{ type: 'set_start_screen_prefill_prompt', prompt: options\.firstPrompt \?\? null \}\);/);
+    assert.doesNotMatch(lifecycleControllerSource, /useChatStore\.getState\(\)\.addMessage\(\{ role: 'user', content: options\.firstPrompt \}\)/);
+    assert.match(lifecycleControllerSource, /chatOpen: false,/);
   });
 
   it('uses the standard send path from an empty project workspace after intent prefill', () => {
-    assert.match(workspaceSource, /if \(workspace\.kind === 'project'\) \{[\s\S]*const result = handleSend\(text\);[\s\S]*return result;/);
-    assert.match(workspaceSource, /if \(!auth\.project\) \{[\s\S]*openCreateProjectModal\(\{ firstPrompt: text \}\);/);
+    assert.match(lifecycleControllerSource, /if \(workspace\.kind === 'project'\) \{[\s\S]*const result = handleSend\(text\);[\s\S]*return result;/);
+    assert.match(lifecycleControllerSource, /if \(!auth\.project\) \{[\s\S]*openCreateProjectModal\(\{ firstPrompt: text \}\);/);
   });
 });
 
@@ -142,6 +144,6 @@ describe('project groups visibility', () => {
     assert.match(workspaceSource, /&& billingStatus\.billingState !== 'trial_active'/);
     assert.match(workspaceSource, /code: 'PROJECT_GROUPS_FEATURE_LOCKED'/);
     assert.match(workspaceSource, /onCreateProjectGroup=\{handleCreateProjectGroup\}/);
-    assert.match(workspaceSource, /onCreateGroup=\{async \(name\) => \{/);
+    assert.match(workspaceSource, /onCreateGroup=\{handleCreateProjectModalGroup\}/);
   });
 });
