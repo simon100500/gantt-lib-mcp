@@ -335,9 +335,28 @@ export class AuthService {
   async updateProject(
     projectId: string,
     userId: string,
-    updates: { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null; groupId?: string },
+    updates: {
+      name?: string;
+      ganttDayMode?: 'business' | 'calendar';
+      calendarId?: string | null;
+      groupId?: string;
+      timelineMarkers?: Array<{ date: string; color?: string | null; name?: string | null }>;
+      hiddenTaskListColumnsDefault?: string[] | null;
+    },
   ): Promise<Project | null> {
     return projectService.update(projectId, userId, updates);
+  }
+
+  async getProjectViewPreference(projectId: string, userId: string) {
+    return projectService.getViewPreference(projectId, userId);
+  }
+
+  async upsertProjectViewPreference(projectId: string, userId: string, hiddenTaskListColumns: string[]) {
+    return projectService.upsertViewPreference(projectId, userId, hiddenTaskListColumns);
+  }
+
+  async clearProjectViewPreference(projectId: string, userId: string) {
+    await projectService.clearViewPreference(projectId, userId);
   }
 
   async archiveProject(projectId: string, userId: string): Promise<ArchiveProjectResult> {

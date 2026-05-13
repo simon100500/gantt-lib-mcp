@@ -632,6 +632,7 @@ export interface Project {
   calendarId: string | null;
   calendarDays: EffectiveCalendarDay[];
   timelineMarkers: TimelineMarker[];
+  hiddenTaskListColumnsDefault: string[] | null;
   archivedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -680,6 +681,15 @@ export interface ShareLink {
   includedTaskIds: string[];
   revokedAt: string | null;
   createdAt: string;
+}
+
+export interface ProjectViewPreference {
+  id: string;
+  userId: string;
+  projectId: string;
+  hiddenTaskListColumns: string[] | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Session {

@@ -114,6 +114,7 @@ interface ToolbarProps {
   hiddenTaskListColumns?: string[] | null;
   onToggleTaskListColumn?: (columnId: string) => void;
   onSetAllTaskListColumnsVisible?: (visible: boolean) => void;
+  onResetTaskListColumnOverride?: (() => void) | null;
   onOpenProjectSettings?: (() => void) | null;
   canOpenProjectSettings?: boolean;
   templateSelectionActive?: boolean;
@@ -394,6 +395,7 @@ export function Toolbar({
   hiddenTaskListColumns = [],
   onToggleTaskListColumn,
   onSetAllTaskListColumnsVisible,
+  onResetTaskListColumnOverride,
   onOpenProjectSettings = null,
   canOpenProjectSettings = false,
   templateSelectionActive = false,
@@ -634,6 +636,18 @@ export function Toolbar({
                       indeterminate={someTaskListColumnsVisible && !allTaskListColumnsVisible}
                     />
                     <span className="text-sm">Выбрать всё</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      onResetTaskListColumnOverride?.();
+                    }}
+                    disabled={!onResetTaskListColumnOverride}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    <span className="text-sm">Как в настройках проекта</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                   {taskListColumnRows.map((column) => {
@@ -1125,6 +1139,18 @@ export function Toolbar({
                     onRefreshBaselines,
                   })}
 
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      onResetTaskListColumnOverride?.();
+                    }}
+                    disabled={!onResetTaskListColumnOverride}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    <span className="text-sm">Как в настройках проекта</span>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                 </>
               )}

@@ -53,6 +53,7 @@ export interface AuthProject {
   calendarId?: string | null;
   calendarDays?: CalendarDay[];
   timelineMarkers?: TimelineMarker[];
+  hiddenTaskListColumnsDefault?: string[] | null;
   taskCount?: number;
   archivedAt?: string | null;
   deletedAt?: string | null;
@@ -94,7 +95,14 @@ export interface UseAuthResult extends AuthState {
   removeProjectGroupMember(groupId: string, userId: string): Promise<void>;
   updateProjectGroupInvite(groupId: string, inviteId: string, payload: { role?: 'editor' | 'viewer'; permissions: ProjectSectionPermissions }): Promise<void>;
   removeProjectGroupInvite(groupId: string, inviteId: string): Promise<void>;
-  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null; groupId?: string; timelineMarkers?: TimelineMarker[] }): Promise<AuthProject>;
+  updateProject(projectId: string, updates: {
+    name?: string;
+    ganttDayMode?: GanttDayMode;
+    calendarId?: string | null;
+    groupId?: string;
+    timelineMarkers?: TimelineMarker[];
+    hiddenTaskListColumnsDefault?: string[] | null;
+  }): Promise<AuthProject>;
   archiveProject(projectId: string): Promise<AuthProject>;
   restoreProject(projectId: string): Promise<AuthProject>;
   deleteProject(projectId: string): Promise<void>;
@@ -209,6 +217,7 @@ function readStoredAuth(): StoredAuthState | null {
       accessRole: value.accessRole ?? 'owner',
       permissions: value.permissions ?? { schedule: 'edit', resources: 'edit', finance: 'edit' },
       timelineMarkers: Array.isArray(value.timelineMarkers) ? value.timelineMarkers : [],
+      hiddenTaskListColumnsDefault: Array.isArray(value.hiddenTaskListColumnsDefault) ? value.hiddenTaskListColumnsDefault : null,
       archivedAt: value.archivedAt ?? null,
       deletedAt: value.deletedAt ?? null,
     });

@@ -236,6 +236,7 @@ function getSubmitButton(container: HTMLElement): HTMLButtonElement | null {
 function buildProjectLoadResponse(overrides?: Partial<ProjectLoadResponse>): ProjectLoadResponse {
   return {
     version: 2,
+    userHiddenTaskListColumnsOverride: null,
     project: {
       id: 'project-1',
       name: 'Project 1',
@@ -243,6 +244,7 @@ function buildProjectLoadResponse(overrides?: Partial<ProjectLoadResponse>): Pro
       ganttDayMode: 'calendar',
       calendarId: null,
       calendarDays: [],
+      hiddenTaskListColumnsDefault: null,
       taskCount: tasks.length,
       archivedAt: null,
       deletedAt: null,
@@ -318,6 +320,7 @@ beforeEach(() => {
       ganttDayMode: 'calendar',
       calendarId: null,
       calendarDays: [],
+      hiddenTaskListColumnsDefault: null,
       taskCount: tasks.length,
       archivedAt: null,
       deletedAt: null,
@@ -331,6 +334,7 @@ beforeEach(() => {
         ganttDayMode: 'calendar',
         calendarId: null,
         calendarDays: [],
+        hiddenTaskListColumnsDefault: null,
         taskCount: tasks.length,
         archivedAt: null,
         deletedAt: null,

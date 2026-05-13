@@ -1,7 +1,19 @@
 import { useEffect, useState } from 'react';
-import { CalendarClock, Plus, Settings2, Trash2 } from 'lucide-react';
+import { CalendarClock, ChevronDown, Columns3Cog, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react';
 
 import type { TimelineMarker } from '../types.ts';
+import type { ToolbarTaskListColumnRow } from './layout/Toolbar.tsx';
+import { DEFAULT_HIDDEN_TASK_LIST_COLUMNS } from '../lib/taskListColumns.ts';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu.tsx';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover.tsx';
 
 type EditableTimelineMarker = {
@@ -49,18 +61,22 @@ interface ProjectSettingsModalProps {
   projectName: string;
   ganttDayMode: 'business' | 'calendar';
   timelineMarkers: TimelineMarker[];
+  hiddenTaskListColumnsDefault: string[] | null;
+  taskListColumnRows: ToolbarTaskListColumnRow[];
   pending: boolean;
   error: string | null;
   canEditProjectName: boolean;
   canShiftProject: boolean;
   canEditGanttDayMode: boolean;
   canEditTimelineMarkers: boolean;
+  canEditTaskListColumnsDefault: boolean;
   onClose: () => void;
   onOpenProjectShift: () => void;
   onSave: (settings: {
     projectName: string;
     ganttDayMode: 'business' | 'calendar';
     timelineMarkers: TimelineMarker[];
+    hiddenTaskListColumnsDefault: string[] | null;
   }) => void | Promise<void>;
 }
 
@@ -68,12 +84,15 @@ export function ProjectSettingsModal({
   projectName,
   ganttDayMode,
   timelineMarkers,
+  hiddenTaskListColumnsDefault,
+  taskListColumnRows,
   pending,
   error,
   canEditProjectName,
   canShiftProject,
   canEditGanttDayMode,
   canEditTimelineMarkers,
+  canEditTaskListColumnsDefault,
   onClose,
   onOpenProjectShift,
   onSave,
@@ -81,6 +100,7 @@ export function ProjectSettingsModal({
   const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [draftMode, setDraftMode] = useState<'business' | 'calendar'>(ganttDayMode);
   const [draftMarkers, setDraftMarkers] = useState<EditableTimelineMarker[]>([]);
+  const [draftHiddenTaskListColumnsDefault, setDraftHiddenTaskListColumnsDefault] = useState<string[] | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,8 +111,9 @@ export function ProjectSettingsModal({
         ? timelineMarkers.map((marker, index) => createEditableMarker(marker, index))
         : [],
     );
+    setDraftHiddenTaskListColumnsDefault(hiddenTaskListColumnsDefault);
     setLocalError(null);
-  }, [ganttDayMode, projectName, timelineMarkers]);
+  }, [ganttDayMode, hiddenTaskListColumnsDefault, projectName, timelineMarkers]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -129,8 +150,11 @@ export function ProjectSettingsModal({
       projectName: normalizedProjectName,
       ganttDayMode: draftMode,
       timelineMarkers: normalizedMarkers,
+      hiddenTaskListColumnsDefault: draftHiddenTaskListColumnsDefault,
     });
   };
+
+  const currentDayModeLabel = draftMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни';
 
   return (
     <div
@@ -142,7 +166,7 @@ export function ProjectSettingsModal({
       }}
     >
       <form
-        className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.2)]"
+        className="flex max-h-[calc(100dvh-3rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.2)]"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => { void handleSubmit(event); }}
       >
@@ -167,92 +191,191 @@ export function ProjectSettingsModal({
           </button>
         </div>
 
-        <div className="space-y-6 px-5 py-5">
+        <div className="space-y-6 overflow-y-auto px-5 py-5 overscroll-contain">
           {(error || localError) && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {localError ?? error}
             </div>
           )}
 
-          <label className="block space-y-1.5">
-            <span className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">Название проекта</span>
-            <input
-              type="text"
-              value={draftProjectName}
-              onChange={(event) => setDraftProjectName(event.target.value)}
-              disabled={!canEditProjectName || pending}
-              placeholder="Название проекта"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-100"
-            />
-          </label>
-
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Режим дней</h3>
-              <p className="text-sm text-slate-500">Переключает расчёт задач между календарными и рабочими днями.</p>
+          <section className="space-y-4">
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 sm:max-w-[55%]">
+                <h3 className="text-sm font-semibold text-slate-900">Название проекта</h3>
+                <p className="text-sm text-slate-500">Используется в заголовке, списке проектов и экспортах.</p>
+              </div>
+              <div className="w-full sm:w-[320px]">
+                <input
+                  type="text"
+                  value={draftProjectName}
+                  onChange={(event) => setDraftProjectName(event.target.value)}
+                  disabled={!canEditProjectName || pending}
+                  placeholder="Название проекта"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-100"
+                />
+              </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {([
-                { value: 'calendar', label: 'Календарные дни', description: 'Учитываются все дни подряд.' },
-                { value: 'business', label: 'Рабочие дни', description: 'Выходные исключаются из расчёта.' },
-              ] as const).map((option) => (
-                <label
-                  key={option.value}
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${draftMode === option.value ? 'border-primary bg-primary/5' : 'border-slate-200 bg-white'} ${!canEditGanttDayMode ? 'cursor-not-allowed opacity-60' : ''}`}
-                >
-                  <input
-                    type="radio"
-                    name="project-day-mode"
-                    value={option.value}
-                    checked={draftMode === option.value}
-                    onChange={() => setDraftMode(option.value)}
-                    disabled={!canEditGanttDayMode || pending}
-                    className="mt-1 h-4 w-4 accent-primary"
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-slate-900">{option.label}</span>
-                    <span className="block text-sm text-slate-500">{option.description}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </section>
 
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 sm:max-w-[55%]">
+                <h3 className="text-sm font-semibold text-slate-900">Режим дней</h3>
+                <p className="text-sm text-slate-500">Переключает расчёт задач между календарными и рабочими днями.</p>
+              </div>
+              <div className="sm:w-auto">
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={!canEditGanttDayMode || pending}
+                      className="inline-flex h-10 min-w-[220px] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <span>{currentDayModeLabel}</span>
+                      <ChevronDown className="h-4 w-4 text-slate-400" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                    <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+                      Режим дней
+                    </DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={draftMode}
+                      onValueChange={(value) => {
+                        if (value === 'calendar' || value === 'business') {
+                          setDraftMode(value);
+                        }
+                      }}
+                    >
+                      <DropdownMenuRadioItem value="calendar">Календарные дни</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="business">Рабочие дни</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 sm:max-w-[55%]">
                 <h3 className="text-sm font-semibold text-slate-900">Сдвиг проекта</h3>
                 <p className="text-sm text-slate-500">Открывает календарь и переносит весь график на одинаковое число дней.</p>
               </div>
-              <button
-                type="button"
-                onClick={onOpenProjectShift}
-                disabled={!canShiftProject || pending}
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <CalendarClock className="h-4 w-4" />
-                Сдвинуть проект...
-              </button>
+              <div className="sm:w-auto">
+                <button
+                  type="button"
+                  onClick={onOpenProjectShift}
+                  disabled={!canShiftProject || pending}
+                  className="inline-flex h-10 min-w-[220px] items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  Сдвинуть проект...
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 sm:max-w-[55%]">
+                <h3 className="text-sm font-semibold text-slate-900">Столбцы по умолчанию</h3>
+                <p className="text-sm text-slate-500">Эти столбцы увидят команда и пользователи по ссылке, если у них нет личного набора.</p>
+              </div>
+              <div className="sm:w-auto">
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={!canEditTaskListColumnsDefault || pending}
+                      className="inline-flex h-10 min-w-[220px] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Columns3Cog className="h-4 w-4" />
+                        Настроить
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-slate-400" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+                    <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+                      Столбцы проекта
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        setDraftHiddenTaskListColumnsDefault([]);
+                      }}
+                      className="flex cursor-pointer items-center gap-2 rounded-xl"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={(draftHiddenTaskListColumnsDefault ?? []).length === 0}
+                        ref={(element) => {
+                          if (element) {
+                            element.indeterminate = draftHiddenTaskListColumnsDefault !== null && (draftHiddenTaskListColumnsDefault ?? []).length > 0;
+                          }
+                        }}
+                        readOnly
+                        className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                      />
+                      Выбрать всё
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        setDraftHiddenTaskListColumnsDefault([...DEFAULT_HIDDEN_TASK_LIST_COLUMNS]);
+                      }}
+                      className="flex cursor-pointer items-center gap-2 rounded-xl"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Сбросить вид по умолчанию
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                    {taskListColumnRows.map((column) => {
+                      const checked = !(draftHiddenTaskListColumnsDefault ?? []).includes(column.id);
+                      return (
+                        <DropdownMenuItem
+                          key={column.id}
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            setDraftHiddenTaskListColumnsDefault((current) => (
+                              (current ?? []).includes(column.id)
+                                ? (current ?? []).filter((entry) => entry !== column.id)
+                                : [...(current ?? []), column.id]
+                            ));
+                          }}
+                          className="flex cursor-pointer items-center gap-2 rounded-xl"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            readOnly
+                            className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                          />
+                          {column.label}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </section>
 
           <section className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 sm:max-w-[55%]">
                 <h3 className="text-sm font-semibold text-slate-900">Маркеры на шкале</h3>
                 <p className="text-sm text-slate-500">Можно добавить несколько вертикальных линий с датой и необязательным названием.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraftMarkers((current) => [...current, createEditableMarker(undefined, current.length)]);
-                }}
-                disabled={!canEditTimelineMarkers || pending}
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Plus className="h-4 w-4" />
-                Добавить маркер
-              </button>
+              <div className="sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraftMarkers((current) => [...current, createEditableMarker(undefined, current.length)]);
+                  }}
+                  disabled={!canEditTimelineMarkers || pending}
+                  className="inline-flex h-10 min-w-[220px] items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Plus className="h-4 w-4" />
+                  Добавить маркер
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3">

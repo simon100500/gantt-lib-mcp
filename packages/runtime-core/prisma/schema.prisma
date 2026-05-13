@@ -234,6 +234,7 @@ model User {
   groupMemberships ProjectGroupMember[] @relation("ProjectGroupMemberUser")
   invitedGroupMembers ProjectGroupMember[] @relation("ProjectGroupMemberInviter")
   sentGroupInvites ProjectGroupInvite[] @relation("ProjectGroupInviteInviter")
+  projectViewPreferences ProjectViewPreference[]
 
   @@map("users")
 }
@@ -313,6 +314,7 @@ model Project {
   ganttDayMode GanttDayMode @default(business) @map("gantt_day_mode")
   calendarId   String?      @map("calendar_id")
   timelineMarkers Json?     @map("timeline_markers")
+  hiddenTaskListColumnsDefault Json? @map("hidden_task_list_columns_default")
   archivedAt   DateTime?    @map("archived_at")
   deletedAt    DateTime?    @map("deleted_at")
   version      Int         @default(0)
@@ -340,12 +342,29 @@ model Project {
   financeSettings TaskFinanceSetting[]
   fundingEvents   TaskFundingEvent[]
   progressEntries TaskProgressEntry[]
+  viewPreferences ProjectViewPreference[]
 
   @@map("projects")
   @@index([userId])
   @@index([groupId])
   @@index([userId, status])
   @@index([calendarId])
+}
+
+model ProjectViewPreference {
+  id                    String   @id @default(uuid())
+  userId                String   @map("user_id")
+  projectId             String   @map("project_id")
+  hiddenTaskListColumns Json?    @map("hidden_task_list_columns")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_view_preferences")
+  @@unique([userId, projectId])
+  @@index([projectId])
 }
 
 model MutationGroup {
