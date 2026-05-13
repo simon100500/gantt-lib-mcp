@@ -238,6 +238,7 @@ beforeEach(() => {
       ganttDayMode: 'calendar',
       calendarId: null,
       calendarDays: [],
+      hiddenTaskListColumnsDefault: null,
       taskCount: 1,
       archivedAt: null,
       deletedAt: null,

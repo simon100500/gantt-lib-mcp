@@ -16,7 +16,7 @@ import { createAssignedResourcesColumn } from './AssignedResourcesColumn.tsx';
 import { createTaskStatusColumn } from './TaskStatusColumn.tsx';
 import { createTaskWorkColumns } from './TaskWorkColumns.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
-import { Toolbar, type ToolbarTaskListColumnRow } from '../layout/Toolbar.tsx';
+import { Toolbar } from '../layout/Toolbar.tsx';
 import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
 import { useFilterPersistence } from '../../hooks/useFilterPersistence';
@@ -27,6 +27,7 @@ import { useProjectStore } from '../../stores/useProjectStore.ts';
 import type { SubscriptionStatus, UsageStatus } from '../../stores/useBillingStore.ts';
 import { useHistoryViewerStore } from '../../stores/useHistoryViewerStore.ts';
 import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
+import { useAuthStore } from '../../stores/useAuthStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { cn } from '../../lib/utils.ts';
@@ -35,6 +36,13 @@ import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
 import type { BaselineSnapshotResponse, ProjectResource, ResourceScope, ResourceType, TaskAssignmentRecord, TaskProgressEntry } from '../../lib/apiTypes.ts';
 import type { ConstraintDenialPayload } from '../../lib/constraintUi.ts';
 import type { CalendarDay, Task, TimelineMarker, ValidationResult } from '../../types.ts';
+import {
+  KNOWN_TASK_LIST_COLUMN_IDS,
+  normalizeHiddenTaskListColumns,
+  resolveHiddenTaskListColumns,
+  TASK_LIST_COLUMN_ROWS,
+  TASK_LIST_COLUMN_WIDTHS,
+} from '../../lib/taskListColumns.ts';
 import {
   collectDescendantLeafIds,
   getAssignableResources,
@@ -444,35 +452,6 @@ function buildTaskChatMention(task: Task): string {
   return `[task:${task.id}|${task.name}]\n\n`;
 }
 
-const TASK_LIST_COLUMN_ROWS: ToolbarTaskListColumnRow[] = [
-  { id: 'number', label: 'Номер' },
-  { id: 'name', label: 'Имя' },
-  { id: 'startDate', label: 'Начало' },
-  { id: 'endDate', label: 'Окончание' },
-  { id: 'duration', label: 'Длительность' },
-  { id: 'work-volume', label: 'Объём' },
-  { id: 'completed-volume', label: 'Выполнено' },
-  { id: 'status', label: 'Статус' },
-  { id: 'progress', label: '% выполнения' },
-  { id: 'assigned-resources', label: 'Ресурсы' },
-  { id: 'dependencies', label: 'Связи' },
-];
-
-const KNOWN_TASK_LIST_COLUMN_IDS = new Set(TASK_LIST_COLUMN_ROWS.map((column) => column.id));
-const TASK_LIST_COLUMN_WIDTHS: TaskListColumnWidthMap = {
-  number: 40,
-  name: 200,
-  startDate: 90,
-  endDate: 90,
-  duration: 60,
-  progress: 50,
-  'work-volume': 96,
-  'completed-volume': 82,
-  status: 108,
-  dependencies: 128,
-  'assigned-resources': 132,
-};
-
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
@@ -597,6 +576,7 @@ export function ProjectWorkspace({
   const consumePlannerCorrectionTarget = useUIStore((state) => state.consumePlannerCorrectionTarget);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
+  const authProject = useAuthStore((state) => state.project);
 
   const projectId = workspace.kind === 'project'
     ? workspace.projectId
@@ -605,6 +585,7 @@ export function ProjectWorkspace({
       : workspace.kind === 'template'
         ? `template:${workspace.templateId}`
         : null;
+  const persistedProjectId = workspace.kind === 'project' ? workspace.projectId : null;
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
 
   useFilterPersistence();
@@ -660,18 +641,27 @@ export function ProjectWorkspace({
     if (!projectId) return false;
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
+  const projectHiddenTaskListColumnsDefault = useMemo<TaskListColumnId[]>(() => {
+    const configuredDefaults = hasShareToken
+      ? sharedProject?.hiddenTaskListColumnsDefault
+      : (persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault : null);
+    return resolveHiddenTaskListColumns({
+      userOverrideInitialized: false,
+      projectHiddenTaskListColumnsDefault: configuredDefaults,
+    });
+  }, [authProject, hasShareToken, persistedProjectId, sharedProject]);
   const hiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => {
     if (!projectId) {
-      return [];
+      return [...projectHiddenTaskListColumnsDefault];
     }
 
-    const storedColumns = projectStates[projectId]?.hiddenTaskListColumns;
-    if (!Array.isArray(storedColumns)) {
-      return [];
+    const projectState = projectStates[projectId];
+    if (!projectState?.taskListColumnsInitialized) {
+      return [...projectHiddenTaskListColumnsDefault];
     }
 
-    return storedColumns.filter((columnId): columnId is TaskListColumnId => KNOWN_TASK_LIST_COLUMN_IDS.has(columnId));
-  }, [projectId, projectStates]);
+    return normalizeHiddenTaskListColumns(projectState.hiddenTaskListColumns);
+  }, [projectHiddenTaskListColumnsDefault, projectId, projectStates]);
   const taskListColumnWidths = useMemo<TaskListColumnWidthMap>(() => {
     if (!projectId) {
       return TASK_LIST_COLUMN_WIDTHS;
@@ -793,13 +783,55 @@ export function ProjectWorkspace({
     if (!projectId || effectiveReadOnly) return;
     setProjectState(projectId, { disableTaskDrag: enabled });
   }, [effectiveReadOnly, projectId, setProjectState]);
+  const persistTaskListColumnOverride = useCallback(async (hiddenColumns: string[] | null) => {
+    if (!persistedProjectId || !isAuthenticated) {
+      return;
+    }
+
+    const getLatestAccessToken = () => localStorage.getItem('gantt_access_token') || accessToken;
+    let token = getLatestAccessToken();
+    if (!token) {
+      return;
+    }
+
+    const doRequest = async (requestToken: string) => fetch(
+      `/api/projects/${persistedProjectId}/task-list-columns/override`,
+      {
+        method: hiddenColumns === null ? 'DELETE' : 'PUT',
+        headers: hiddenColumns === null
+          ? { Authorization: `Bearer ${requestToken}` }
+          : {
+              Authorization: `Bearer ${requestToken}`,
+              'Content-Type': 'application/json',
+            },
+        body: hiddenColumns === null ? undefined : JSON.stringify({ hiddenTaskListColumns: hiddenColumns }),
+      },
+    );
+
+    let response = await doRequest(token);
+    if (response.status === 401) {
+      const refreshedToken = await useAuthStore.getState().refreshAccessToken();
+      if (!refreshedToken) {
+        return;
+      }
+      token = localStorage.getItem('gantt_access_token') || refreshedToken;
+      response = await doRequest(token);
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+  }, [accessToken, isAuthenticated, persistedProjectId]);
 
   const handleToggleTaskListColumn = useCallback((columnId: string) => {
     if (!projectId || !KNOWN_TASK_LIST_COLUMN_IDS.has(columnId)) {
       return;
     }
 
-    const currentColumns = getProjectState(projectId)?.hiddenTaskListColumns ?? [];
+    const currentProjectState = getProjectState(projectId);
+    const currentColumns = currentProjectState?.taskListColumnsInitialized
+      ? (currentProjectState.hiddenTaskListColumns ?? [])
+      : hiddenTaskListColumns;
     const currentSet = new Set(Array.isArray(currentColumns) ? currentColumns : []);
     if (currentSet.has(columnId)) {
       currentSet.delete(columnId);
@@ -808,19 +840,36 @@ export function ProjectWorkspace({
     }
 
     setProjectState(projectId, {
+      taskListColumnsInitialized: true,
       hiddenTaskListColumns: Array.from(currentSet).filter((id) => KNOWN_TASK_LIST_COLUMN_IDS.has(id)),
     });
-  }, [getProjectState, projectId, setProjectState]);
+    void persistTaskListColumnOverride(Array.from(currentSet).filter((id) => KNOWN_TASK_LIST_COLUMN_IDS.has(id)));
+  }, [getProjectState, hiddenTaskListColumns, persistTaskListColumnOverride, projectId, setProjectState]);
 
   const handleSetAllTaskListColumnsVisible = useCallback((visible: boolean) => {
     if (!projectId) {
       return;
     }
 
+    const nextHiddenColumns = visible ? [] : TASK_LIST_COLUMN_ROWS.map((column) => column.id);
     setProjectState(projectId, {
-      hiddenTaskListColumns: visible ? [] : TASK_LIST_COLUMN_ROWS.map((column) => column.id),
+      taskListColumnsInitialized: true,
+      hiddenTaskListColumns: nextHiddenColumns,
     });
-  }, [projectId, setProjectState]);
+    void persistTaskListColumnOverride(nextHiddenColumns);
+  }, [persistTaskListColumnOverride, projectId, setProjectState]);
+
+  const handleResetTaskListColumnOverride = useCallback(() => {
+    if (!projectId) {
+      return;
+    }
+
+    setProjectState(projectId, {
+      taskListColumnsInitialized: false,
+      hiddenTaskListColumns: [],
+    });
+    void persistTaskListColumnOverride(null);
+  }, [persistTaskListColumnOverride, projectId, setProjectState]);
 
   const handleTaskDateChangeModeChange = useCallback((mode: TaskDateChangeMode) => {
     if (!projectId) {
@@ -2056,15 +2105,22 @@ export function ProjectWorkspace({
     projectName: string;
     ganttDayMode: 'business' | 'calendar';
     timelineMarkers: TimelineMarker[];
+    hiddenTaskListColumnsDefault: string[] | null;
   }) => {
+    const currentProjectHiddenTaskListColumnsDefault = persistedProjectId && authProject?.id === persistedProjectId
+      ? (authProject.hiddenTaskListColumnsDefault ?? null)
+      : null;
     const projectNameChanged = Boolean(onProjectNameChange)
       && settings.projectName.trim() !== projectName.trim();
     const markersChanged = Boolean(onTimelineMarkersChange)
       && JSON.stringify(settings.timelineMarkers) !== JSON.stringify(timelineMarkers);
     const dayModeChanged = Boolean(onGanttDayModeChange)
       && settings.ganttDayMode !== ganttDayMode;
+    const hiddenColumnsDefaultChanged = persistedProjectId
+      && authProject?.id === persistedProjectId
+      && JSON.stringify(settings.hiddenTaskListColumnsDefault ?? null) !== JSON.stringify(currentProjectHiddenTaskListColumnsDefault);
 
-    if (!projectNameChanged && !markersChanged && !dayModeChanged) {
+    if (!projectNameChanged && !markersChanged && !dayModeChanged && !hiddenColumnsDefaultChanged) {
       setProjectSettingsOpen(false);
       setProjectSettingsError(null);
       return;
@@ -2082,6 +2138,11 @@ export function ProjectWorkspace({
       if (markersChanged && onTimelineMarkersChange) {
         await onTimelineMarkersChange(settings.timelineMarkers);
       }
+      if (hiddenColumnsDefaultChanged && persistedProjectId && authProject?.id === persistedProjectId) {
+        await useAuthStore.getState().updateProject(persistedProjectId, {
+          hiddenTaskListColumnsDefault: settings.hiddenTaskListColumnsDefault,
+        });
+      }
       setProjectSettingsOpen(false);
     } catch (error) {
       console.error('[ProjectWorkspace] Failed to save project settings:', error);
@@ -2089,7 +2150,7 @@ export function ProjectWorkspace({
     } finally {
       setProjectSettingsPending(false);
     }
-  }, [ganttDayMode, onGanttDayModeChange, onProjectNameChange, onTimelineMarkersChange, projectName, setProjectSettingsOpen, timelineMarkers]);
+  }, [authProject, ganttDayMode, onGanttDayModeChange, onProjectNameChange, onTimelineMarkersChange, persistedProjectId, projectName, setProjectSettingsOpen, timelineMarkers]);
 
   useEffect(() => {
     // Block history shortcuts while preview/read-only modes are active.
@@ -2383,6 +2444,7 @@ export function ProjectWorkspace({
           hiddenTaskListColumns={hiddenTaskListColumns}
           onToggleTaskListColumn={handleToggleTaskListColumn}
           onSetAllTaskListColumnsVisible={handleSetAllTaskListColumnsVisible}
+          onResetTaskListColumnOverride={handleResetTaskListColumnOverride}
           onOpenProjectSettings={handleOpenProjectSettings}
           canOpenProjectSettings={canOpenProjectSettings}
           showStructureControls={true}
@@ -2425,12 +2487,15 @@ export function ProjectWorkspace({
                 projectName={projectName}
                 ganttDayMode={displayGanttDayMode ?? ganttDayMode}
                 timelineMarkers={timelineMarkers}
+                hiddenTaskListColumnsDefault={persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault ?? null : null}
+                taskListColumnRows={TASK_LIST_COLUMN_ROWS}
                 pending={projectSettingsPending}
                 error={projectSettingsError}
                 canEditProjectName={Boolean(onProjectNameChange) && !effectiveReadOnly}
                 canShiftProject={canShiftProject}
                 canEditGanttDayMode={Boolean(onGanttDayModeChange) && !effectiveReadOnly}
                 canEditTimelineMarkers={Boolean(onTimelineMarkersChange) && !effectiveReadOnly}
+                canEditTaskListColumnsDefault={!effectiveReadOnly && Boolean(persistedProjectId && authProject?.id === persistedProjectId)}
                 onClose={() => {
                   if (!projectSettingsPending) {
                     setProjectSettingsOpen(false);

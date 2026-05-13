@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { CalendarClock, Plus, Settings2, Trash2 } from 'lucide-react';
 
 import type { TimelineMarker } from '../types.ts';
+import type { ToolbarTaskListColumnRow } from './layout/Toolbar.tsx';
+import { DEFAULT_HIDDEN_TASK_LIST_COLUMNS } from '../lib/taskListColumns.ts';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover.tsx';
 
 type EditableTimelineMarker = {
@@ -49,18 +51,22 @@ interface ProjectSettingsModalProps {
   projectName: string;
   ganttDayMode: 'business' | 'calendar';
   timelineMarkers: TimelineMarker[];
+  hiddenTaskListColumnsDefault: string[] | null;
+  taskListColumnRows: ToolbarTaskListColumnRow[];
   pending: boolean;
   error: string | null;
   canEditProjectName: boolean;
   canShiftProject: boolean;
   canEditGanttDayMode: boolean;
   canEditTimelineMarkers: boolean;
+  canEditTaskListColumnsDefault: boolean;
   onClose: () => void;
   onOpenProjectShift: () => void;
   onSave: (settings: {
     projectName: string;
     ganttDayMode: 'business' | 'calendar';
     timelineMarkers: TimelineMarker[];
+    hiddenTaskListColumnsDefault: string[] | null;
   }) => void | Promise<void>;
 }
 
@@ -68,12 +74,15 @@ export function ProjectSettingsModal({
   projectName,
   ganttDayMode,
   timelineMarkers,
+  hiddenTaskListColumnsDefault,
+  taskListColumnRows,
   pending,
   error,
   canEditProjectName,
   canShiftProject,
   canEditGanttDayMode,
   canEditTimelineMarkers,
+  canEditTaskListColumnsDefault,
   onClose,
   onOpenProjectShift,
   onSave,
@@ -81,6 +90,7 @@ export function ProjectSettingsModal({
   const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [draftMode, setDraftMode] = useState<'business' | 'calendar'>(ganttDayMode);
   const [draftMarkers, setDraftMarkers] = useState<EditableTimelineMarker[]>([]);
+  const [draftHiddenTaskListColumnsDefault, setDraftHiddenTaskListColumnsDefault] = useState<string[] | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,8 +101,9 @@ export function ProjectSettingsModal({
         ? timelineMarkers.map((marker, index) => createEditableMarker(marker, index))
         : [],
     );
+    setDraftHiddenTaskListColumnsDefault(hiddenTaskListColumnsDefault);
     setLocalError(null);
-  }, [ganttDayMode, projectName, timelineMarkers]);
+  }, [ganttDayMode, hiddenTaskListColumnsDefault, projectName, timelineMarkers]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -129,6 +140,7 @@ export function ProjectSettingsModal({
       projectName: normalizedProjectName,
       ganttDayMode: draftMode,
       timelineMarkers: normalizedMarkers,
+      hiddenTaskListColumnsDefault: draftHiddenTaskListColumnsDefault,
     });
   };
 
@@ -233,6 +245,67 @@ export function ProjectSettingsModal({
                 <CalendarClock className="h-4 w-4" />
                 Сдвинуть проект...
               </button>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Столбцы по умолчанию</h3>
+                <p className="text-sm text-slate-500">Эти столбцы увидят команда и пользователи по ссылке, если у них нет личного набора.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDraftHiddenTaskListColumnsDefault([])}
+                  disabled={!canEditTaskListColumnsDefault || pending}
+                  className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Показать все
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftHiddenTaskListColumnsDefault([...DEFAULT_HIDDEN_TASK_LIST_COLUMNS])}
+                  disabled={!canEditTaskListColumnsDefault || pending}
+                  className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Рекомендованные
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftHiddenTaskListColumnsDefault(null)}
+                  disabled={!canEditTaskListColumnsDefault || pending}
+                  className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Системный fallback
+                </button>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {taskListColumnRows.map((column) => {
+                const checked = !(draftHiddenTaskListColumnsDefault ?? []).includes(column.id);
+                return (
+                  <label
+                    key={column.id}
+                    className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${checked ? 'border-primary/20 bg-primary/5' : 'border-slate-200 bg-white'} ${!canEditTaskListColumnsDefault ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setDraftHiddenTaskListColumnsDefault((current) => (
+                          (current ?? []).includes(column.id)
+                            ? (current ?? []).filter((entry) => entry !== column.id)
+                            : [...(current ?? []), column.id]
+                        ));
+                      }}
+                      disabled={!canEditTaskListColumnsDefault || pending}
+                      className="h-4 w-4 shrink-0 accent-primary"
+                    />
+                    <span className="text-sm text-slate-800">{column.label}</span>
+                  </label>
+                );
+              })}
             </div>
           </section>
 

@@ -6,7 +6,7 @@
  */
 
 import { Prisma, getPrisma } from '../prisma.js';
-import type { Project, ProjectGroup, ProjectSectionPermissions, TimelineMarker } from '../types.js';
+import type { Project, ProjectGroup, ProjectSectionPermissions, ProjectViewPreference, TimelineMarker } from '../types.js';
 import { randomUUID } from 'node:crypto';
 import { ensureSystemDefaultCalendar, loadEffectiveCalendarDays } from './projectScheduleOptions.js';
 
@@ -21,6 +21,34 @@ export type RestoreProjectResult =
 export type SoftDeleteProjectResult =
   | { ok: true }
   | { ok: false; reason: 'not_found' };
+
+const KNOWN_TASK_LIST_COLUMN_IDS = new Set([
+  'number',
+  'name',
+  'startDate',
+  'endDate',
+  'duration',
+  'work-volume',
+  'completed-volume',
+  'status',
+  'progress',
+  'assigned-resources',
+  'dependencies',
+]);
+
+function normalizeHiddenTaskListColumns(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (typeof entry !== 'string') {
+      return [];
+    }
+    const normalized = entry.trim();
+    return normalized && KNOWN_TASK_LIST_COLUMN_IDS.has(normalized) ? [normalized] : [];
+  });
+}
 
 export class ProjectService {
   private prisma = getPrisma();
@@ -245,9 +273,25 @@ export class ProjectService {
       calendarId: project.calendarId ?? null,
       calendarDays,
       timelineMarkers: this.normalizeTimelineMarkers(project.timelineMarkers),
+      hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault == null
+        ? null
+        : normalizeHiddenTaskListColumns(project.hiddenTaskListColumnsDefault),
       archivedAt: project.archivedAt ? project.archivedAt.toISOString() : null,
       deletedAt: project.deletedAt ? project.deletedAt.toISOString() : null,
       createdAt: project.createdAt.toISOString(),
+    };
+  }
+
+  private viewPreferenceToDomain(preference: any): ProjectViewPreference {
+    return {
+      id: preference.id,
+      userId: preference.userId,
+      projectId: preference.projectId,
+      hiddenTaskListColumns: preference.hiddenTaskListColumns == null
+        ? null
+        : normalizeHiddenTaskListColumns(preference.hiddenTaskListColumns),
+      createdAt: preference.createdAt.toISOString(),
+      updatedAt: preference.updatedAt.toISOString(),
     };
   }
 
@@ -365,7 +409,14 @@ export class ProjectService {
   async update(
     projectId: string,
     userId: string,
-    updates: { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null; groupId?: string; timelineMarkers?: TimelineMarker[] },
+    updates: {
+      name?: string;
+      ganttDayMode?: 'business' | 'calendar';
+      calendarId?: string | null;
+      groupId?: string;
+      timelineMarkers?: TimelineMarker[];
+      hiddenTaskListColumnsDefault?: string[] | null;
+    },
   ): Promise<Project | null> {
     // Verify ownership
     const existing = await this.prisma.project.findUnique({
@@ -416,6 +467,13 @@ export class ProjectService {
       ...(updates.groupId !== undefined ? { groupId: resolvedGroupId } : {}),
       ...(updates.timelineMarkers !== undefined
         ? { timelineMarkers: updates.timelineMarkers as unknown as Prisma.InputJsonValue }
+        : {}),
+      ...(updates.hiddenTaskListColumnsDefault !== undefined
+        ? {
+            hiddenTaskListColumnsDefault: updates.hiddenTaskListColumnsDefault === null
+              ? Prisma.DbNull
+              : normalizeHiddenTaskListColumns(updates.hiddenTaskListColumnsDefault) as unknown as Prisma.InputJsonValue,
+          }
         : {}),
     };
 
@@ -502,6 +560,50 @@ export class ProjectService {
     });
 
     return { ok: true };
+  }
+
+  async getViewPreference(projectId: string, userId: string): Promise<ProjectViewPreference | null> {
+    const preference = await this.prisma.projectViewPreference.findUnique({
+      where: {
+        userId_projectId: {
+          userId,
+          projectId,
+        },
+      },
+    });
+
+    return preference ? this.viewPreferenceToDomain(preference) : null;
+  }
+
+  async upsertViewPreference(projectId: string, userId: string, hiddenTaskListColumns: string[]): Promise<ProjectViewPreference> {
+    const preference = await this.prisma.projectViewPreference.upsert({
+      where: {
+        userId_projectId: {
+          userId,
+          projectId,
+        },
+      },
+      update: {
+        hiddenTaskListColumns: normalizeHiddenTaskListColumns(hiddenTaskListColumns) as unknown as Prisma.InputJsonValue,
+      },
+      create: {
+        id: randomUUID(),
+        userId,
+        projectId,
+        hiddenTaskListColumns: normalizeHiddenTaskListColumns(hiddenTaskListColumns) as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return this.viewPreferenceToDomain(preference);
+  }
+
+  async clearViewPreference(projectId: string, userId: string): Promise<void> {
+    await this.prisma.projectViewPreference.deleteMany({
+      where: {
+        userId,
+        projectId,
+      },
+    });
   }
 }
 

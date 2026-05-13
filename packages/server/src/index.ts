@@ -20,6 +20,7 @@ import {
   taskService,
   assignmentService,
   resourceService,
+  projectService,
 } from '@gantt/mcp/services';
 import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import { authService } from '@gantt/mcp/services';
@@ -101,7 +102,7 @@ await registerWorkProgressRoutes(fastify);
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function buildProjectLoadResponse(projectId: string, requesterEmail?: string): Promise<{
+async function buildProjectLoadResponse(projectId: string, requesterEmail?: string, requesterUserId?: string): Promise<{
   version: number;
   snapshot: ProjectSnapshot & {
     resources: Array<{
@@ -141,10 +142,12 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     calendarId: string | null;
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
     timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
+    hiddenTaskListColumnsDefault: string[] | null;
     taskCount: number;
     archivedAt: string | null;
     deletedAt: string | null;
   };
+  userHiddenTaskListColumnsOverride: string[] | null;
 }> {
   const { getPrisma } = await import('@gantt/runtime-core/prisma');
   const prisma = getPrisma();
@@ -191,6 +194,9 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     }),
     getProjectCalendarSettings(prisma, projectId),
   ]);
+  const viewPreference = requesterUserId
+    ? await projectService.getViewPreference(projectId, requesterUserId)
+    : null;
 
   return {
     version: projectVersion?.version ?? 0,
@@ -202,10 +208,12 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
       calendarId: projectCalendar.calendarId,
       calendarDays: projectCalendar.calendarDays,
       timelineMarkers: accessibleProject?.timelineMarkers ?? [],
+      hiddenTaskListColumnsDefault: accessibleProject?.hiddenTaskListColumnsDefault ?? null,
       taskCount: tasks.length,
       archivedAt: accessibleProject?.archivedAt ?? null,
       deletedAt: accessibleProject?.deletedAt ?? null,
     },
+    userHiddenTaskListColumnsOverride: viewPreference?.hiddenTaskListColumns ?? null,
     snapshot: {
       tasks: tasks.map((task: any) => ({
         id: task.id,
@@ -273,7 +281,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
 fastify.get('/api/health', async () => ({ status: 'ok' }));
 
 fastify.get('/api/project', { preHandler: [authMiddleware] }, async (req, reply) => {
-  const project = await buildProjectLoadResponse(req.user!.projectId, req.user!.email);
+  const project = await buildProjectLoadResponse(req.user!.projectId, req.user!.email, req.user!.userId);
   return reply.send(project);
 });
 

@@ -41,13 +41,14 @@ import type { AuthSuccessResponse, ProjectLoadResponse, TemplatePublicationDetai
 import { PLAN_LABELS, type PlanId } from './lib/billing.ts';
 import { normalizeConstraintDenialPayload, type ConstraintDenialPayload, type ConstraintLimitKey } from './lib/constraintUi.ts';
 import { collectTaskSubtreeIds } from './lib/shareLinkSelection.ts';
+import { TASK_LIST_COLUMN_ROWS } from './lib/taskListColumns.ts';
 import { useAuthStore } from './stores/useAuthStore.ts';
 import { getExportAccessLevel, useBillingStore, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useTemplateStore } from './stores/useTemplateStore.ts';
 import { readProjectChatOpenState, useUIStore } from './stores/useUIStore.ts';
-import { DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS, useProjectUIStore } from './stores/useProjectUIStore.ts';
+import { useProjectUIStore } from './stores/useProjectUIStore.ts';
 import { useProjectStore } from './stores/useProjectStore.ts';
 import { normalizeTasks, type ProjectSectionPermissions, type Task, type TimelineMarker, type ValidationResult } from './types.ts';
 
@@ -3309,22 +3310,6 @@ function WorkspaceApp({
     && Boolean(auth.project)
     && !hasShareToken;
 
-  useEffect(() => {
-    if (workspace.kind !== 'project' || !currentProjectIsEmpty) {
-      return;
-    }
-
-    const currentProjectState = getProjectState(workspace.projectId);
-    if (currentProjectState?.taskListColumnsInitialized) {
-      return;
-    }
-
-    setProjectState(workspace.projectId, {
-      taskListColumnsInitialized: true,
-      hiddenTaskListColumns: [...DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS],
-    });
-  }, [currentProjectIsEmpty, getProjectState, setProjectState, workspace]);
-
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'template'
@@ -3336,6 +3321,7 @@ function WorkspaceApp({
     projectName: string;
     ganttDayMode: 'business' | 'calendar';
     timelineMarkers: TimelineMarker[];
+    hiddenTaskListColumnsDefault: string[] | null;
   }) => {
     if (!auth.project || isScheduleReadOnlyProject) {
       return;
@@ -3344,8 +3330,10 @@ function WorkspaceApp({
     const projectNameChanged = settings.projectName.trim() !== (auth.project.name ?? '').trim();
     const markersChanged = JSON.stringify(settings.timelineMarkers) !== JSON.stringify(auth.project.timelineMarkers ?? []);
     const dayModeChanged = settings.ganttDayMode !== effectiveAuthGanttDayMode;
+    const hiddenColumnsDefaultChanged = JSON.stringify(settings.hiddenTaskListColumnsDefault ?? null)
+      !== JSON.stringify(auth.project.hiddenTaskListColumnsDefault ?? null);
 
-    if (!projectNameChanged && !markersChanged && !dayModeChanged) {
+    if (!projectNameChanged && !markersChanged && !dayModeChanged && !hiddenColumnsDefaultChanged) {
       setShowProjectSettingsModal(false);
       setStartScreenProjectSettingsError(null);
       return;
@@ -3362,6 +3350,9 @@ function WorkspaceApp({
       }
       if (markersChanged) {
         await auth.updateProject(auth.project.id, { timelineMarkers: settings.timelineMarkers });
+      }
+      if (hiddenColumnsDefaultChanged) {
+        await auth.updateProject(auth.project.id, { hiddenTaskListColumnsDefault: settings.hiddenTaskListColumnsDefault });
       }
       setShowProjectSettingsModal(false);
     } catch (error) {
@@ -3941,12 +3932,15 @@ function WorkspaceApp({
         projectName={auth.project.name ?? 'Мой проект'}
         ganttDayMode={effectiveAuthGanttDayMode}
         timelineMarkers={auth.project.timelineMarkers ?? []}
+        hiddenTaskListColumnsDefault={auth.project.hiddenTaskListColumnsDefault ?? null}
+        taskListColumnRows={TASK_LIST_COLUMN_ROWS}
         pending={startScreenProjectSettingsPending}
         error={startScreenProjectSettingsError}
         canEditProjectName={!isScheduleReadOnlyProject}
         canShiftProject={false}
         canEditGanttDayMode={!isScheduleReadOnlyProject}
         canEditTimelineMarkers={!isScheduleReadOnlyProject}
+        canEditTaskListColumnsDefault={!isScheduleReadOnlyProject}
         onClose={() => {
           if (!startScreenProjectSettingsPending) {
             setShowProjectSettingsModal(false);

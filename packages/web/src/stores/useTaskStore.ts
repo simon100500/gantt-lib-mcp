@@ -4,6 +4,7 @@ import { normalizeTasks, type CalendarDay, type ProjectDependency, type Task, ty
 import type { ProjectLoadResponse } from '../lib/apiTypes.ts';
 import { useAuthStore } from './useAuthStore.ts';
 import { useProjectStore } from './useProjectStore.ts';
+import { useProjectUIStore } from './useProjectUIStore.ts';
 
 const LOCAL_STORAGE_KEY = 'gantt_local_tasks';
 const PROJECT_NAME_KEY = 'gantt_project_name';
@@ -16,6 +17,7 @@ export interface SharedTaskProject {
   calendarId?: string | null;
   calendarDays?: CalendarDay[];
   timelineMarkers?: TimelineMarker[];
+  hiddenTaskListColumnsDefault?: string[] | null;
 }
 
 export type TaskSource = 'local' | 'auth' | 'shared';
@@ -336,6 +338,10 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
           projects: updatedProjects,
         });
       }
+      useProjectUIStore.getState().setProjectState(project.project.id, {
+        taskListColumnsInitialized: project.userHiddenTaskListColumnsOverride !== null,
+        hiddenTaskListColumns: project.userHiddenTaskListColumnsOverride ?? [],
+      });
 
       set({
         tasks: normalizedTasks,

@@ -38,15 +38,16 @@ type AuthSuccessResponse = {
   accessToken: string;
   refreshToken: string;
   user: { id: string; email: string };
-    project: {
-      id: string;
-      name: string;
-      groupId: string;
+  project: {
+    id: string;
+    name: string;
+    groupId: string;
     status: 'active' | 'archived' | 'deleted';
     ganttDayMode: 'business' | 'calendar';
     calendarId: string | null;
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
     timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
+    hiddenTaskListColumnsDefault: string[] | null;
     archivedAt: string | null;
     deletedAt: string | null;
   };
@@ -95,6 +96,21 @@ function normalizeTimelineMarkersInput(value: unknown): Array<{ date: string; co
   return normalized;
 }
 
+function normalizeHiddenTaskListColumnsInput(value: unknown): string[] | null {
+  if (value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value.flatMap((entry) => (
+    typeof entry === 'string' && entry.trim()
+      ? [entry.trim()]
+      : []
+  ));
+}
+
 async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse> {
   const user = await authService.findOrCreateUser(email);
   await authService.syncPendingGroupInvitesForUser(user.id, user.email);
@@ -126,6 +142,7 @@ async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse
       calendarId: project.calendarId,
       calendarDays: project.calendarDays,
       timelineMarkers: project.timelineMarkers,
+      hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
       archivedAt: project.archivedAt,
       deletedAt: project.deletedAt,
     },
@@ -562,6 +579,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
         timelineMarkers: project.timelineMarkers,
+        hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
         archivedAt: project.archivedAt,
         deletedAt: project.deletedAt,
       },
@@ -637,6 +655,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
         timelineMarkers: project.timelineMarkers,
+        hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
         archivedAt: project.archivedAt,
         deletedAt: project.deletedAt,
       },
@@ -727,6 +746,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
         timelineMarkers: project.timelineMarkers,
+        hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
         archivedAt: project.archivedAt,
         deletedAt: project.deletedAt,
       },
@@ -772,6 +792,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
         timelineMarkers: project.timelineMarkers,
+        hiddenTaskListColumnsDefault: project.hiddenTaskListColumnsDefault,
       },
       tasks,
     });
@@ -1285,6 +1306,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       calendarId?: string | null;
       groupId?: string;
       timelineMarkers?: Array<{ date: string; color?: string | null; name?: string | null }>;
+      hiddenTaskListColumnsDefault?: string[] | null;
     };
     const name = body.name?.trim();
     const groupId = body.groupId?.trim();
@@ -1292,9 +1314,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const hasGanttDayMode = body.ganttDayMode === 'business' || body.ganttDayMode === 'calendar';
     const hasGroupId = body.groupId !== undefined;
     const hasTimelineMarkers = body.timelineMarkers !== undefined;
+    const hasHiddenTaskListColumnsDefault = body.hiddenTaskListColumnsDefault !== undefined;
     const normalizedTimelineMarkers = hasTimelineMarkers ? normalizeTimelineMarkersInput(body.timelineMarkers) : undefined;
+    const normalizedHiddenTaskListColumnsDefault = hasHiddenTaskListColumnsDefault
+      ? (body.hiddenTaskListColumnsDefault === null ? null : normalizeHiddenTaskListColumnsInput(body.hiddenTaskListColumnsDefault))
+      : undefined;
 
-    if (!hasName && body.ganttDayMode === undefined && body.calendarId === undefined && !hasGroupId && !hasTimelineMarkers) {
+    if (!hasName && body.ganttDayMode === undefined && body.calendarId === undefined && !hasGroupId && !hasTimelineMarkers && !hasHiddenTaskListColumnsDefault) {
       return reply.status(400).send({ error: 'No project fields provided' });
     }
 
@@ -1312,6 +1338,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     if (hasTimelineMarkers && normalizedTimelineMarkers === null) {
       return reply.status(400).send({ error: 'Invalid timelineMarkers' });
+    }
+
+    if (hasHiddenTaskListColumnsDefault && normalizedHiddenTaskListColumnsDefault === null) {
+      return reply.status(400).send({ error: 'Invalid hiddenTaskListColumnsDefault' });
     }
 
     const access = await resolveProjectAccess(req.user!.userId, projectId);
@@ -1334,6 +1364,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       ...(body.calendarId !== undefined ? { calendarId: body.calendarId } : {}),
       ...(hasGroupId ? { groupId } : {}),
       ...(hasTimelineMarkers ? { timelineMarkers: normalizedTimelineMarkers ?? [] } : {}),
+      ...(hasHiddenTaskListColumnsDefault ? { hiddenTaskListColumnsDefault: normalizedHiddenTaskListColumnsDefault } : {}),
     });
 
     if (!project) {
@@ -1341,6 +1372,45 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     return reply.send({ project });
+  });
+
+  fastify.get<{ Params: { id: string } }>('/api/projects/:id/task-list-columns/override', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const preference = await authService.getProjectViewPreference(projectId, req.user!.userId);
+    return reply.send({ hiddenTaskListColumns: preference?.hiddenTaskListColumns ?? null });
+  });
+
+  fastify.put<{ Params: { id: string } }>('/api/projects/:id/task-list-columns/override', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const body = req.body as { hiddenTaskListColumns?: string[] };
+    const normalizedHiddenTaskListColumns = normalizeHiddenTaskListColumnsInput(body.hiddenTaskListColumns);
+    if (normalizedHiddenTaskListColumns === null) {
+      return reply.status(400).send({ error: 'Invalid hiddenTaskListColumns' });
+    }
+
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const preference = await authService.upsertProjectViewPreference(projectId, req.user!.userId, normalizedHiddenTaskListColumns);
+    return reply.send({ hiddenTaskListColumns: preference.hiddenTaskListColumns ?? [] });
+  });
+
+  fastify.delete<{ Params: { id: string } }>('/api/projects/:id/task-list-columns/override', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    await authService.clearProjectViewPreference(projectId, req.user!.userId);
+    return reply.send({ hiddenTaskListColumns: null });
   });
 
   fastify.post<{ Params: { id: string } }>('/api/projects/:id/archive', { preHandler: [authMiddleware] }, async (req, reply) => {

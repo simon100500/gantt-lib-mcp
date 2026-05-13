@@ -74,6 +74,7 @@ export interface AuthSuccessResponse {
 export interface ProjectLoadResponse {
   version: number;
   project: AuthProject;
+  userHiddenTaskListColumnsOverride: string[] | null;
   snapshot: {
     tasks: Task[];
     dependencies: ProjectDependency[];
