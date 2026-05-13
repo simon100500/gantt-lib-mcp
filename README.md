@@ -44,6 +44,12 @@ Build and push the exact image used by CapRover:
 npm run deploy:image
 ```
 
+Build, push, and immediately deploy to CapRover using values from `.env`:
+
+```bash
+npm run deploy:caprover
+```
+
 By default it pushes:
 - `reg.volobuev.keenetic.pro/getgantt:latest`
 - `reg.volobuev.keenetic.pro/getgantt:sha-<git-sha>`
@@ -52,6 +58,13 @@ You can override the target with environment variables:
 
 ```bash
 DEPLOY_REGISTRY=reg.example.com DEPLOY_IMAGE=myapp npm run deploy:image
+```
+
+PowerShell wrapper:
+
+```powershell
+.\deploy-image.ps1
+.\deploy-image.ps1 -CapRover
 ```
 
 ### Environment Variables
