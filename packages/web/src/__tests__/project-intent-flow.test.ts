@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 
 const appSource = readFileSync(resolve(process.cwd(), 'packages/web/src/App.tsx'), 'utf8');
 const workspaceSource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/workspace/WorkspaceShell.tsx'), 'utf8');
+const lifecycleApiSource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/project-lifecycle/api.ts'), 'utf8');
 const lifecycleControllerSource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/project-lifecycle/controller.ts'), 'utf8');
 const generationSource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/project-generation/useProjectGenerationController.ts'), 'utf8');
 const routeControllerSource = readFileSync(resolve(process.cwd(), 'packages/web/src/app/useAppRouteController.ts'), 'utf8');
@@ -18,16 +19,16 @@ const deleteProjectGroupModalSource = readFileSync(resolve(process.cwd(), 'packa
 describe('landing prompt flow orchestration', () => {
   it('reads project intent text and routes it into the standard web flow', () => {
     assert.match(
-      lifecycleControllerSource,
-      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}`,\s*\{\s*headers:/,
+      lifecycleApiSource,
+      /fetchWithLifecycleTokenRetry\(\s*auth,\s*`\/api\/project-intents\/\$\{encodeURIComponent\(projectIntentId\)\}`,/,
     );
     assert.doesNotMatch(
-      lifecycleControllerSource,
-      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}\/launch`/,
+      lifecycleApiSource,
+      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectIntentId\)\}\/launch`/,
     );
     assert.doesNotMatch(
-      lifecycleControllerSource,
-      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectCreationIntentId\)\}\/create-project`/,
+      lifecycleApiSource,
+      /fetch\(`\/api\/project-intents\/\$\{encodeURIComponent\(projectIntentId\)\}\/create-project`/,
     );
     assert.match(
       lifecycleControllerSource,
@@ -79,6 +80,7 @@ describe('project creation recovery', () => {
     assert.match(lifecycleControllerSource, /await fetchUsage\(\);\s*await auth\.refreshProjects\(\);/);
     assert.match(lifecycleControllerSource, /!behavior\.skipProjectLimitRecovery[\s\S]*body\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree[\s\S]*await openLimitModal\(body\);/);
     assert.match(lifecycleControllerSource, /!behavior\.skipProjectLimitRecovery[\s\S]*denial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*!canSilentlyReplaceOnFree[\s\S]*await openLimitModal\(denial\);/);
+    assert.match(lifecycleApiSource, /\/api\/template-publications\/\$\{encodeURIComponent\(templatePublicationId\)\}\/create-project/);
   });
 
   it('decides modal vs paywall from local project state before the create request fails', () => {

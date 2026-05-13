@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, type MutableRefObject } from 'react';
 
-import type { TemplatePublicationDetail } from '../../lib/apiTypes.ts';
 import { useAuthStore, type AuthProject, type UseAuthResult } from '../../stores/useAuthStore.ts';
 import { useChatStore } from '../../stores/useChatStore.ts';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
@@ -9,23 +8,15 @@ import { useTaskStore } from '../../stores/useTaskStore.ts';
 import type { ConstraintDenialPayload } from '../../lib/constraintUi.ts';
 import type { StartScreenSendResult } from '../../components/StartScreen.tsx';
 import type { ProjectGroup, Task } from '../../types.ts';
+import {
+  createProjectFromTemplatePublication,
+  fetchProjectIntent,
+  fetchTemplatePublicationDetail,
+  parseTemplateProjectCreationResponse,
+  type ProjectIntentReadResponse,
+} from './api.ts';
 import type { PendingProjectCreation } from './model.ts';
 import { initialProjectLifecycleState, projectLifecycleReducer } from './reducer.ts';
-
-const ACCESS_TOKEN_KEY = 'gantt_access_token';
-
-type ProjectIntentReadResponse = {
-  id: string;
-  text: string;
-  source: string;
-  projectId: string | null;
-  requestContextId: string | null;
-  historyGroupId: string | null;
-  templateSlug: string | null;
-  createdAt: string;
-  expiresAt: string;
-  consumedAt: string | null;
-};
 
 type ProjectUiLookup = {
   activeWorkspace: 'project' | 'planner' | 'finance';
@@ -162,46 +153,14 @@ export function useProjectLifecycleController(params: {
       let newProject: AuthProject | null = null;
 
       if (options.templatePublicationId) {
-        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-        let token = getLatestAccessToken();
-        if (!token) {
-          queuedPromptRef.current = null;
-          createEmptyChartAfterActivationRef.current = false;
-          return null;
-        }
-
-        let response = await fetch(`/api/template-publications/${encodeURIComponent(options.templatePublicationId)}/create-project`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
+        const response = await createProjectFromTemplatePublication(
+          auth,
+          options.templatePublicationId,
+          {
             projectName: trimmedName,
             groupId: options.groupId ?? auth.project?.groupId,
-          }),
-        });
-
-        if (response.status === 401) {
-          const refreshedToken = await auth.refreshAccessToken();
-          if (!refreshedToken) {
-            queuedPromptRef.current = null;
-            createEmptyChartAfterActivationRef.current = false;
-            return null;
-          }
-          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-          response = await fetch(`/api/template-publications/${encodeURIComponent(options.templatePublicationId)}/create-project`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              projectName: trimmedName,
-              groupId: options.groupId ?? auth.project?.groupId,
-            }),
-          });
-        }
+          },
+        );
 
         if (response.status === 403) {
           try {
@@ -227,7 +186,7 @@ export function useProjectLifecycleController(params: {
           throw new Error(`HTTP ${response.status}`);
         }
 
-        const payload = await response.json() as { project: AuthProject };
+        const payload = await parseTemplateProjectCreationResponse(response);
         newProject = payload.project;
       } else {
         newProject = await auth.createProject(trimmedName, options.groupId ?? auth.project?.groupId);
@@ -597,33 +556,9 @@ export function useProjectLifecycleController(params: {
     let cancelled = false;
 
     const openTemplateCreateModal = async () => {
-      const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-      let token = getLatestAccessToken();
-      let publication: TemplatePublicationDetail | null = null;
-
-      if (token) {
-        let response = await fetch(`/api/template-publications/${encodeURIComponent(templateCreateIntentId)}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.status === 401) {
-          const refreshedToken = await auth.refreshAccessToken();
-          if (refreshedToken) {
-            token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-            response = await fetch(`/api/template-publications/${encodeURIComponent(templateCreateIntentId)}`, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            });
-          }
-        }
-
-        if (response.ok) {
-          publication = await response.json() as TemplatePublicationDetail;
-        }
-      }
+      const publication = auth.isAuthenticated
+        ? await fetchTemplatePublicationDetail(auth, templateCreateIntentId)
+        : null;
 
       if (cancelled) {
         return;
@@ -680,32 +615,12 @@ export function useProjectLifecycleController(params: {
 
     const startProjectIntentFlow = async () => {
       try {
-        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-        let token = getLatestAccessToken();
-        if (!token || !auth.user) {
+        if (!auth.user) {
           onConsumeProjectCreationIntent();
           return;
         }
 
-        let response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.status === 401) {
-          const refreshedToken = await auth.refreshAccessToken();
-          if (!refreshedToken) {
-            onConsumeProjectCreationIntent();
-            return;
-          }
-          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-          response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-        }
+        const response = await fetchProjectIntent(auth, projectCreationIntentId);
 
         if (cancelled) {
           return;
