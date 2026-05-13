@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { DeleteProjectModal } from '../../components/DeleteProjectModal.tsx';
 import { CreateProjectModal } from '../../components/CreateProjectModal.tsx';
@@ -6,8 +6,7 @@ import { LimitReachedModal } from '../../components/LimitReachedModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from '../../components/PdfHelperModal.tsx';
 import { SaveTemplateModal } from '../../components/SaveTemplateModal.tsx';
 import { ShareLinksManagerModal } from '../../components/ShareLinksManagerModal.tsx';
-import { BackupRestoreModal, type BackupRestoreSummary } from '../../components/BackupRestoreModal.tsx';
-import { buildSplitTaskTrace, type SplitTaskSubmitPayload } from '../../components/SplitTaskModal.tsx';
+import { BackupRestoreModal } from '../../components/BackupRestoreModal.tsx';
 import { InsertTemplateModal } from '../../components/InsertTemplateModal.tsx';
 import { ImportExcelModal } from '../../components/ImportExcelModal.tsx';
 import { ProjectSettingsModal } from '../../components/ProjectSettingsModal.tsx';
@@ -29,14 +28,12 @@ import { useSharedProject } from '../../hooks/useSharedProject.ts';
 import { useTasks } from '../../hooks/useTasks.ts';
 import { useTemplateBatchUpdate } from '../../hooks/useTemplateBatchUpdate.ts';
 import { useTemplates } from '../../hooks/useTemplates.ts';
-import { useWebSocket, type ServerMessage } from '../../hooks/useWebSocket.ts';
-import type { ProjectLoadResponse, TemplatePublicationDetail } from '../../lib/apiTypes.ts';
+import type { TemplatePublicationDetail } from '../../lib/apiTypes.ts';
 import { PLAN_LABELS, type PlanId } from '../../lib/billing.ts';
 import { normalizeConstraintDenialPayload, type ConstraintDenialPayload } from '../../lib/constraintUi.ts';
-import { collectTaskSubtreeIds } from '../../lib/shareLinkSelection.ts';
 import { TASK_LIST_COLUMN_ROWS } from '../../lib/taskListColumns.ts';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
-import { getExportAccessLevel, useBillingStore } from '../../stores/useBillingStore.ts';
+import { useBillingStore } from '../../stores/useBillingStore.ts';
 import { useChatStore } from '../../stores/useChatStore.ts';
 import { useTaskStore } from '../../stores/useTaskStore.ts';
 import { useTemplateStore } from '../../stores/useTemplateStore.ts';
@@ -52,11 +49,10 @@ import {
   type BillingConstraintStatus,
 } from '../billing/policy.ts';
 import { FREE_ARCHIVED_PROJECT_LIMIT, mergeProjectsForLimitEvaluation, type PendingProjectCreation } from '../project-lifecycle/model.ts';
-import {
-  canUseSessionStorage,
-  getGenerationJobStorageKey,
-  getGenerationPreviewStorageKey,
-} from '../project-generation/storage.ts';
+import { isActiveProjectGenerationJob } from '../project-generation/model.ts';
+import { useProjectGenerationController } from '../project-generation/useProjectGenerationController.ts';
+import { useShareTemplateSelectionController } from '../share/useShareTemplateSelectionController.ts';
+import { useExportImportController } from '../export-import/useExportImportController.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
@@ -82,32 +78,6 @@ function getAccessTokenProjectId(accessToken: string | null): string | null {
 }
 
 
-function buildDependencyRowsFromTasks(tasks: Task[]) {
-  return tasks.flatMap((task) =>
-    (task.dependencies ?? []).map((dependency, index) => ({
-      id: `${task.id}:${dependency.taskId}:${dependency.type}:${index}`,
-      taskId: task.id,
-      depTaskId: dependency.taskId,
-      type: dependency.type,
-      lag: dependency.lag ?? 0,
-    })),
-  );
-}
-
-function summarizeTasksForLog(tasks: Task[]) {
-  return tasks.slice(0, 20).map((task) => ({
-    id: task.id,
-    name: task.name,
-    startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
-    endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
-    dependencies: (task.dependencies ?? []).map((dependency) => ({
-      taskId: dependency.taskId,
-      type: dependency.type,
-      lag: dependency.lag ?? 0,
-    })),
-  }));
-}
-
 function formatPdfFileTimestamp(value: Date): string {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, '0');
@@ -118,78 +88,13 @@ function formatPdfFileTimestamp(value: Date): string {
   return `${year}-${month}-${day} ${hours}-${minutes}`;
 }
 
-function getAttachmentFileName(contentDisposition: string | null, fallback: string): string {
-  if (!contentDisposition) {
-    return fallback;
-  }
-
-  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-  if (utf8Match?.[1]) {
-    return decodeURIComponent(utf8Match[1]);
-  }
-
-  const asciiMatch = contentDisposition.match(/filename="([^"]+)"/i);
-  if (asciiMatch?.[1]) {
-    return asciiMatch[1];
-  }
-
-  return fallback;
-}
-
 function getProjectPermissions(permissions: ProjectSectionPermissions | undefined): ProjectSectionPermissions {
   return permissions ?? { schedule: 'edit', resources: 'edit', finance: 'edit' };
 }
 
-async function triggerBlobDownload(blob: Blob, fileName: string): Promise<void> {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-type BackupImportResponse = {
-  ok: true;
-  summary: BackupRestoreSummary;
-};
-
-type PreviewState = {
-  tasks: Task[];
-  active: boolean;
-  mode: 'rendering' | 'failed';
-  message: string | null;
-  wave: number;
-};
-
 type WorkspaceToast = {
   id: number;
   message: string;
-};
-
-type ProjectGenerationJobView = {
-  id: string;
-  projectId: string | null;
-  intentId: string | null;
-  userId: string;
-  source: string;
-  type: string;
-  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
-  stage: 'queued' | 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing' | 'succeeded' | 'failed';
-  statusMessage: string | null;
-  requestContextId: string | null;
-  historyGroupId: string | null;
-  progressPercent: number | null;
-  previewMode: 'none' | 'ephemeral' | 'persisted';
-  previewAvailable: boolean;
-  errorCode: string | null;
-  errorMessage: string | null;
-  startedAt: string | null;
-  finishedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
 };
 
 type ProjectIntentReadResponse = {
@@ -212,153 +117,6 @@ type NormalizedChatMessage = {
   requestContextId: string | null;
   historyGroupId: string | null;
 };
-
-function isActiveProjectGenerationJob(job: ProjectGenerationJobView | null): boolean {
-  return Boolean(job && (job.status === 'queued' || job.status === 'running'));
-}
-
-function isSameChatMessage(left: NormalizedChatMessage, right: NormalizedChatMessage): boolean {
-  if (left.id === right.id) {
-    return true;
-  }
-
-  if (left.requestContextId && right.requestContextId && left.requestContextId === right.requestContextId) {
-    return true;
-  }
-
-  if (left.historyGroupId && right.historyGroupId && left.historyGroupId === right.historyGroupId) {
-    return true;
-  }
-
-  return left.role === right.role && left.content === right.content;
-}
-
-function mergeOptimisticChatMessages(
-  serverMessages: NormalizedChatMessage[],
-  localMessages: NormalizedChatMessage[],
-): NormalizedChatMessage[] {
-  const trailingOptimisticUsers: NormalizedChatMessage[] = [];
-
-  for (let index = localMessages.length - 1; index >= 0; index -= 1) {
-    const message = localMessages[index];
-    if (message.role !== 'user') {
-      break;
-    }
-
-    if (message.requestContextId || message.historyGroupId) {
-      break;
-    }
-
-    if (serverMessages.some((serverMessage) => isSameChatMessage(serverMessage, message))) {
-      break;
-    }
-
-    trailingOptimisticUsers.unshift(message);
-  }
-
-  if (trailingOptimisticUsers.length === 0) {
-    return serverMessages;
-  }
-
-  return [...serverMessages, ...trailingOptimisticUsers];
-}
-
-function getGenerationStageFallbackMessage(stage: ProjectGenerationJobView['stage']): string | null {
-  switch (stage) {
-    case 'queued':
-      return 'Ручное редактирование пока недоступно';
-    case 'interpreting':
-      return 'Понимаем запрос';
-    case 'planning':
-      return 'Планируем график';
-    case 'compiling':
-      return 'Собираем график';
-    case 'committing':
-      return 'Сохраняем изменения в проект';
-    case 'finalizing':
-      return 'Фиксируем результат';
-    default:
-      return null;
-  }
-}
-
-function resolveGenerationLockMessage(
-  job: ProjectGenerationJobView | null,
-  currentMessage: string | null,
-): string | null {
-  if (!job) {
-    return currentMessage;
-  }
-
-  return job.statusMessage ?? getGenerationStageFallbackMessage(job.stage) ?? currentMessage;
-}
-
-type StoredGenerationPreview = {
-  jobId: string;
-  projectId: string;
-  tasks: Task[];
-  mode: 'rendering' | 'failed';
-  message: string | null;
-  wave: number;
-};
-
-function readStoredGenerationJob(projectId: string): ProjectGenerationJobView | null {
-  if (!canUseSessionStorage()) {
-    return null;
-  }
-
-  try {
-    const raw = window.sessionStorage.getItem(getGenerationJobStorageKey(projectId));
-    if (!raw) {
-      return null;
-    }
-    return JSON.parse(raw) as ProjectGenerationJobView;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredGenerationJob(projectId: string, job: ProjectGenerationJobView | null): void {
-  if (!canUseSessionStorage()) {
-    return;
-  }
-
-  if (!job || !isActiveProjectGenerationJob(job)) {
-    window.sessionStorage.removeItem(getGenerationJobStorageKey(projectId));
-    return;
-  }
-
-  window.sessionStorage.setItem(getGenerationJobStorageKey(projectId), JSON.stringify(job));
-}
-
-function readStoredGenerationPreview(projectId: string): StoredGenerationPreview | null {
-  if (!canUseSessionStorage()) {
-    return null;
-  }
-
-  try {
-    const raw = window.sessionStorage.getItem(getGenerationPreviewStorageKey(projectId));
-    if (!raw) {
-      return null;
-    }
-    return JSON.parse(raw) as StoredGenerationPreview;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredGenerationPreview(projectId: string, preview: StoredGenerationPreview | null): void {
-  if (!canUseSessionStorage()) {
-    return;
-  }
-
-  if (!preview) {
-    window.sessionStorage.removeItem(getGenerationPreviewStorageKey(projectId));
-    return;
-  }
-
-  window.sessionStorage.setItem(getGenerationPreviewStorageKey(projectId), JSON.stringify(preview));
-}
 
 interface WorkspaceAppProps {
   auth: UseAuthResult;
@@ -408,34 +166,14 @@ export function WorkspaceShell({
   const updateActiveTemplateTasks = useTemplateStore((state) => state.updateActiveTemplateTasks);
   const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
-  const [showPdfHelper, setShowPdfHelper] = useState(false);
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
-  const [preparedIntentChatProjectId, setPreparedIntentChatProjectId] = useState<string | null>(null);
-  const [activeGenerationJob, setActiveGenerationJob] = useState<ProjectGenerationJobView | null>(null);
-  const [generationJobLookupPending, setGenerationJobLookupPending] = useState(false);
   const [toasts, setToasts] = useState<WorkspaceToast[]>([]);
   const hasShareToken = Boolean(sharedProject.shareToken);
-  const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
-  const [isImportTemplateLoading, setIsImportTemplateLoading] = useState(false);
-  const [showImportExcelModal, setShowImportExcelModal] = useState(false);
-  const backupImportInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedBackupFile, setSelectedBackupFile] = useState<File | null>(null);
-  const [backupRestorePending, setBackupRestorePending] = useState(false);
-  const [backupRestoreError, setBackupRestoreError] = useState<string | null>(null);
-  const [backupRestoreSummary, setBackupRestoreSummary] = useState<BackupRestoreSummary | null>(null);
   const [startScreenProjectSettingsPending, setStartScreenProjectSettingsPending] = useState(false);
   const [startScreenProjectSettingsError, setStartScreenProjectSettingsError] = useState<string | null>(null);
   const [startScreenPrefillPrompt, setStartScreenPrefillPrompt] = useState<string | null>(null);
   const toastIdRef = useRef(0);
   const resolvingProjectIntentRef = useRef<string | null>(null);
-  const [shareSelectionMode, setShareSelectionMode] = useState(false);
-  const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
-  const [templateSelectionMode, setTemplateSelectionMode] = useState(false);
-  const [selectedTemplateTaskIds, setSelectedTemplateTaskIds] = useState<Set<string>>(new Set());
-  const [saveTemplateDraft, setSaveTemplateDraft] = useState<{ mode: 'project' | 'selection'; initialName: string; taskCount: number; rootTaskIds: string[] } | null>(null);
-  const [saveTemplatePending, setSaveTemplatePending] = useState(false);
-  const [insertTemplateDraft, setInsertTemplateDraft] = useState<{ anchorTaskId: string; anchorTaskName: string } | null>(null);
-  const [insertTemplatePending, setInsertTemplatePending] = useState(false);
   const refreshProjects = auth.refreshProjects;
   const [limitModal, setLimitModal] = useState<{
     denial: ConstraintDenialPayload;
@@ -633,29 +371,17 @@ export function WorkspaceShell({
       ? (sharedProject.project?.calendarDays ?? EMPTY_CALENDAR_DAYS)
       : (auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS),
   });
+  const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
+    setTasks(nextTasks);
+  }, [setTasks]);
   const templateBatchUpdate = useTemplateBatchUpdate({
     tasks: templateTasks,
     setTasks: setTemplateTasks,
     saveTemplateSnapshot,
   });
   const ganttRef = useRef<GanttChartRef>(null);
-  const [previewState, setPreviewState] = useState<PreviewState>({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
-  const [pendingGanttDayMode, setPendingGanttDayMode] = useState<'business' | 'calendar' | null>(null);
   const activationInFlightRef = useRef(false);
-  const createEmptyChartAfterActivationRef = useRef(false);
-  const queuedPromptRef = useRef<string | null>(null);
-  const aiDoneGraceTimerRef = useRef<number | null>(null);
-  const aiMutationWatchdogRef = useRef<number | null>(null);
-  const lastGenerationFailureJobIdRef = useRef<string | null>(null);
-  const preserveStartScreenPrefillOnNextSessionRef = useRef(false);
-  const forceProjectWorkspaceOnNextSessionRef = useRef<string | null>(null);
-  const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
-  const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
-  const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
-  const clearAiMutationLock = useUIStore((state) => state.clearAiMutationLock);
   const syncProjectTaskCount = auth.syncProjectTaskCount;
-  const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
-  const visibleTasks = previewState.active ? previewState.tasks : tasks;
   const sessionProjectId = getAccessTokenProjectId(auth.accessToken);
   const activeWorkspaceProjectId = workspace.kind === 'project' ? workspace.projectId : null;
   const selectedWorkspaceProject = workspace.kind === 'project'
@@ -664,44 +390,83 @@ export function WorkspaceShell({
       ?? (sessionProjectId === workspace.projectId ? auth.project : null)
     )
     : null;
-  const activeProjectGenerationRunning = Boolean(
-    activeGenerationJob
-    && isActiveProjectGenerationJob(activeGenerationJob)
-    && activeGenerationJob.projectId === activeWorkspaceProjectId,
-  );
-
-  // Active generation lifecycle and session recovery.
-  useLayoutEffect(() => {
-    if (!activeWorkspaceProjectId) {
-      return;
-    }
-
-    const storedJob = readStoredGenerationJob(activeWorkspaceProjectId);
-    if (storedJob && isActiveProjectGenerationJob(storedJob)) {
-      setActiveGenerationJob((current) => current?.id === storedJob.id ? current : storedJob);
-      setAiMutationLock({
-        active: true,
-        stage: 'thinking',
-        message: storedJob.statusMessage ?? 'Восстанавливаем активную генерацию...',
-      });
-      useChatStore.setState((state) => ({
-        ...state,
-        aiThinking: true,
-        error: null,
-      }));
-    }
-
-    const storedPreview = readStoredGenerationPreview(activeWorkspaceProjectId);
-    if (storedPreview) {
-      setPreviewState({
-        tasks: normalizeTasks(storedPreview.tasks),
-        active: true,
-        mode: storedPreview.mode,
-        message: storedPreview.message,
-        wave: storedPreview.wave,
-      });
-    }
-  }, [activeWorkspaceProjectId, setAiMutationLock]);
+  const generationController = useProjectGenerationController({
+    auth: {
+      accessToken: auth.accessToken,
+      isAuthenticated: auth.isAuthenticated,
+      refreshAccessToken: auth.refreshAccessToken,
+    },
+    workspace,
+    tasks,
+    setTasks,
+    hasShareToken,
+    isScheduleReadOnlyProject,
+    proactiveChatDenial,
+    selectedWorkspaceProjectTaskCount: selectedWorkspaceProject?.taskCount,
+    onLoginRequired,
+    openLimitModal,
+    setWorkspace,
+  });
+  const {
+    connected,
+    previewState,
+    pendingGanttDayMode,
+    activeGenerationJob,
+    generationJobLookupPending,
+    activeEmptyProjectModeProjectId,
+    activeProjectGenerationRunning,
+    preparedIntentChatProjectId,
+    queuedPromptRef,
+    createEmptyChartAfterActivationRef,
+    preserveStartScreenPrefillOnNextSessionRef,
+    forceProjectWorkspaceOnNextSessionRef,
+    setPreparedIntentChatProjectId,
+    setPendingGanttDayMode,
+    setActiveGenerationJob,
+    setActiveEmptyProjectModeProjectId,
+    clearAiDoneGraceTimer,
+    releaseAiMutationLock,
+    handleSend,
+    submitChatMessage,
+    submitSplitTask,
+    handleCancelActiveGeneration,
+    closeProjectChat,
+    openProjectChat,
+    toggleProjectChat,
+    resetWorkspacePresentation,
+    mergeOptimisticChatMessages,
+  } = generationController;
+  const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
+  const visibleTasks = previewState.active ? previewState.tasks : tasks;
+  const selectionController = useShareTemplateSelectionController({
+    visibleTasks,
+    accessToken: auth.accessToken,
+    project: auth.project ? { id: auth.project.id, name: auth.project.name } : null,
+  });
+  const {
+    shareSelectionMode,
+    selectedShareTaskIds,
+    templateSelectionMode,
+    selectedTemplateTaskIds,
+    saveTemplateDraft,
+    insertTemplateDraft,
+    saveTemplatePending,
+    insertTemplatePending,
+    setSaveTemplateDraft,
+    setInsertTemplateDraft,
+    setSaveTemplatePending,
+    setInsertTemplatePending,
+    setSelectedTemplateTaskIds,
+    resetShareSelection,
+    resetTemplateSelection,
+    handleStartPartialShareSelection,
+    handlePartialShareSelectionChange,
+    handleStartTemplateSelection,
+    handleTemplateSelectionChange,
+    handleConfirmTemplateSelection,
+    handleCreateTemplateFromTask,
+    handleSubmitPartialShareSelection,
+  } = selectionController;
 
   useEffect(() => {
     if (!pendingGanttDayMode) {
@@ -712,386 +477,7 @@ export function WorkspaceShell({
       setPendingGanttDayMode(null);
     }
   }, [auth.project?.ganttDayMode, pendingGanttDayMode]);
-
-  const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
-    setTasks(nextTasks);
-  }, [setTasks]);
-
-  const clearAiDoneGraceTimer = useCallback(() => {
-    if (aiDoneGraceTimerRef.current) {
-      window.clearTimeout(aiDoneGraceTimerRef.current);
-      aiDoneGraceTimerRef.current = null;
-    }
-  }, []);
-
-  const scheduleAiDoneGraceExit = useCallback(() => {
-    clearAiDoneGraceTimer();
-    aiDoneGraceTimerRef.current = window.setTimeout(() => {
-      aiDoneGraceTimerRef.current = null;
-      useChatStore.getState().finishStreaming();
-    }, AI_DONE_GRACE_PERIOD_MS);
-  }, [clearAiDoneGraceTimer]);
-
-  const armAiMutationWatchdog = useCallback(() => {
-    if (aiMutationWatchdogRef.current) {
-      window.clearTimeout(aiMutationWatchdogRef.current);
-    }
-
-    aiMutationWatchdogRef.current = window.setTimeout(() => {
-      aiMutationWatchdogRef.current = null;
-      clearAiMutationLock();
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
-      useChatStore.getState().finishStreaming();
-    }, AI_MUTATION_LOCK_TIMEOUT_MS);
-  }, [clearAiMutationLock]);
-
-  const releaseAiMutationLock = useCallback(() => {
-    if (aiMutationWatchdogRef.current) {
-      window.clearTimeout(aiMutationWatchdogRef.current);
-      aiMutationWatchdogRef.current = null;
-    }
-    clearAiMutationLock();
-  }, [clearAiMutationLock]);
-
-  useEffect(() => {
-    if (!activeWorkspaceProjectId || !activeGenerationJob || activeGenerationJob.projectId !== activeWorkspaceProjectId) {
-      return;
-    }
-
-    writeStoredGenerationJob(activeWorkspaceProjectId, activeGenerationJob);
-
-    if (activeGenerationJob.status === 'queued' || activeGenerationJob.status === 'running') {
-      clearAiDoneGraceTimer();
-      setAiMutationLock({
-        active: true,
-        stage: activeGenerationJob.previewAvailable ? 'preview' : 'thinking',
-        message: resolveGenerationLockMessage(activeGenerationJob, 'Ручное редактирование пока недоступно'),
-      });
-      useChatStore.setState((state) => ({
-        ...state,
-        aiThinking: true,
-        error: null,
-      }));
-      return;
-    }
-
-    if (activeGenerationJob.status === 'failed') {
-      releaseAiMutationLock();
-      setPreparedIntentChatProjectId(null);
-      const storedPreview = readStoredGenerationPreview(activeWorkspaceProjectId);
-      setPreviewState((current) => ({
-        tasks: current.tasks.length > 0 ? current.tasks : normalizeTasks(storedPreview?.tasks ?? []),
-        active: current.tasks.length > 0 || Boolean(storedPreview?.tasks?.length),
-        mode: 'failed',
-        message: activeGenerationJob.errorMessage ?? activeGenerationJob.statusMessage ?? 'Генерация завершилась ошибкой.',
-        wave: current.wave > 0 ? current.wave : (storedPreview?.wave ?? 0),
-      }));
-      if (lastGenerationFailureJobIdRef.current !== activeGenerationJob.id) {
-        lastGenerationFailureJobIdRef.current = activeGenerationJob.id;
-        useChatStore.getState().setError(activeGenerationJob.errorMessage ?? activeGenerationJob.statusMessage ?? 'Генерация завершилась ошибкой.');
-      }
-      return;
-    }
-
-    if (activeGenerationJob.status === 'succeeded' || activeGenerationJob.status === 'canceled') {
-      writeStoredGenerationJob(activeWorkspaceProjectId, null);
-      writeStoredGenerationPreview(activeWorkspaceProjectId, null);
-      releaseAiMutationLock();
-      setPreparedIntentChatProjectId(null);
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
-    }
-  }, [
-    activeGenerationJob,
-    activeWorkspaceProjectId,
-    clearAiDoneGraceTimer,
-    releaseAiMutationLock,
-    setAiMutationLock,
-  ]);
-
-  useEffect(() => {
-    if (!activeWorkspaceProjectId || generationJobLookupPending || activeProjectGenerationRunning || previewState.active) {
-      return;
-    }
-
-    const storedJob = readStoredGenerationJob(activeWorkspaceProjectId);
-    const lockActive = useUIStore.getState().aiMutationLock.active;
-    if (!storedJob && !lockActive) {
-      return;
-    }
-
-    writeStoredGenerationJob(activeWorkspaceProjectId, null);
-    writeStoredGenerationPreview(activeWorkspaceProjectId, null);
-    releaseAiMutationLock();
-    setPreparedIntentChatProjectId(null);
-  }, [
-    activeProjectGenerationRunning,
-    activeWorkspaceProjectId,
-    generationJobLookupPending,
-    previewState.active,
-    releaseAiMutationLock,
-  ]);
-
-  const handleWsMessage = useCallback((msg: ServerMessage) => {
-    console.log('[WS] message', msg);
-    if (msg.type === 'preview_tasks' || msg.type === 'preview_tasks_replace') {
-      const normalizedPreviewTasks = normalizeTasks(msg.tasks as Task[]);
-      armAiMutationWatchdog();
-      setAiMutationLock({
-        active: true,
-        stage: 'preview',
-        message: 'Ручное редактирование пока недоступно',
-      });
-      setPreviewState({
-        tasks: normalizedPreviewTasks,
-        active: true,
-        mode: 'rendering',
-        message: null,
-        wave: msg.type === 'preview_tasks_replace' ? (msg.wave ?? 1) : 1,
-      });
-      if (workspace.kind === 'project') {
-        const previewJobId = activeGenerationJob?.projectId === workspace.projectId ? activeGenerationJob.id : 'unknown';
-        writeStoredGenerationPreview(workspace.projectId, {
-          jobId: previewJobId,
-          projectId: workspace.projectId,
-          tasks: normalizedPreviewTasks,
-          mode: 'rendering',
-          message: null,
-          wave: msg.type === 'preview_tasks_replace' ? (msg.wave ?? 1) : 1,
-        });
-      }
-      return;
-    }
-    if (msg.type === 'preview_failed') {
-      armAiMutationWatchdog();
-      setAiMutationLock({
-        active: true,
-        stage: 'failed',
-        message: msg.message ?? 'Предварительный график не был сохранён.',
-      });
-      setPreparedIntentChatProjectId(null);
-      setPreviewState((current) => current.active
-        ? {
-            ...current,
-            mode: 'failed',
-            message: msg.message ?? 'Предварительный график не был сохранён.',
-          }
-        : current);
-      if (workspace.kind === 'project') {
-        const storedPreview = readStoredGenerationPreview(workspace.projectId);
-        if (storedPreview) {
-          writeStoredGenerationPreview(workspace.projectId, {
-            ...storedPreview,
-            mode: 'failed',
-            message: msg.message ?? 'Предварительный график не был сохранён.',
-          });
-        }
-      }
-      useChatStore.getState().setError(msg.message ?? 'Предварительный график не был сохранён.');
-      return;
-    }
-    if (msg.type === 'history_changed') {
-      bumpHistoryRefreshRevision();
-      return;
-    }
-    if (msg.type === 'tasks') {
-      const normalizedTasks = normalizeTasks(msg.tasks as Task[]);
-      console.log('[WS->UI] tasks', {
-        taskCount: normalizedTasks.length,
-        tasks: summarizeTasksForLog(normalizedTasks),
-      });
-      releaseAiMutationLock();
-      scheduleAiDoneGraceExit();
-      if (workspace.kind === 'project') {
-        writeStoredGenerationPreview(workspace.projectId, null);
-        writeStoredGenerationJob(workspace.projectId, null);
-      }
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
-      useTaskStore.getState().replaceFromSystem(normalizedTasks);
-
-      if (!hasShareToken && auth.isAuthenticated) {
-        const projectStore = useProjectStore.getState();
-        console.log('[WS->PROJECT_STORE] mergeConfirmedSnapshot', {
-          taskCount: normalizedTasks.length,
-          tasks: summarizeTasksForLog(normalizedTasks),
-        });
-        projectStore.mergeConfirmedSnapshot({
-          tasks: normalizedTasks,
-          dependencies: buildDependencyRowsFromTasks(normalizedTasks),
-        });
-      }
-      setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
-        ? { ...current, status: 'succeeded', stage: 'succeeded', statusMessage: 'График готов', errorCode: null, errorMessage: null }
-        : current);
-      return;
-    }
-    if (msg.type === 'token') {
-      setPreparedIntentChatProjectId(null);
-      armAiMutationWatchdog();
-      useChatStore.getState().appendToken(msg.content ?? '');
-      return;
-    }
-    if (msg.type === 'done') {
-      setPreparedIntentChatProjectId(null);
-      clearAiDoneGraceTimer();
-      releaseAiMutationLock();
-      if (workspace.kind === 'project') {
-        writeStoredGenerationPreview(workspace.projectId, null);
-        writeStoredGenerationJob(workspace.projectId, null);
-      }
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
-      setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
-        ? { ...current, status: 'succeeded', stage: 'succeeded', statusMessage: 'График готов', errorCode: null, errorMessage: null }
-        : current);
-      useChatStore.getState().attachCheckpointToLatestUserMessage(msg.chatMessage);
-      useChatStore.getState().finishStreaming(msg.chatMessage);
-      return;
-    }
-    if (msg.type === 'error') {
-      setPreparedIntentChatProjectId(null);
-      clearAiDoneGraceTimer();
-      releaseAiMutationLock();
-      if (workspace.kind === 'project') {
-        const storedPreview = readStoredGenerationPreview(workspace.projectId);
-        if (storedPreview) {
-          writeStoredGenerationPreview(workspace.projectId, {
-            ...storedPreview,
-            mode: 'failed',
-            message: msg.message ?? 'unknown error',
-          });
-        }
-      }
-      setPreviewState((current) => current.active
-        ? { ...current, mode: 'failed', message: msg.message ?? 'unknown error' }
-        : current);
-      setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
-        ? { ...current, status: 'failed', stage: 'failed', statusMessage: msg.message ?? 'unknown error', errorMessage: msg.message ?? 'unknown error' }
-        : current);
-      useChatStore.getState().setError(msg.message ?? 'unknown error');
-    }
-  }, [
-    activeGenerationJob,
-    armAiMutationWatchdog,
-    auth.isAuthenticated,
-    bumpHistoryRefreshRevision,
-    clearAiDoneGraceTimer,
-    hasShareToken,
-    releaseAiMutationLock,
-    scheduleAiDoneGraceExit,
-    setAiMutationLock,
-    workspace,
-  ]);
-
-  const { connected, connectedToken } = useWebSocket(
-    handleWsMessage,
-    () => (hasShareToken ? null : auth.accessToken),
-    hasShareToken ? null : auth.accessToken,
-    hasShareToken ? undefined : auth.refreshAccessToken,
-  );
   const displayConnected = hasShareToken ? true : auth.isAuthenticated ? connected : true;
-
-  // Workspace session restoration and project activation flow.
-  useEffect(() => {
-    if (!auth.isAuthenticated || !auth.accessToken || hasShareToken || workspace.kind !== 'project') {
-      setActiveGenerationJob(null);
-      setGenerationJobLookupPending(false);
-      return;
-    }
-
-    let cancelled = false;
-    let pollTimer: number | null = null;
-
-    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-
-    const loadLatestGenerationJob = async () => {
-      setGenerationJobLookupPending(true);
-      let token = getLatestAccessToken();
-      if (!token) {
-        setGenerationJobLookupPending(false);
-        return;
-      }
-
-      let response = await fetch(`/api/project-generation-jobs/active?projectId=${encodeURIComponent(workspace.projectId)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.status === 401) {
-        const refreshedToken = await auth.refreshAccessToken();
-        if (!refreshedToken) {
-          setGenerationJobLookupPending(false);
-          return;
-        }
-        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-        response = await fetch(`/api/project-generation-jobs/active?projectId=${encodeURIComponent(workspace.projectId)}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
-
-      if (!response.ok || cancelled) {
-        setGenerationJobLookupPending(false);
-        return;
-      }
-
-      const payload = await response.json() as { job: ProjectGenerationJobView | null };
-      if (cancelled) {
-        setGenerationJobLookupPending(false);
-        return;
-      }
-
-      if (payload.job) {
-        setActiveGenerationJob(payload.job);
-        setGenerationJobLookupPending(false);
-
-        if ((payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer === null) {
-          pollTimer = window.setInterval(() => {
-            void loadLatestGenerationJob();
-          }, 2000);
-        }
-
-        if (!(payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer !== null) {
-          window.clearInterval(pollTimer);
-          pollTimer = null;
-        }
-        return;
-      }
-
-      const latestResponse = await fetch(`/api/project-generation-jobs/latest?projectId=${encodeURIComponent(workspace.projectId)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!latestResponse.ok || cancelled) {
-        setGenerationJobLookupPending(false);
-        return;
-      }
-      const latestPayload = await latestResponse.json() as { job: ProjectGenerationJobView | null };
-      if (cancelled) {
-        setGenerationJobLookupPending(false);
-        return;
-      }
-
-      if (!latestPayload.job) {
-        setActiveGenerationJob(null);
-      } else if (latestPayload.job.status === 'succeeded' || latestPayload.job.status === 'canceled') {
-        setActiveGenerationJob(latestPayload.job);
-      } else {
-        setActiveGenerationJob(latestPayload.job);
-      }
-      setGenerationJobLookupPending(false);
-    };
-
-    void loadLatestGenerationJob();
-
-    return () => {
-      cancelled = true;
-      if (pollTimer !== null) {
-        window.clearInterval(pollTimer);
-      }
-    };
-  }, [
-    auth.accessToken,
-    auth.isAuthenticated,
-    auth.refreshAccessToken,
-    hasShareToken,
-    workspace,
-  ]);
 
   useEffect(() => {
     if (hasShareToken) {
@@ -1139,40 +525,6 @@ export function WorkspaceShell({
     }
     setStartScreenPrefillPrompt(null);
   }, [sessionProjectId]);
-
-
-  const closeProjectChat = useCallback(() => {
-    setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: false } : current);
-  }, [setWorkspace]);
-
-  const openProjectChat = useCallback(() => {
-    if (auth.project?.taskCount === 0 && workspace.kind === 'project') {
-      setActiveEmptyProjectModeProjectId(workspace.projectId);
-    }
-    setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
-  }, [auth.project?.taskCount, setWorkspace, workspace]);
-
-  const toggleProjectChat = useCallback(() => {
-    if (auth.project?.taskCount === 0 && workspace.kind === 'project' && !workspace.chatOpen) {
-      setActiveEmptyProjectModeProjectId(workspace.projectId);
-    }
-    setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: !current.chatOpen } : current);
-  }, [auth.project?.taskCount, setWorkspace, workspace]);
-
-  const resetWorkspacePresentation = useCallback(() => {
-    clearAiDoneGraceTimer();
-    releaseAiMutationLock();
-    if (activeWorkspaceProjectId) {
-      writeStoredGenerationJob(activeWorkspaceProjectId, null);
-      writeStoredGenerationPreview(activeWorkspaceProjectId, null);
-    }
-    setActiveGenerationJob(null);
-    setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
-    replaceTasksFromSystem([]);
-    useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
-    useChatStore.getState().reset();
-  }, [activeWorkspaceProjectId, clearAiDoneGraceTimer, releaseAiMutationLock, replaceTasksFromSystem]);
-
   const openCreateProjectModal = useCallback((nextIntent: PendingProjectCreation = {}) => {
     setPendingProjectCreation(nextIntent);
     setShowCreateProjectModal(true);
@@ -1414,274 +766,6 @@ export function WorkspaceShell({
     onConsumeTemplateCreateIntent,
     openCreateProjectModal,
     templateCreateIntentId,
-  ]);
-
-  const submitChatMessage = useCallback(async (message: string) => {
-    if (isScheduleReadOnlyProject) {
-      return false;
-    }
-
-    if (proactiveChatDenial) {
-      await openLimitModal(proactiveChatDenial);
-      return false;
-    }
-
-    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-    let token = getLatestAccessToken();
-    if (!token) {
-      releaseAiMutationLock();
-      return false;
-    }
-
-    armAiMutationWatchdog();
-    setAiMutationLock({
-      active: true,
-      stage: 'thinking',
-      message: 'AI готовит изменения графика. Редактирование временно заблокировано.',
-    });
-
-    let response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ message }),
-    });
-
-    if (response.status === 401) {
-      const refreshedToken = await auth.refreshAccessToken();
-      if (!refreshedToken) {
-        releaseAiMutationLock();
-        return false;
-      }
-      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-      response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ message }),
-      });
-    }
-
-    if (response.status === 403) {
-      try {
-        const body = await response.json() as Partial<ConstraintDenialPayload>;
-        if (isConstraintCode(body.code)) {
-          releaseAiMutationLock();
-          await openLimitModal(body);
-          return false;
-        }
-      } catch {
-        // response body not JSON — fall through to generic error
-      }
-      releaseAiMutationLock();
-      throw new Error(`HTTP 403`);
-    }
-
-    if (!response.ok) {
-      releaseAiMutationLock();
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const responsePayload = await response.json() as { job?: ProjectGenerationJobView | null };
-    if (responsePayload.job) {
-      setActiveGenerationJob(responsePayload.job);
-    }
-    return true;
-  }, [armAiMutationWatchdog, auth, isScheduleReadOnlyProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setActiveGenerationJob, setAiMutationLock]);
-
-  const submitSplitTask = useCallback(async (task: Task, payload: SplitTaskSubmitPayload): Promise<StartScreenSendResult> => {
-    if (hasShareToken) {
-      return { accepted: false };
-    }
-    if (isScheduleReadOnlyProject) {
-      return {
-        accepted: false,
-        message: 'Проект доступен только для чтения.',
-      };
-    }
-    if (!auth.isAuthenticated) {
-      onLoginRequired();
-      return { accepted: false };
-    }
-    if (proactiveChatDenial) {
-      await openLimitModal(proactiveChatDenial);
-      return { accepted: false };
-    }
-
-    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-    let token = getLatestAccessToken();
-    if (!token) {
-      return { accepted: false, message: 'Нет access token для AI-запроса.' };
-    }
-
-    useChatStore.getState().addMessage({ role: 'user', content: buildSplitTaskTrace(task, payload) });
-    openProjectChat();
-    armAiMutationWatchdog();
-    setAiMutationLock({
-      active: true,
-      stage: 'thinking',
-      message: 'AI обрабатывает задачу. Редактирование графика временно заблокировано.',
-    });
-
-    let response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/split`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (response.status === 401) {
-      const refreshedToken = await auth.refreshAccessToken();
-      if (!refreshedToken) {
-        releaseAiMutationLock();
-        return { accepted: false, message: 'Сессия истекла. Войдите заново.' };
-      }
-      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-      response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/split`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-    }
-
-    if (response.status === 403) {
-      try {
-        const body = await response.json() as Partial<ConstraintDenialPayload>;
-        if (isConstraintCode(body.code)) {
-          releaseAiMutationLock();
-          await openLimitModal(body);
-          return { accepted: false };
-        }
-      } catch {
-        // response body not JSON
-      }
-      releaseAiMutationLock();
-      return { accepted: false, message: 'Доступ к AI-функции ограничен.' };
-    }
-
-    if (!response.ok) {
-      releaseAiMutationLock();
-      return { accepted: false, message: `HTTP ${response.status}` };
-    }
-
-    const responsePayload = await response.json() as { job?: ProjectGenerationJobView | null };
-    if (responsePayload.job) {
-      setActiveGenerationJob(responsePayload.job);
-    }
-
-    return { accepted: true };
-  }, [armAiMutationWatchdog, auth, hasShareToken, isScheduleReadOnlyProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setActiveGenerationJob, setAiMutationLock]);
-
-  const handleCancelActiveGeneration = useCallback(async () => {
-    const activeJob = activeGenerationJob;
-    if (!activeJob || !isActiveProjectGenerationJob(activeJob)) {
-      return;
-    }
-
-    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-    let token = getLatestAccessToken();
-    if (!token) {
-      return;
-    }
-
-    let response = await fetch(`/api/project-generation-jobs/${encodeURIComponent(activeJob.id)}/cancel`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 401) {
-      const refreshedToken = await auth.refreshAccessToken();
-      if (!refreshedToken) {
-        return;
-      }
-      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-      response = await fetch(`/api/project-generation-jobs/${encodeURIComponent(activeJob.id)}/cancel`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-    }
-
-    if (!response.ok) {
-      useChatStore.getState().setError(`Не удалось остановить AI-задачу (HTTP ${response.status}).`);
-      return;
-    }
-
-    const payload = await response.json() as { job?: ProjectGenerationJobView | null };
-    if (payload.job) {
-      setActiveGenerationJob(payload.job);
-    }
-    if (workspace.kind === 'project' && tasks.length === 0) {
-      setActiveEmptyProjectModeProjectId(null);
-      setWorkspace((current) => current.kind === 'project'
-        ? { ...current, chatOpen: false }
-        : current);
-    }
-    useChatStore.getState().finishStreaming();
-  }, [activeGenerationJob, auth.accessToken, auth.refreshAccessToken, setWorkspace, tasks.length, workspace.kind]);
-
-  const handleSend = useCallback((text: string): StartScreenSendResult => {
-    const activeProjectId = workspace.kind === 'project' ? workspace.projectId : auth.project?.id;
-    const activeProjectTaskCount = workspace.kind === 'project'
-      ? (selectedWorkspaceProject?.taskCount ?? tasks.length)
-      : auth.project?.taskCount;
-
-    if (hasShareToken) {
-      return { accepted: false };
-    }
-    if (isScheduleReadOnlyProject) {
-      return {
-        accepted: false,
-        message: 'Проект доступен только для чтения.',
-      };
-    }
-    if (!auth.isAuthenticated) {
-      onLoginRequired();
-      return { accepted: false };
-    }
-    if (proactiveChatDenial) {
-      void openLimitModal(proactiveChatDenial);
-      return { accepted: false };
-    }
-    if (workspace.kind !== 'project' && !auth.project) {
-      return { accepted: false };
-    }
-    if (workspace.kind === 'project' && activeProjectId && activeProjectTaskCount === 0) {
-      setActiveEmptyProjectModeProjectId(activeProjectId);
-    }
-    useChatStore.getState().addMessage({ role: 'user', content: text });
-    setWorkspace((current) => current.kind === 'project'
-      ? { ...current, chatOpen: true }
-      : current);
-    void submitChatMessage(text).catch((submitError) => {
-      useChatStore.getState().setError(String(submitError));
-    });
-    return { accepted: true };
-  }, [
-    auth.isAuthenticated,
-    auth.project,
-    hasShareToken,
-    isScheduleReadOnlyProject,
-    onLoginRequired,
-    openLimitModal,
-    proactiveChatDenial,
-    selectedWorkspaceProject?.taskCount,
-    setWorkspace,
-    submitChatMessage,
-    tasks.length,
-    workspace.kind,
-    workspace.kind === 'project' ? workspace.projectId : null,
   ]);
 
   const handleStartScreenSend = useCallback(async (text: string): Promise<StartScreenSendResult> => {
@@ -2026,16 +1110,15 @@ export function WorkspaceShell({
     if (isScheduleReadOnlyProject) {
       return;
     }
-    setShareSelectionMode(false);
-    setSelectedShareTaskIds(new Set());
-    setTemplateSelectionMode(false);
+    resetShareSelection();
+    resetTemplateSelection();
     setSaveTemplateDraft({
       mode: 'project',
       initialName: auth.project?.name ? `${auth.project.name} шаблон` : 'Новый шаблон',
       taskCount: visibleTasks.length,
       rootTaskIds: [],
     });
-  }, [auth.project?.name, isScheduleReadOnlyProject, visibleTasks.length]);
+  }, [auth.project?.name, isScheduleReadOnlyProject, resetShareSelection, resetTemplateSelection, visibleTasks.length]);
 
   const handleDeleteTemplate = useCallback(async (templateId: string) => {
     const deletingCurrent = workspace.kind === 'template' && workspace.templateId === templateId;
@@ -2058,14 +1141,13 @@ export function WorkspaceShell({
           name,
           rootTaskIds: saveTemplateDraft.rootTaskIds,
         });
-        setSelectedTemplateTaskIds(new Set());
-        setTemplateSelectionMode(false);
+        resetTemplateSelection();
       }
       setSaveTemplateDraft(null);
     } finally {
       setSaveTemplatePending(false);
     }
-  }, [createTemplateFromProject, createTemplateFromSelection, saveTemplateDraft]);
+  }, [createTemplateFromProject, createTemplateFromSelection, resetTemplateSelection, saveTemplateDraft]);
 
   const handleInsertTemplateFromModal = useCallback(async (input: { templateId: string; placement: 'after' | 'inside' }) => {
     if (!insertTemplateDraft) {
@@ -2332,11 +1414,9 @@ export function WorkspaceShell({
   }, [clearAiDoneGraceTimer, releaseAiMutationLock]);
 
   useEffect(() => {
-    setSelectedShareTaskIds(new Set());
-    setShareSelectionMode(false);
-    setSelectedTemplateTaskIds(new Set());
-    setTemplateSelectionMode(false);
-  }, [hasShareToken, sessionProjectId]);
+    resetShareSelection();
+    resetTemplateSelection();
+  }, [hasShareToken, resetShareSelection, resetTemplateSelection, sessionProjectId]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !activeWorkspaceProjectId || hasShareToken || workspace.kind !== 'project') {
@@ -2504,144 +1584,6 @@ export function WorkspaceShell({
   const shareStatus = useUIStore((state) => state.shareStatus);
   const showShareManager = useUIStore((state) => state.showShareManager);
   const { updateAvailable, reloadApp } = useAppUpdateCheck();
-  const handleStartPartialShareSelection = useCallback(() => {
-    setTemplateSelectionMode(false);
-    setSelectedTemplateTaskIds(new Set());
-    setSelectedShareTaskIds(new Set());
-    setShareSelectionMode(true);
-    useUIStore.getState().setShowShareManager(false);
-    setShareStatus('idle');
-  }, [setShareStatus]);
-  const handlePartialShareSelectionChange = useCallback((nextSelectedTaskIds: Set<string>) => {
-    setSelectedShareTaskIds((previousSelectedTaskIds) => {
-      const added = Array.from(nextSelectedTaskIds).filter((id) => !previousSelectedTaskIds.has(id));
-      const removed = Array.from(previousSelectedTaskIds).filter((id) => !nextSelectedTaskIds.has(id));
-      if (added.length + removed.length !== 1) {
-        return nextSelectedTaskIds;
-      }
-
-      const changedTaskId = added[0] ?? removed[0];
-      if (!changedTaskId) {
-        return nextSelectedTaskIds;
-      }
-
-      const subtreeIds = collectTaskSubtreeIds(visibleTasks, changedTaskId);
-      if (subtreeIds.length <= 1) {
-        return nextSelectedTaskIds;
-      }
-
-      const normalized = new Set(nextSelectedTaskIds);
-      const shouldSelect = added.length === 1;
-      for (const taskId of subtreeIds) {
-        if (shouldSelect) {
-          normalized.add(taskId);
-        } else {
-          normalized.delete(taskId);
-        }
-      }
-      return normalized;
-    });
-  }, [visibleTasks]);
-  const handleCancelPartialShareSelection = useCallback(() => {
-    setSelectedShareTaskIds(new Set());
-    setShareSelectionMode(false);
-    setShareStatus('idle');
-  }, [setShareStatus]);
-  const handleStartTemplateSelection = useCallback(() => {
-    setShareSelectionMode(false);
-    setSelectedShareTaskIds(new Set());
-    setSelectedTemplateTaskIds(new Set());
-    setTemplateSelectionMode(true);
-  }, []);
-  const handleTemplateSelectionChange = useCallback((nextSelectedTaskIds: Set<string>) => {
-    setSelectedTemplateTaskIds((previousSelectedTaskIds) => {
-      const added = Array.from(nextSelectedTaskIds).filter((id) => !previousSelectedTaskIds.has(id));
-      const removed = Array.from(previousSelectedTaskIds).filter((id) => !nextSelectedTaskIds.has(id));
-      if (added.length + removed.length !== 1) {
-        return nextSelectedTaskIds;
-      }
-
-      const changedTaskId = added[0] ?? removed[0];
-      if (!changedTaskId) {
-        return nextSelectedTaskIds;
-      }
-
-      const subtreeIds = collectTaskSubtreeIds(visibleTasks, changedTaskId);
-      if (subtreeIds.length <= 1) {
-        return nextSelectedTaskIds;
-      }
-
-      const normalized = new Set(nextSelectedTaskIds);
-      const shouldSelect = added.length === 1;
-      for (const taskId of subtreeIds) {
-        if (shouldSelect) {
-          normalized.add(taskId);
-        } else {
-          normalized.delete(taskId);
-        }
-      }
-      return normalized;
-    });
-  }, [visibleTasks]);
-  const handleCancelTemplateSelection = useCallback(() => {
-    setSelectedTemplateTaskIds(new Set());
-    setTemplateSelectionMode(false);
-  }, []);
-  const handleConfirmTemplateSelection = useCallback(() => {
-    if (selectedTemplateTaskIds.size === 0) {
-      return;
-    }
-    const selectedTasks = visibleTasks.filter((task) => selectedTemplateTaskIds.has(task.id));
-    const initialName = selectedTasks.find((task) => !task.parentId || !selectedTemplateTaskIds.has(task.parentId))?.name ?? 'Новый шаблон';
-    setSaveTemplateDraft({
-      mode: 'selection',
-      initialName,
-      taskCount: selectedTasks.length,
-      rootTaskIds: Array.from(selectedTemplateTaskIds),
-    });
-  }, [selectedTemplateTaskIds, visibleTasks]);
-  const handleCreateTemplateFromTask = useCallback((task: Task) => {
-    setShareSelectionMode(false);
-    setSelectedShareTaskIds(new Set());
-    setSelectedTemplateTaskIds(new Set(collectTaskSubtreeIds(visibleTasks, task.id)));
-    setTemplateSelectionMode(true);
-  }, [visibleTasks]);
-  const handleSubmitPartialShareSelection = useCallback(async () => {
-    if (!auth.accessToken || !auth.project || selectedShareTaskIds.size === 0) {
-      return;
-    }
-
-    try {
-      setShareStatus('creating');
-      const response = await fetch(`/api/projects/${auth.project.id}/share-links`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${auth.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          scope: 'task_selection',
-          includedTaskIds: Array.from(selectedShareTaskIds),
-          label: auth.project.name,
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      setSelectedShareTaskIds(new Set());
-      setShareSelectionMode(false);
-      useUIStore.getState().setShowShareManager(true);
-      setShareStatus('idle');
-    } catch (error) {
-      console.error('Failed to create partial share link:', error);
-      setShareStatus('error');
-      window.setTimeout(() => {
-        if (useUIStore.getState().shareStatus === 'error') {
-          useUIStore.getState().setShareStatus('idle');
-        }
-      }, 2500);
-    }
-  }, [auth.accessToken, auth.project, selectedShareTaskIds, setShareStatus]);
   const currentProjectTaskCount = workspace.kind === 'project'
     ? (
       auth.projects.find((project) => project.id === workspace.projectId)?.taskCount
@@ -2738,357 +1680,44 @@ export function WorkspaceShell({
       },
     });
   }, [currentProjectLabel, ganttRef]);
-
-  const handleExportPdf = useCallback(async () => {
-    const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);
-    if (proactiveExportDenial) {
-      await openLimitModal(proactiveExportDenial);
-      return;
-    }
-
-    if (isPdfHelperDismissed()) {
-      await doExportPdf();
-    } else {
-      setShowPdfHelper(true);
-    }
-  }, [billingStatus, doExportPdf, openLimitModal]);
-
-  const handleExportExcel = useCallback(async () => {
-    const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);
-    if (proactiveExportDenial) {
-      await openLimitModal(proactiveExportDenial);
-      return;
-    }
-
-    const exportAccessLevel = getExportAccessLevel(billingStatus);
-    if (exportAccessLevel !== 'pdf_excel' && exportAccessLevel !== 'pdf_excel_api') {
-      await openLimitModal({
-        code: 'EXPORT_FEATURE_LOCKED',
-        limitKey: 'export',
-        reasonCode: 'feature_disabled',
-        remaining: null,
-        plan: ((billingStatus?.plan as PlanId | undefined) ?? 'free'),
-        planLabel: billingStatus?.planMeta.label ?? PLAN_LABELS[((billingStatus?.plan as PlanId | undefined) ?? 'free')],
-        upgradeHint: 'Экспорт PDF + Excel доступен на любом платном тарифе.',
-      });
-      return;
-    }
-
-    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-    let token = getLatestAccessToken();
-    if (!token) {
-      onLoginRequired();
-      return;
-    }
-
-    setIsExportExcelLoading(true);
-    try {
-      let response = await fetch('/api/export/excel', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status === 401) {
-        const refreshedToken = await auth.refreshAccessToken();
-        if (!refreshedToken) {
-          onLoginRequired();
-          return;
-        }
-        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-        response = await fetch('/api/export/excel', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-      }
-
-      if (response.status === 403) {
-        try {
-          const body = await response.json() as Partial<ConstraintDenialPayload>;
-          if (isConstraintCode(body.code)) {
-            await openLimitModal(body);
-            return;
-          }
-        } catch {
-          // fall through to generic error
-        }
-        throw new Error(`HTTP 403`);
-      }
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const projectName = currentProjectLabel?.trim() || 'Мой проект';
-      const fallbackFileName = `ГетГант - ${projectName} - ${formatPdfFileTimestamp(new Date())}.xlsx`;
-      const fileName = getAttachmentFileName(response.headers.get('Content-Disposition'), fallbackFileName);
-      await triggerBlobDownload(blob, fileName);
-    } finally {
-      setIsExportExcelLoading(false);
-    }
-  }, [auth, billingStatus, currentProjectLabel, onLoginRequired, openLimitModal]);
-
-  const handleExportBackup = useCallback(async () => {
-    const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);
-    if (proactiveExportDenial) {
-      await openLimitModal(proactiveExportDenial);
-      return;
-    }
-
-    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-    let token = getLatestAccessToken();
-    if (!token) {
-      onLoginRequired();
-      return;
-    }
-
-    let response = await fetch('/api/export/backup', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 401) {
-      const refreshedToken = await auth.refreshAccessToken();
-      if (!refreshedToken) {
-        onLoginRequired();
-        return;
-      }
-      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-      response = await fetch('/api/export/backup', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-    }
-
-    if (response.status === 403) {
-      try {
-        const body = await response.json() as Partial<ConstraintDenialPayload>;
-        if (isConstraintCode(body.code)) {
-          await openLimitModal(body);
-          return;
-        }
-      } catch {
-        // fall through to generic error
-      }
-      throw new Error('HTTP 403');
-    }
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const blob = await response.blob();
-    const projectName = currentProjectLabel?.trim() || 'Мой проект';
-    const fallbackFileName = `ГетГант - ${projectName} - backup.gantt.json`;
-    const fileName = getAttachmentFileName(response.headers.get('Content-Disposition'), fallbackFileName);
-    await triggerBlobDownload(blob, fileName);
-  }, [auth, billingStatus, currentProjectLabel, onLoginRequired, openLimitModal]);
-
-  const reloadAuthenticatedProjectSnapshot = useCallback(async () => {
-    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-    let token = getLatestAccessToken();
-    if (!token) {
-      onLoginRequired();
-      return;
-    }
-
-    let response = await fetch('/api/project', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 401) {
-      const refreshedToken = await auth.refreshAccessToken();
-      if (!refreshedToken) {
-        onLoginRequired();
-        return;
-      }
-      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-      response = await fetch('/api/project', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-    }
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const payload = await response.json() as ProjectLoadResponse;
-    useProjectStore.getState().hydrateConfirmed(payload.version, {
-      tasks: normalizeTasks(payload.snapshot.tasks),
-      dependencies: payload.snapshot.dependencies,
-    }, {
-      resources: payload.snapshot.resources,
-      assignments: payload.snapshot.assignments,
-      progressEntries: payload.snapshot.progressEntries ?? [],
-    });
-  }, [auth, onLoginRequired]);
-
-  const handleOpenBackupImport = useCallback(() => {
-    backupImportInputRef.current?.click();
-  }, []);
-
-  const handleBackupImportChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) {
-      return;
-    }
-
-    if (hasShareToken) {
-      return;
-    }
-
-    if (!auth.isAuthenticated) {
-      onLoginRequired();
-      return;
-    }
-
-    if (isScheduleReadOnlyProject) {
-      return;
-    }
-    setSelectedBackupFile(file);
-    setBackupRestoreError(null);
-    setBackupRestoreSummary(null);
-  }, [auth.isAuthenticated, hasShareToken, isScheduleReadOnlyProject, onLoginRequired]);
-
-  const handleCloseBackupRestoreModal = useCallback(() => {
-    if (backupRestorePending) {
-      return;
-    }
-    setSelectedBackupFile(null);
-    setBackupRestoreError(null);
-    setBackupRestoreSummary(null);
-  }, [backupRestorePending]);
-
-  const handleConfirmBackupRestore = useCallback(async () => {
-    if (!selectedBackupFile) {
-      return;
-    }
-
-    let backup: unknown;
-    try {
-      backup = JSON.parse(await selectedBackupFile.text());
-    } catch {
-      setBackupRestoreError('Файл backup не является корректным JSON.');
-      return;
-    }
-
-    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-    let token = getLatestAccessToken();
-    if (!token) {
-      onLoginRequired();
-      return;
-    }
-
-    setBackupRestorePending(true);
-    setBackupRestoreError(null);
-    try {
-      let response = await fetch('/api/import/backup', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ backup }),
-      });
-
-      if (response.status === 401) {
-        const refreshedToken = await auth.refreshAccessToken();
-        if (!refreshedToken) {
-          onLoginRequired();
-          return;
-        }
-        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-        response = await fetch('/api/import/backup', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ backup }),
-        });
-      }
-
-      if (!response.ok) {
-        let message = `HTTP ${response.status}`;
-        try {
-          const payload = await response.json() as { error?: string };
-          if (payload.error) {
-            message = payload.error;
-          }
-        } catch {
-          // ignore invalid error body
-        }
-        setBackupRestoreError(`Не удалось восстановить backup: ${message}`);
-        return;
-      }
-
-      const payload = await response.json() as BackupImportResponse;
-      useProjectStore.getState().clearTransientState();
-      await refreshProjects();
-      await reloadAuthenticatedProjectSnapshot();
-      setBackupRestoreSummary(payload.summary);
-    } finally {
-      setBackupRestorePending(false);
-    }
-  }, [auth, onLoginRequired, refreshProjects, reloadAuthenticatedProjectSnapshot, selectedBackupFile]);
-
-  const handleDownloadImportTemplate = useCallback(async () => {
-    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-    let token = getLatestAccessToken();
-    if (!token) {
-      onLoginRequired();
-      return;
-    }
-
-    setIsImportTemplateLoading(true);
-    try {
-      let response = await fetch('/api/import/excel/template', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status === 401) {
-        const refreshedToken = await auth.refreshAccessToken();
-        if (!refreshedToken) {
-          onLoginRequired();
-          return;
-        }
-        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-        response = await fetch('/api/import/excel/template', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-      }
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const fileName = getAttachmentFileName(
-        response.headers.get('Content-Disposition'),
-        'Шаблон импорта задач - GetGantt.xlsx',
-      );
-      await triggerBlobDownload(blob, fileName);
-    } finally {
-      setIsImportTemplateLoading(false);
-    }
-  }, [auth, onLoginRequired]);
-
-  const handleImportExcelCompleted = useCallback(async () => {
-    await reloadAuthenticatedProjectSnapshot();
-  }, [reloadAuthenticatedProjectSnapshot]);
+  const exportImportController = useExportImportController({
+    auth: {
+      accessToken: auth.accessToken,
+      isAuthenticated: auth.isAuthenticated,
+      refreshAccessToken: auth.refreshAccessToken,
+    },
+    billingStatus,
+    currentProjectLabel: currentProjectLabel ?? 'Мой проект',
+    hasShareToken,
+    isScheduleReadOnlyProject,
+    onLoginRequired,
+    openLimitModal,
+    refreshProjects,
+    doExportPdf,
+    isPdfHelperDismissed,
+  });
+  const {
+    backupImportInputRef,
+    isExportExcelLoading,
+    isImportTemplateLoading,
+    showImportExcelModal,
+    showPdfHelper,
+    selectedBackupFile,
+    backupRestorePending,
+    backupRestoreError,
+    backupRestoreSummary,
+    setShowImportExcelModal,
+    setShowPdfHelper,
+    handleExportPdf,
+    handleExportExcel,
+    handleExportBackup,
+    handleOpenBackupImport,
+    handleBackupImportChange,
+    handleCloseBackupRestoreModal,
+    handleConfirmBackupRestore,
+    handleDownloadImportTemplate,
+    handleImportExcelCompleted,
+  } = exportImportController;
 
   // Workspace view selection and shared overlays.
   const workspaceShell = workspace.kind === 'shared'
@@ -3214,12 +1843,12 @@ export function WorkspaceShell({
               shareSelectionMode={shareSelectionMode}
               selectedShareTaskIds={selectedShareTaskIds}
               onSelectedShareTaskIdsChange={handlePartialShareSelectionChange}
-              onCancelShareSelection={handleCancelPartialShareSelection}
+              onCancelShareSelection={resetShareSelection}
               onConfirmShareSelection={handleSubmitPartialShareSelection}
               templateSelectionMode={templateSelectionMode}
               selectedTemplateTaskIds={selectedTemplateTaskIds}
               onSelectedTemplateTaskIdsChange={handleTemplateSelectionChange}
-              onCancelTemplateSelection={handleCancelTemplateSelection}
+              onCancelTemplateSelection={resetTemplateSelection}
               onConfirmTemplateSelection={handleConfirmTemplateSelection}
               ganttDayMode={effectiveAuthGanttDayMode}
               displayGanttDayMode={effectiveAuthGanttDayMode}
@@ -3541,8 +2170,7 @@ export function WorkspaceShell({
         onClose={() => {
           if (!saveTemplatePending) {
             if (saveTemplateDraft.mode === 'selection') {
-              setSelectedTemplateTaskIds(new Set());
-              setTemplateSelectionMode(false);
+              resetTemplateSelection();
             }
             setSaveTemplateDraft(null);
           }

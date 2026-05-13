@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 
 const appSource = readFileSync(resolve(process.cwd(), 'packages/web/src/App.tsx'), 'utf8');
 const workspaceSource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/workspace/WorkspaceShell.tsx'), 'utf8');
+const generationSource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/project-generation/useProjectGenerationController.ts'), 'utf8');
 const routeControllerSource = readFileSync(resolve(process.cwd(), 'packages/web/src/app/useAppRouteController.ts'), 'utf8');
 const appRoutesSource = readFileSync(resolve(process.cwd(), 'packages/web/src/app/appRoutes.ts'), 'utf8');
 const billingPolicySource = readFileSync(resolve(process.cwd(), 'packages/web/src/features/billing/policy.ts'), 'utf8');
@@ -121,7 +122,7 @@ describe('project creation recovery', () => {
 describe('empty project stability', () => {
   it('keeps start screen visibility gated by generation state and explicit empty-project mode', () => {
     assert.match(workspaceSource, /const showProjectStartScreen = workspace\.kind === 'project'[\s\S]*&& !activeProjectGenerationRunning[\s\S]*&& activeEmptyProjectModeProjectId !== workspace\.projectId;/);
-    assert.match(workspaceSource, /if \(activeGenerationJob\.status === 'succeeded' \|\| activeGenerationJob\.status === 'canceled'\) \{/);
+    assert.match(generationSource, /if \(activeGenerationJob\.status === 'succeeded' \|\| activeGenerationJob\.status === 'canceled'\) \{/);
   });
 });
 
