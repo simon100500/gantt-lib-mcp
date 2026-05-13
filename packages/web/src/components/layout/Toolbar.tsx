@@ -647,7 +647,7 @@ export function Toolbar({
                     className="flex cursor-pointer items-center gap-2"
                   >
                     <RefreshCw className="h-4 w-4" />
-                    <span className="text-sm">Сбросить мой вид</span>
+                    <span className="text-sm">Как в настройках проекта</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                   {taskListColumnRows.map((column) => {
@@ -1149,7 +1149,7 @@ export function Toolbar({
                     className="flex cursor-pointer items-center gap-2"
                   >
                     <RefreshCw className="h-4 w-4" />
-                    <span className="text-sm">Сбросить мой вид</span>
+                    <span className="text-sm">Как в настройках проекта</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                 </>
