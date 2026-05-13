@@ -18,7 +18,7 @@ interface CreateProjectModalProps {
   description?: string;
   submitLabel?: string;
   archiveProjectName?: string;
-  onSave: (name: string, groupId: string) => Promise<{ id: string; name: string } | null>;
+  onSave: (name: string, groupId?: string) => Promise<{ id: string; name: string } | null>;
   onCreateGroup?: (name: string) => Promise<ProjectGroup | null>;
   onClose: () => void;
 }
@@ -61,14 +61,14 @@ export function CreateProjectModal({
       return;
     }
 
-    if (!selectedGroupId) {
+    if (projectGroups.length > 0 && !selectedGroupId) {
       setError('Выберите группу проектов');
       return;
     }
 
     setLoading(true);
     try {
-      const result = await onSave(trimmedName, selectedGroupId);
+      const result = await onSave(trimmedName, selectedGroupId || undefined);
       if (result) {
         onClose();
       } else if (!archiveProjectName) {
@@ -140,27 +140,30 @@ export function CreateProjectModal({
                   </Button>
                 ) : null}
               </div>
-              <select
-                id="new-project-group"
-                value={selectedGroupId}
-                onChange={(event) => setSelectedGroupId(event.target.value)}
-                disabled={loading || projectGroups.length === 0}
-                className={cn(
-                  'flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
-                  error && !selectedGroupId && 'border-destructive focus-visible:ring-destructive',
-                )}
-              >
-                {projectGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-              {projectGroups.length === 0 ? (
-                <p className="text-sm text-slate-500">Сначала создайте группу проектов.</p>
-              ) : null}
+              {projectGroups.length > 0 ? (
+                <select
+                  id="new-project-group"
+                  value={selectedGroupId}
+                  onChange={(event) => setSelectedGroupId(event.target.value)}
+                  disabled={loading}
+                  className={cn(
+                    'flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                    error && !selectedGroupId && 'border-destructive focus-visible:ring-destructive',
+                  )}
+                >
+                  {projectGroups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  Проект будет создан в основной группе аккаунта.
+                </div>
+              )}
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
@@ -185,7 +188,7 @@ export function CreateProjectModal({
               <Button
                 type="submit"
                 className="flex-1"
-                disabled={loading || projectGroups.length === 0}
+                disabled={loading}
               >
                 {loading ? 'Создание...' : submitLabel}
               </Button>

@@ -555,11 +555,24 @@ export function ProjectSwitcher({
     return map;
   }, [activeProjects, effectiveGroups]);
 
-  const defaultCreateGroupId = currentProject.kind === 'project'
+  const editableGroups = useMemo(
+    () => effectiveGroups.filter((group) => group.accessRole !== 'viewer'),
+    [effectiveGroups],
+  );
+  const currentProjectGroupId = currentProject.kind === 'project'
     ? projects.find((project) => project.id === currentProject.id)?.groupId ?? currentProject.groupId
-    : effectiveGroups.find((group) => group.isDefault)?.id ?? effectiveGroups[0]?.id;
-  const defaultCreateGroup = effectiveGroups.find((group) => group.id === defaultCreateGroupId);
-  const defaultCreateDisabled = createDisabled || defaultCreateGroup?.accessRole === 'viewer';
+    : null;
+  const preferredEditableGroupId = currentProjectGroupId
+    && editableGroups.some((group) => group.id === currentProjectGroupId)
+    ? currentProjectGroupId
+    : null;
+  const fallbackEditableGroupId = editableGroups.find((group) => group.isDefault)?.id ?? editableGroups[0]?.id ?? null;
+  const defaultCreateGroupId = preferredEditableGroupId
+    ?? fallbackEditableGroupId
+    ?? currentProjectGroupId
+    ?? effectiveGroups.find((group) => group.isDefault)?.id
+    ?? effectiveGroups[0]?.id;
+  const defaultCreateDisabled = createDisabled || editableGroups.length === 0;
 
   useEffect(() => {
     setOpenGroupIds((current) => {
