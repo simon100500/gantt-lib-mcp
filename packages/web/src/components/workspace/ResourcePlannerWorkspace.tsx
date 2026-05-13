@@ -45,6 +45,7 @@ interface ResourcePlannerWorkspaceProps {
   onBackToProject: () => void;
   onCorrectConflict: (target: PlannerCorrectionTarget) => void;
   onOpenTask?: (target: PlannerCorrectionTarget) => void;
+  onResourceLimitReached?: () => void | Promise<void>;
 }
 
 type PlannerState =
@@ -317,6 +318,7 @@ export function ResourcePlannerWorkspace({
   calendarDays = [],
   readonly = false,
   onOpenTask,
+  onResourceLimitReached,
 }: ResourcePlannerWorkspaceProps) {
   const plannerScope: PlannerScope = 'current-project';
   const cachedPlannerData = useProjectStore((store) => store.resourcePlannerCache[`${projectId}:${plannerScope}`] ?? null);
@@ -731,6 +733,13 @@ export function ResourcePlannerWorkspace({
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
+        const issueCode = body && typeof body === 'object' && 'issue' in body && body.issue && typeof body.issue === 'object' && 'code' in body.issue
+          ? body.issue.code
+          : null;
+        if (issueCode === 'resource_limit_reached') {
+          await onResourceLimitReached?.();
+          return;
+        }
         const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
           ? body.error
           : `HTTP ${response.status}`;
@@ -750,7 +759,7 @@ export function ResourcePlannerWorkspace({
     } finally {
       setPendingCatalogResourceId(null);
     }
-  }, [accessToken, clearResourcePlannerCache, pendingCatalogResourceId, projectId, upsertResource]);
+  }, [accessToken, clearResourcePlannerCache, onResourceLimitReached, pendingCatalogResourceId, projectId, upsertResource]);
 
   const handleResourceChange = useCallback(async (nextResource: ResourcePlannerTimelineResource) => {
     const resource = resources.find((candidate) => candidate.id === nextResource.id);

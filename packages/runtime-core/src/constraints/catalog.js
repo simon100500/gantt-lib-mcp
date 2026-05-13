@@ -37,7 +37,7 @@ export const PLAN_CATALOG = {
             projects: 1,
             ai_queries: { period: 'lifetime', value: 20 },
             archive: true,
-            resource_pool: false,
+            resource_pool: true,
             export: 'none',
         },
     },

@@ -203,6 +203,23 @@ function buildLocalArchiveLimitDenial(params: {
   };
 }
 
+function buildResourceCreationLimitDenial(
+  status: BillingConstraintStatus,
+): Partial<ConstraintDenialPayload> {
+  const plan = ((status?.plan as PlanId | undefined) ?? 'free');
+  const planLabel = status?.planMeta.label ?? PLAN_LABELS[plan];
+
+  return {
+    code: 'RESOURCE_POOL_FEATURE_LOCKED',
+    limitKey: 'resource_pool',
+    reasonCode: 'feature_disabled',
+    remaining: null,
+    plan,
+    planLabel,
+    upgradeHint: 'На бесплатном тарифе можно создать до 3 ресурсов. Перейдите на Старт, чтобы добавить больше.',
+  };
+}
+
 function normalizePathname(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith('/')) {
     return pathname.slice(0, -1);
@@ -2841,18 +2858,13 @@ function WorkspaceApp({
     if (!canViewResources) {
       return;
     }
-    const proactiveResourcePoolDenial = buildProactiveConstraintDenial('resource_pool', billingStatus);
-    if (proactiveResourcePoolDenial) {
-      await openLimitModal(proactiveResourcePoolDenial);
-      return;
-    }
 
     if (!auth.project) {
       return;
     }
 
     setWorkspace({ kind: 'planner', projectId: auth.project.id });
-  }, [auth.project, billingStatus, canViewResources, openLimitModal, setWorkspace]);
+  }, [auth.project, canViewResources, setWorkspace]);
 
   const handleOpenFinance = useCallback(async () => {
     if (!auth.project || !canViewFinance) {
@@ -3786,6 +3798,7 @@ function WorkspaceApp({
           ganttDayMode={effectiveAuthGanttDayMode}
           calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
           readonly={isArchivedProject || !canEditResources}
+          onResourceLimitReached={() => openLimitModal(buildResourceCreationLimitDenial(billingStatus))}
           onBackToProject={() => {
             setPlannerCorrectionTarget(null);
             setWorkspace({ kind: 'project', projectId: workspace.projectId, chatOpen: readProjectChatOpenState() });
@@ -3905,6 +3918,7 @@ function WorkspaceApp({
               onInsertTemplateAtTask={handleInsertTemplateAtTask}
               onCreateTemplateFromProject={handleCreateCurrentProjectTemplate}
               onStartTemplateSelection={handleStartTemplateSelection}
+              onOpenLimitModal={openLimitModal}
             />
           )
           : (

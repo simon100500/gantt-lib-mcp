@@ -33,6 +33,7 @@ import { cn } from '../../lib/utils.ts';
 import { buildDefaultBaselineName } from '../../lib/baselineNaming.ts';
 import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
 import type { BaselineSnapshotResponse, ProjectResource, ResourceScope, ResourceType, TaskAssignmentRecord, TaskProgressEntry } from '../../lib/apiTypes.ts';
+import type { ConstraintDenialPayload } from '../../lib/constraintUi.ts';
 import type { CalendarDay, Task, TimelineMarker, ValidationResult } from '../../types.ts';
 import {
   collectDescendantLeafIds,
@@ -105,6 +106,7 @@ interface ProjectWorkspaceProps {
   onCreateTemplateFromProject?: () => void | Promise<void>;
   onStartTemplateSelection?: () => void | Promise<void>;
   templateMode?: boolean;
+  onOpenLimitModal?: (denial: Partial<ConstraintDenialPayload>) => Promise<void>;
 }
 
 function formatTaskCount(count: number) {
@@ -570,6 +572,7 @@ export function ProjectWorkspace({
   onCreateTemplateFromProject,
   onStartTemplateSelection,
   templateMode = false,
+  onOpenLimitModal,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -1604,6 +1607,21 @@ export function ProjectWorkspace({
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
+        const issueCode = body && typeof body === 'object' && 'issue' in body && body.issue && typeof body.issue === 'object' && 'code' in body.issue
+          ? body.issue.code
+          : null;
+        if (issueCode === 'resource_limit_reached') {
+          await onOpenLimitModal?.({
+            code: 'RESOURCE_POOL_FEATURE_LOCKED',
+            limitKey: 'resource_pool',
+            reasonCode: 'feature_disabled',
+            remaining: null,
+            plan: 'free',
+            planLabel: 'Бесплатный',
+            upgradeHint: 'На бесплатном тарифе можно создать до 3 ресурсов. Обновите тариф, чтобы снять этот лимит.',
+          });
+          return;
+        }
         const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
           ? body.error
           : `HTTP ${response.status}`;
@@ -1628,7 +1646,7 @@ export function ProjectWorkspace({
     } finally {
       setCreateAssignmentResourcePending(false);
     }
-  }, [accessToken, clearResourcePlannerCache, effectiveReadOnly, upsertResource, workspace]);
+  }, [accessToken, clearResourcePlannerCache, effectiveReadOnly, onOpenLimitModal, upsertResource, workspace]);
 
   const handleAssignResources = useCallback(async (task: Task, selectedResourceIds: string[]) => {
     if (!accessToken || effectiveReadOnly) {

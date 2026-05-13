@@ -45,6 +45,7 @@ type ResourceRow = {
 
 type ProjectOwnerSelection = { id: string; userId: string; groupId: string };
 type ResourceIdSelection = { id: string };
+type SubscriptionPlanSelection = { plan: string; billingState?: string | null };
 
 type ResourceFindFirstArgs = {
   where: {
@@ -61,6 +62,12 @@ type ResourceFindFirstArgs = {
 type ResourcePrismaClient = {
   project: {
     findUnique(args: { where: { id: string }; select: { id: true; userId: true; groupId: true } }): Promise<ProjectOwnerSelection | null>;
+  };
+  subscription: {
+    findUnique(args: {
+      where: { userId: string };
+      select: { plan: true; billingState?: true };
+    }): Promise<SubscriptionPlanSelection | null>;
   };
   resource: {
     findMany(args: {
@@ -220,6 +227,35 @@ export class ResourceService {
     }
   }
 
+  private async enforceFreeResourceCreateLimit(project: ProjectOwnerRow, projectId: string): Promise<void> {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { userId: project.userId },
+      select: { plan: true, billingState: true },
+    });
+    const plan = subscription?.plan ?? 'free';
+    const billingState = subscription?.billingState ?? 'free';
+
+    if (plan !== 'free' || billingState === 'trial_active') {
+      return;
+    }
+
+    const existingResources = await this.prisma.resource.findMany({
+      where: {
+        userId: project.userId,
+        OR: [{ projectGroupId: project.groupId }, { projectId }],
+      },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    if (existingResources.length >= 3) {
+      throw new ResourceValidationError('На бесплатном тарифе можно создать не больше 3 ресурсов.', {
+        code: 'resource_limit_reached',
+        field: 'name',
+        detail: '3',
+      });
+    }
+  }
+
   async list({ projectId, includeInactive = false }: ListProjectResourcesInput): Promise<{ resources: ProjectResource[] }> {
     const normalizedProjectId = requireTrimmed(projectId, 'projectId');
     const project = await this.getWorkspaceBoundaryProject(normalizedProjectId);
@@ -241,6 +277,7 @@ export class ResourceService {
     const scope = normalizeScope(input.scope);
 
     const project = await this.getWorkspaceBoundaryProject(projectId);
+    await this.enforceFreeResourceCreateLimit(project, projectId);
     const ownership = scope === 'shared'
       ? { projectId: null, projectGroupId: project.groupId }
       : { projectId: project.id, projectGroupId: null };

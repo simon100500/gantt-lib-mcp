@@ -31,12 +31,18 @@ type AssignmentRow = {
   resourceId: string;
   createdAt: Date;
 };
+type SubscriptionRow = {
+  userId: string;
+  plan: string;
+  billingState?: string | null;
+};
 
 class FakeRuntimeCorePrisma {
   readonly projects = new Map<string, ProjectRow>();
   readonly tasks = new Map<string, TaskRow>();
   readonly resources = new Map<string, ResourceRow>();
   readonly assignments = new Map<string, AssignmentRow>();
+  readonly subscriptions = new Map<string, SubscriptionRow>();
 
   readonly project = {
     findUnique: async ({ where, select }: { where: { id: string }; select?: { id?: true; userId?: true; groupId?: true } }): Promise<ProjectRow | null> => {
@@ -52,6 +58,13 @@ class FakeRuntimeCorePrisma {
         userId: project.userId,
         groupId: project.groupId,
       };
+    },
+  };
+
+  readonly subscription = {
+    findUnique: async ({ where }: { where: { userId: string }; select?: { plan?: true; billingState?: true } }): Promise<SubscriptionRow | null> => {
+      const subscription = this.subscriptions.get(where.userId) ?? null;
+      return subscription ? { ...subscription } : null;
     },
   };
 
@@ -221,6 +234,8 @@ function createFixture() {
   prisma.projects.set('project-2', { id: 'project-2', userId: 'workspace-user-1', groupId: 'group-1' });
   prisma.projects.set('project-3', { id: 'project-3', userId: 'workspace-user-2', groupId: 'group-3' });
   prisma.projects.set('project-4', { id: 'project-4', userId: 'workspace-user-1', groupId: 'group-2' });
+  prisma.subscriptions.set('workspace-user-1', { userId: 'workspace-user-1', plan: 'free', billingState: 'free' });
+  prisma.subscriptions.set('workspace-user-2', { userId: 'workspace-user-2', plan: 'free', billingState: 'free' });
 
   prisma.tasks.set('parent-task', { id: 'parent-task', projectId: 'project-1', parentId: null });
   prisma.tasks.set('leaf-task', { id: 'leaf-task', projectId: 'project-1', parentId: 'parent-task' });
@@ -395,6 +410,24 @@ describe('resource and assignment service contracts', () => {
 
     const siblingLocal = await resourceService.create({ projectId: 'project-2', name: 'Local A', scope: 'project' });
     assert.equal(siblingLocal.projectId, 'project-2');
+  });
+
+  it('limits free users to three resources in the current resource pool', async () => {
+    const { resourceService } = createFixture();
+
+    await resourceService.create({ projectId: 'project-1', name: 'Crew A', scope: 'project' });
+    await resourceService.create({ projectId: 'project-1', name: 'Crew B', scope: 'project' });
+    await resourceService.create({ projectId: 'project-1', name: 'Crew C', scope: 'shared' });
+
+    await assert.rejects(
+      () => resourceService.create({ projectId: 'project-1', name: 'Crew D', scope: 'project' }),
+      (error: unknown) => {
+        assert.ok(error instanceof ResourceValidationError);
+        assert.equal(error.issue.code, 'resource_limit_reached');
+        assert.equal(error.message, 'На бесплатном тарифе можно создать не больше 3 ресурсов.');
+        return true;
+      },
+    );
   });
 
   it('replaces leaf assignments idempotently for mixed shared and local resources and supports empty assignment sets', async () => {

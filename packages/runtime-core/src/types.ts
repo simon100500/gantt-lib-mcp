@@ -274,6 +274,7 @@ export interface ResourceAssignmentValidationIssue {
     | 'task_has_no_leaf_descendants'
     | 'duplicate_resource_id'
     | 'resource_name_conflict'
+    | 'resource_limit_reached'
     | 'planner_scope_invalid';
   field?: 'projectId' | 'taskId' | 'resourceId' | 'resourceIds' | 'name' | 'type' | 'scope';
   detail?: string;

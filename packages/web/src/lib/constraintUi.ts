@@ -269,8 +269,11 @@ export function buildConstraintModalContent(
     if (denial.limitKey === 'archive') {
       title = 'Не теряйте доступ к проектам';
       description = 'Архивируйте завершённые проекты и возвращайтесь к ним в любой момент.';
+    } else if (denial.limitKey === 'resource_pool') {
+      title = 'Добавьте больше ресурсов';
+      description = buildFeatureGateDescription(denial, planLabel);
     } else {
-      title = `${limitLabel} недоступен`;
+      title = `${limitLabel} на следующем тарифе`;
       description = buildFeatureGateDescription(denial, planLabel);
     }
   } else {
@@ -343,7 +346,7 @@ function defaultUpgradeHint(limitKey: ConstraintLimitKey | null): string {
   }
 
   if (limitKey === 'resource_pool') {
-    return 'Пул ресурсов доступен на тарифе Старт и выше.';
+    return 'Добавляйте больше ресурсов на тарифе Старт и выше.';
   }
 
   if (limitKey === 'export') {
