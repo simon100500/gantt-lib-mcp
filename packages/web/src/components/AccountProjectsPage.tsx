@@ -30,16 +30,7 @@ export function AccountProjectsPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-lg font-semibold text-slate-900">Проекты</h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Активный проект открывается первым. Отсюда можно быстро переключиться в другой.
-              </p>
             </div>
-            <a
-              href="/"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
-            >
-              Открыть приложение
-            </a>
           </div>
 
           {error && (
@@ -84,35 +75,32 @@ export function AccountProjectsPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      <a
-                        href="/"
-                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-white"
+                      <button
+                        type="button"
+                        disabled={switchingProjectId === item.id}
+                        onClick={() => {
+                          if (isCurrent) {
+                            window.location.href = '/';
+                            return;
+                          }
+
+                          setSwitchingProjectId(item.id);
+                          setError(null);
+                          void switchProject(item.id)
+                            .then(() => {
+                              window.location.href = '/';
+                            })
+                        .catch((switchError) => {
+                              setError(switchError instanceof Error ? switchError.message : 'Не удалось переключить проект');
+                            })
+                            .finally(() => {
+                              setSwitchingProjectId((current) => (current === item.id ? null : current));
+                            });
+                        }}
+                        className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Открыть
-                      </a>
-                      {!isCurrent && (
-                        <button
-                          type="button"
-                          disabled={switchingProjectId === item.id}
-                          onClick={() => {
-                            setSwitchingProjectId(item.id);
-                            setError(null);
-                            void switchProject(item.id)
-                              .then(() => {
-                                window.location.href = '/';
-                              })
-                              .catch((switchError) => {
-                                setError(switchError instanceof Error ? switchError.message : 'Не удалось переключить проект');
-                              })
-                              .finally(() => {
-                                setSwitchingProjectId((current) => (current === item.id ? null : current));
-                              });
-                          }}
-                          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {switchingProjectId === item.id ? 'Переключение…' : 'Сделать текущим'}
-                        </button>
-                      )}
+                        {switchingProjectId === item.id ? 'Открытие…' : 'Открыть'}
+                      </button>
                     </div>
                   </div>
                 </div>

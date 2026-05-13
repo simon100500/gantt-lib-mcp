@@ -133,7 +133,7 @@ describe('legacy compatibility', () => {
     expect(result!.limitKey).toBe('projects');
     const content = buildConstraintModalContent(result!);
     expect(content.title).toBe('Пора расширяться');
-    expect(content.description).toContain('расширьте тариф');
+    expect(content.description).toContain('1 активный и 4 архивных проекта');
     expect(content.limitLabel).toBe('лимит проектов');
   });
 
@@ -149,5 +149,20 @@ describe('legacy compatibility', () => {
     };
     const result = normalizeConstraintDenialPayload(denial);
     expect(result!.limitKey).toBe('ai_queries');
+  });
+
+  it('drops impossible enterprise project-limit denials', () => {
+    const denial: ConstraintDenialPayload = {
+      code: 'PROJECT_LIMIT_REACHED',
+      limitKey: 'projects',
+      reasonCode: 'limit_reached',
+      remaining: 'unlimited',
+      plan: 'enterprise',
+      planLabel: 'Корпоративный',
+      upgradeHint: 'Лимит активных проектов исчерпан.',
+      limit: 'unlimited',
+    };
+    const result = normalizeConstraintDenialPayload(denial);
+    expect(result).toBeNull();
   });
 });

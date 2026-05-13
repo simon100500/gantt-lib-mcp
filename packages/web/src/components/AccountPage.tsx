@@ -35,7 +35,7 @@ function PageHeader({ children }: { children: React.ReactNode }) {
 }
 
 export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: AccountPageProps) {
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing'>('billing');
 
   if (!isAuthenticated) {
     return (
@@ -70,29 +70,27 @@ export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: Acc
         <div className="mx-auto flex max-w-5xl flex-wrap gap-2 px-4 py-4 sm:px-6">
           <button
             type="button"
-            onClick={() => setActiveTab('projects')}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'projects'
-                ? 'bg-slate-900 text-white'
+            onClick={() => setActiveTab('billing')}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'billing'
+                ? 'bg-primary text-white'
                 : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-            }`}
+              }`}
           >
-            Проекты
+            Тариф
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('billing')}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'billing'
-                ? 'bg-slate-900 text-white'
+            onClick={() => setActiveTab('projects')}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'projects'
+                ? 'bg-primary text-white'
                 : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-            }`}
+              }`}
           >
-            Биллинг
+            Проекты
           </button>
         </div>
       </div>
-      {activeTab === 'projects' ? <AccountProjectsPage /> : <AccountBillingPage />}
+      {activeTab === 'billing' ? <AccountBillingPage /> : <AccountProjectsPage />}
     </div>
   );
 }

@@ -202,6 +202,19 @@ export function normalizeConstraintDenialPayload(
   const usageSnapshot = limitKey && usage ? getConstraintUsageSnapshot(usage, limitKey) : null;
   const trackedRemaining = usageSnapshot ? readTrackedValue(usageSnapshot.remaining) : null;
 
+  if (
+    denial.code === 'PROJECT_LIMIT_REACHED'
+    && limitKey === 'projects'
+    && (
+      denial.limit === 'unlimited'
+      || denial.remaining === 'unlimited'
+      || usageSnapshot?.remaining?.remainingState === 'unlimited'
+      || plan === 'enterprise'
+    )
+  ) {
+    return null;
+  }
+
   return {
     code: denial.code,
     limitKey,

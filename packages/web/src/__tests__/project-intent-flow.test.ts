@@ -64,6 +64,8 @@ describe('project creation recovery', () => {
   it('renders inline archive warning inside create project modal', () => {
     assert.match(createProjectModalSource, /archiveProjectName\?: string;/);
     assert.match(createProjectModalSource, /Проект "\{archiveProjectName\}" при этом будет архивирован\./);
+    assert.match(createProjectModalSource, /href="\/purchase"/);
+    assert.match(createProjectModalSource, /Расширить тариф/);
   });
 
   it('silently archives the active project before creation and shows paywall only after the limit', () => {
@@ -74,10 +76,13 @@ describe('project creation recovery', () => {
 
   it('decides modal vs paywall from local project state before the create request fails', () => {
     assert.match(appSource, /function buildLocalFreeProjectLimitDenial\(/);
+    assert.match(appSource, /const isFreePlan = billingStatus\?\.billingState === 'free';/);
     assert.match(appSource, /const effectiveProjectDenial = isFreePlanProjectReplacementMode[\s\S]*\? localProjectLimitDenial[\s\S]*: proactiveProjectDenial;/);
     assert.match(appSource, /if \(auth\.isAuthenticated\) \{[\s\S]*if \(\s*effectiveProjectDenial\?\.code === 'PROJECT_LIMIT_REACHED'[\s\S]*canSilentlyReplaceOnFree[\s\S]*openCreateProjectModal/);
     assert.match(appSource, /if \(effectiveProjectDenial\) \{[\s\S]*await openLimitModal\(effectiveProjectDenial\);/);
-    assert.match(appSource, /const immediateDenial = normalizeConstraintDenialPayload\(denial, currentBillingStatus\);[\s\S]*setLimitModal\(\{[\s\S]*denial: immediateDenial,/);
+    assert.match(appSource, /const shouldDeferProjectLimitModal = denial\.code === 'PROJECT_LIMIT_REACHED' && !currentBillingStatus;/);
+    assert.match(appSource, /const immediateDenial = shouldDeferProjectLimitModal[\s\S]*\? null[\s\S]*: normalizeConstraintDenialPayload\(denial, currentBillingStatus\);/);
+    assert.match(appSource, /if \(immediateDenial\) \{[\s\S]*setLimitModal\(\{[\s\S]*denial: immediateDenial,/);
   });
 
   it('refreshes projects after archive and restore so limits update without reload', () => {
@@ -127,8 +132,9 @@ describe('project groups visibility', () => {
     assert.match(createProjectModalSource, /onCreateGroup\?: \(name: string\) => Promise<ProjectGroup \| null>;/);
     assert.match(createProjectModalSource, /\{onCreateGroup \? \(/);
     assert.match(deleteProjectGroupModalSource, /Вместе с ней будут удалены все проекты в группе/);
-    assert.match(appSource, /const isProjectGroupsLockedOnCurrentPlan = billingStatus == null/);
-    assert.match(appSource, /billingStatus\.plan === 'free' && billingStatus\.billingState !== 'trial_active'/);
+    assert.match(appSource, /const isProjectGroupsLockedOnCurrentPlan = billingStatus != null/);
+    assert.match(appSource, /&& billingStatus\.plan === 'free'/);
+    assert.match(appSource, /&& billingStatus\.billingState !== 'trial_active'/);
     assert.match(appSource, /code: 'PROJECT_GROUPS_FEATURE_LOCKED'/);
     assert.match(appSource, /onCreateProjectGroup=\{handleCreateProjectGroup\}/);
     assert.match(appSource, /onCreateGroup=\{async \(name\) => \{/);

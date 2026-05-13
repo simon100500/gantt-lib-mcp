@@ -166,7 +166,10 @@ export function CreateProjectModal({
           <CardFooter className="flex flex-col gap-3">
             {archiveProjectName ? (
               <div className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Проект "{archiveProjectName}" при этом будет архивирован.
+                Проект "{archiveProjectName}" при этом будет архивирован.{' '}
+                <a href="/purchase" className="font-medium underline underline-offset-2 hover:no-underline">
+                  Расширить тариф
+                </a>
               </div>
             ) : null}
             <div className="flex w-full gap-2">

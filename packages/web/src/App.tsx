@@ -159,7 +159,7 @@ function buildLocalFreeProjectLimitDenial(params: {
   const { billingStatus, activeProjectCount, archivedProjectsCount, archivedProjectLimit } = params;
   const plan = ((billingStatus?.plan as PlanId | undefined) ?? 'free');
   const planLabel = billingStatus?.planMeta.label ?? PLAN_LABELS[plan];
-  const isFreePlan = billingStatus?.billingState === 'free' || billingStatus == null;
+  const isFreePlan = billingStatus?.billingState === 'free';
 
   if (!isFreePlan || activeProjectCount === 0 || archivedProjectsCount < archivedProjectLimit) {
     return null;
@@ -186,7 +186,7 @@ function buildLocalArchiveLimitDenial(params: {
   const { billingStatus, archivedProjectsCount, archivedProjectLimit } = params;
   const plan = ((billingStatus?.plan as PlanId | undefined) ?? 'free');
   const planLabel = billingStatus?.planMeta.label ?? PLAN_LABELS[plan];
-  const isFreePlan = billingStatus?.billingState === 'free' || billingStatus == null;
+  const isFreePlan = billingStatus?.billingState === 'free';
 
   if (!isFreePlan || archivedProjectsCount < archivedProjectLimit) {
     return null;
@@ -1045,8 +1045,9 @@ function WorkspaceApp({
   const proactiveProjectDenial = buildProactiveConstraintDenial('projects', billingStatus);
   const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
   const proactiveArchiveDenial = buildProactiveConstraintDenial('archive', billingStatus);
-  const isProjectGroupsLockedOnCurrentPlan = billingStatus == null
-    || (billingStatus.plan === 'free' && billingStatus.billingState !== 'trial_active');
+  const isProjectGroupsLockedOnCurrentPlan = billingStatus != null
+    && billingStatus.plan === 'free'
+    && billingStatus.billingState !== 'trial_active';
   const projectGroupsLockedDenial: Partial<ConstraintDenialPayload> | null = isProjectGroupsLockedOnCurrentPlan
     ? {
         code: 'PROJECT_GROUPS_FEATURE_LOCKED',
@@ -1062,7 +1063,7 @@ function WorkspaceApp({
   const activeProjectToReplace = projectsForLimitEvaluation.find((project) => project.status === 'active') ?? null;
   const activeProjectsCount = projectsForLimitEvaluation.filter((project) => project.status === 'active').length;
   const archivedProjectsCount = projectsForLimitEvaluation.filter((project) => project.status === 'archived').length;
-  const isFreePlanProjectReplacementMode = billingStatus?.billingState === 'free' || billingStatus == null;
+  const isFreePlanProjectReplacementMode = billingStatus?.billingState === 'free';
   const canSilentlyReplaceOnFree = isFreePlanProjectReplacementMode
     && Boolean(activeProjectToReplace)
     && archivedProjectsCount < FREE_ARCHIVED_PROJECT_LIMIT;
@@ -1104,7 +1105,10 @@ function WorkspaceApp({
     }
 
     const currentBillingStatus = useBillingStore.getState().usage ?? useBillingStore.getState().subscription ?? billingStatus;
-    const immediateDenial = normalizeConstraintDenialPayload(denial, currentBillingStatus);
+    const shouldDeferProjectLimitModal = denial.code === 'PROJECT_LIMIT_REACHED' && !currentBillingStatus;
+    const immediateDenial = shouldDeferProjectLimitModal
+      ? null
+      : normalizeConstraintDenialPayload(denial, currentBillingStatus);
     if (immediateDenial) {
       setLimitModal({
         denial: immediateDenial,
