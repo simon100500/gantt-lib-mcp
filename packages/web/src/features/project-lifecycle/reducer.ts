@@ -15,9 +15,11 @@ export interface ProjectLifecycleState {
 type ProjectLifecycleAction =
   | { type: 'open_create_project_modal'; pending: PendingProjectCreation }
   | { type: 'close_create_project_modal' }
-  | { type: 'set_pending_project_creation'; pending: PendingProjectCreation | null }
+  | { type: 'resolve_project_limit_recovery'; pending: PendingProjectCreation }
   | { type: 'show_delete_project_modal'; draft: DeleteProjectDraft }
   | { type: 'hide_delete_project_modal' }
+  | { type: 'project_created'; prompt: string | null }
+  | { type: 'project_intent_prefilled'; prompt: string }
   | { type: 'set_start_screen_prefill_prompt'; prompt: string | null };
 
 export const initialProjectLifecycleState: ProjectLifecycleState = {
@@ -44,10 +46,11 @@ export function projectLifecycleReducer(
         pendingProjectCreation: null,
         showCreateProjectModal: false,
       };
-    case 'set_pending_project_creation':
+    case 'resolve_project_limit_recovery':
       return {
         ...state,
         pendingProjectCreation: action.pending,
+        showCreateProjectModal: true,
       };
     case 'show_delete_project_modal':
       return {
@@ -58,6 +61,18 @@ export function projectLifecycleReducer(
       return {
         ...state,
         deleteProjectDraft: null,
+      };
+    case 'project_created':
+      return {
+        ...state,
+        pendingProjectCreation: null,
+        showCreateProjectModal: false,
+        startScreenPrefillPrompt: action.prompt,
+      };
+    case 'project_intent_prefilled':
+      return {
+        ...state,
+        startScreenPrefillPrompt: action.prompt,
       };
     case 'set_start_screen_prefill_prompt':
       return {

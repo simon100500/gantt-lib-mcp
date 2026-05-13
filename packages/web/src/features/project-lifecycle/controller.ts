@@ -268,8 +268,7 @@ export function useProjectLifecycleController(params: {
         projectId: newProject.id,
         chatOpen: false,
       });
-      dispatch({ type: 'set_start_screen_prefill_prompt', prompt: options.firstPrompt ?? null });
-      dispatch({ type: 'set_pending_project_creation', pending: null });
+      dispatch({ type: 'project_created', prompt: options.firstPrompt ?? null });
       setPendingPostAuthAction(null);
       return { id: newProject.id, name: newProject.name };
     } finally {
@@ -524,15 +523,7 @@ export function useProjectLifecycleController(params: {
     if (constraintDenial.code === 'PROJECT_LIMIT_REACHED' && activeProjectToReplace) {
       if (canSilentlyReplaceOnFree) {
         dispatch({
-          type: 'set_pending_project_creation',
-          pending: {
-            ...(state.pendingProjectCreation ?? {}),
-            groupId: state.pendingProjectCreation?.groupId ?? activeProjectToReplace.groupId ?? auth.projectGroups[0]?.id,
-            initialProjectName: state.pendingProjectCreation?.initialProjectName ?? 'Новый проект',
-          },
-        });
-        dispatch({
-          type: 'open_create_project_modal',
+          type: 'resolve_project_limit_recovery',
           pending: {
             ...(state.pendingProjectCreation ?? {}),
             groupId: state.pendingProjectCreation?.groupId ?? activeProjectToReplace.groupId ?? auth.projectGroups[0]?.id,
@@ -765,7 +756,7 @@ export function useProjectLifecycleController(params: {
             forceProjectWorkspaceOnNextSessionRef.current = reusableEmptyProject.id;
             await auth.switchProject(reusableEmptyProject.id);
           }
-          dispatch({ type: 'set_start_screen_prefill_prompt', prompt });
+          dispatch({ type: 'project_intent_prefilled', prompt });
           setWorkspace({ kind: 'project', projectId: reusableEmptyProject.id, chatOpen: false });
           onConsumeProjectCreationIntent();
           return;

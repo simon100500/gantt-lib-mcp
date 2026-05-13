@@ -64,7 +64,7 @@ describe('project creation recovery', () => {
 
   it('keeps replacement quiet inside the regular create modal before the archive limit', () => {
     assert.match(lifecycleControllerSource, /if \(\s*constraintDenial\.code === 'PROJECT_LIMIT_REACHED' && activeProjectToReplace[\s\S]*if \(canSilentlyReplaceOnFree\) \{/);
-    assert.match(lifecycleControllerSource, /type: 'open_create_project_modal'[\s\S]*initialProjectName: state\.pendingProjectCreation\?\.initialProjectName \?\? 'Новый проект',/);
+    assert.match(lifecycleControllerSource, /type: 'resolve_project_limit_recovery'[\s\S]*initialProjectName: state\.pendingProjectCreation\?\.initialProjectName \?\? 'Новый проект',/);
     assert.match(workspaceSource, /archiveProjectName=\{effectivePendingProjectCreation\?\.archiveProjectName\}/);
   });
 
@@ -110,7 +110,7 @@ describe('project creation recovery', () => {
   });
 
   it('prefills the start screen instead of auto-sending the first prompt to chat after project creation', () => {
-    assert.match(lifecycleControllerSource, /await auth\.switchProject\(newProject\.id\);[\s\S]*dispatch\(\{ type: 'set_start_screen_prefill_prompt', prompt: options\.firstPrompt \?\? null \}\);/);
+    assert.match(lifecycleControllerSource, /await auth\.switchProject\(newProject\.id\);[\s\S]*dispatch\(\{ type: 'project_created', prompt: options\.firstPrompt \?\? null \}\);/);
     assert.doesNotMatch(lifecycleControllerSource, /useChatStore\.getState\(\)\.addMessage\(\{ role: 'user', content: options\.firstPrompt \}\)/);
     assert.match(lifecycleControllerSource, /chatOpen: false,/);
   });
