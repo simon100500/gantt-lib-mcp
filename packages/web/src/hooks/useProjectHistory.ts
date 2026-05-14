@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type {
   HistoryItem,
@@ -73,6 +73,8 @@ export function useProjectHistory(accessToken: string | null, enabled = true, pr
   const clearAfterRestore = useHistoryViewerStore((state) => state.clearAfterRestore);
   const setConfirmed = useProjectStore((state) => state.setConfirmed);
   const clearTransientState = useProjectStore((state) => state.clearTransientState);
+  const projectScopeKey = projectIdOverride ?? '';
+  const activeProjectScopeKeyRef = useRef(projectScopeKey);
   const syncChatMessages = useCallback(async () => {
     if (!accessToken) {
       return;
@@ -111,6 +113,8 @@ export function useProjectHistory(accessToken: string | null, enabled = true, pr
   }, [accessToken, projectIdOverride]);
 
   const loadHistory = useCallback(async (cursor?: string, options?: { silent?: boolean }) => {
+    const requestProjectScopeKey = projectScopeKey;
+
     if (!accessToken) {
       setItems([]);
       setNextCursor(undefined);
@@ -146,6 +150,10 @@ export function useProjectHistory(accessToken: string | null, enabled = true, pr
       }
 
       const data = await response.json() as HistoryListResponse;
+      if (activeProjectScopeKeyRef.current !== requestProjectScopeKey) {
+        return data;
+      }
+
       setItems((current) => cursor ? [...current, ...data.items] : data.items);
       setNextCursor(data.nextCursor);
       setCanRedo(Boolean(data.canRedo));
@@ -156,15 +164,19 @@ export function useProjectHistory(accessToken: string | null, enabled = true, pr
       }
       return data;
     } catch (err) {
+      if (activeProjectScopeKeyRef.current !== requestProjectScopeKey) {
+        return { items: [], nextCursor: undefined };
+      }
+
       const message = err instanceof Error ? err.message : 'Failed to load history';
       setError(message);
       throw err;
     } finally {
-      if (!options?.silent) {
+      if (!options?.silent && activeProjectScopeKeyRef.current === requestProjectScopeKey) {
         setLoading(false);
       }
     }
-  }, [accessToken, projectIdOverride]);
+  }, [accessToken, projectIdOverride, projectScopeKey]);
 
   const refreshHistory = useCallback(async (cursor?: string) => {
     return loadHistory(cursor);
@@ -363,6 +375,21 @@ export function useProjectHistory(accessToken: string | null, enabled = true, pr
       setLoading(false);
     }
   }, [accessToken, clearAfterRestore, clearTransientState, refreshHistory, setConfirmed, syncChatMessages]);
+
+  useEffect(() => {
+    activeProjectScopeKeyRef.current = projectScopeKey;
+    setItems([]);
+    setLoading(false);
+    setError(null);
+    setNextCursor(undefined);
+    setCanRedo(false);
+    setRedoGroupId(null);
+    setPreviewingGroupId(null);
+    setRestoringGroupId(null);
+    setStale(false);
+    setLastRefreshAt(0);
+    exitPreview();
+  }, [accessToken, exitPreview, projectScopeKey]);
 
   useEffect(() => {
     if (!enabled) {
