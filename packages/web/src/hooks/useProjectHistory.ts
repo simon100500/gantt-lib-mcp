@@ -12,6 +12,32 @@ import { useProjectStore } from '../stores/useProjectStore.ts';
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const OPEN_PANEL_REFRESH_THROTTLE_MS = 2500;
+const INITIAL_HISTORY_GROUP_ID = 'initial';
+
+function appendInitialHistoryItem(items: HistoryItem[], hasAnyAppliedHistory: boolean): HistoryItem[] {
+  if (items.some((item) => item.id === INITIAL_HISTORY_GROUP_ID)) {
+    return items;
+  }
+
+  const oldestItemCreatedAt = [...items]
+    .reverse()
+    .find((item) => item.createdAt)?.createdAt;
+
+  return [
+    ...items,
+    {
+      id: INITIAL_HISTORY_GROUP_ID,
+      actorType: 'system',
+      title: 'initial',
+      createdAt: oldestItemCreatedAt ?? new Date().toISOString(),
+      baseVersion: 0,
+      newVersion: 0,
+      commandCount: 0,
+      isCurrent: !hasAnyAppliedHistory,
+      canRestore: hasAnyAppliedHistory,
+    },
+  ];
+}
 
 async function readErrorMessage(response: Response): Promise<string> {
   const fallback = `HTTP ${response.status}`;
@@ -154,7 +180,11 @@ export function useProjectHistory(accessToken: string | null, enabled = true, pr
         return data;
       }
 
-      setItems((current) => cursor ? [...current, ...data.items] : data.items);
+      const hasAnyAppliedHistory = Boolean(cursor || data.items.length > 0);
+      const nextItems = data.nextCursor
+        ? data.items
+        : appendInitialHistoryItem(data.items, hasAnyAppliedHistory);
+      setItems((current) => cursor ? [...current, ...nextItems] : nextItems);
       setNextCursor(data.nextCursor);
       setCanRedo(Boolean(data.canRedo));
       setRedoGroupId(data.redoGroupId ?? null);

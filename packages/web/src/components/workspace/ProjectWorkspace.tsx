@@ -2043,6 +2043,12 @@ export function ProjectWorkspace({
         }
         await batchUpdate.handleDelete(taskId);
       },
+      handleClearAllTasks: async () => {
+        if (!(await prepareUndoPreviewForEdit())) {
+          return;
+        }
+        await batchUpdate.handleClearAllTasks();
+      },
       handleInsertAfter: async (taskId: string, newTask: Task) => {
         if (!(await prepareUndoPreviewForEdit())) {
           return;
@@ -2064,8 +2070,9 @@ export function ProjectWorkspace({
     };
   }, [applyProgressColumnVolumeDeltas, batchUpdate, prepareUndoPreviewForEdit]);
 
+  const canClearTasks = !effectiveReadOnly && Boolean(guardedBatchUpdate) && effectiveTasks.length > 0;
   const canShiftProject = !effectiveReadOnly && Boolean(guardedBatchUpdate) && Boolean(projectDateRange);
-  const canOpenProjectSettings = canShiftProject || Boolean(onGanttDayModeChange) || Boolean(onTimelineMarkersChange) || Boolean(onProjectNameChange);
+  const canOpenProjectSettings = canClearTasks || canShiftProject || Boolean(onGanttDayModeChange) || Boolean(onTimelineMarkersChange) || Boolean(onProjectNameChange);
 
   useEffect(() => {
     if (templateMode && showHistoryPanel) {
@@ -2096,6 +2103,24 @@ export function ProjectWorkspace({
     setProjectSettingsError(null);
     handleOpenProjectShift();
   }, [handleOpenProjectShift]);
+
+  const handleClearAllTasksFromSettings = useCallback(async () => {
+    if (!guardedBatchUpdate || !canClearTasks) {
+      return;
+    }
+
+    setProjectSettingsPending(true);
+    setProjectSettingsError(null);
+    try {
+      await guardedBatchUpdate.handleClearAllTasks();
+      setProjectSettingsOpen(false);
+    } catch (error) {
+      console.error('[ProjectWorkspace] Failed to clear project tasks:', error);
+      setProjectSettingsError('Не удалось очистить задачи проекта. Попробуйте ещё раз.');
+    } finally {
+      setProjectSettingsPending(false);
+    }
+  }, [canClearTasks, guardedBatchUpdate, setProjectSettingsOpen]);
 
   const handleSubmitProjectShift = useCallback(async (deltaDays: number) => {
     if (!guardedBatchUpdate || !Number.isFinite(deltaDays) || deltaDays === 0) {
@@ -2529,6 +2554,7 @@ export function ProjectWorkspace({
                 canEditGanttDayMode={Boolean(onGanttDayModeChange) && !effectiveReadOnly}
                 canEditTimelineMarkers={Boolean(onTimelineMarkersChange) && !effectiveReadOnly}
                 canEditTaskListColumnsDefault={!effectiveReadOnly && !projectIdOverride && Boolean(persistedProjectId && authProject?.id === persistedProjectId)}
+                canClearTasks={canClearTasks}
                 onClose={() => {
                   if (!projectSettingsPending) {
                     setProjectSettingsOpen(false);
@@ -2536,6 +2562,7 @@ export function ProjectWorkspace({
                   }
                 }}
                 onOpenProjectShift={handleOpenShiftFromSettings}
+                onClearTasks={handleClearAllTasksFromSettings}
                 onSave={(settings) => {
                   void handleSaveProjectSettings(settings);
                 }}

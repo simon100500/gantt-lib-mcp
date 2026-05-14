@@ -160,4 +160,33 @@ describe('HistoryPanel baseline actions', () => {
 
     root.unmount();
   });
+
+  it('renders the initial empty chart checkpoint without baseline creation', () => {
+    const onCreateBaselineFromHistory = vi.fn();
+    const { container, root } = renderPanel({
+      items: [
+        baseItems[0],
+        {
+          id: 'initial',
+          actorType: 'system',
+          title: 'initial',
+          createdAt: '1970-01-01T00:00:00.000Z',
+          baseVersion: 0,
+          newVersion: 0,
+          commandCount: 0,
+          isCurrent: false,
+          canRestore: true,
+        },
+      ],
+      onCreateBaselineFromHistory,
+    });
+
+    expect(container.textContent).toContain('01 января в 03:00');
+    expect(container.textContent).toContain('Пустой график');
+    expect(container.textContent).toContain('#0');
+    expect(container.textContent).toContain('Восстановить эту версию');
+    expect(container.textContent).not.toContain('Сохранить как базовый план');
+
+    root.unmount();
+  });
 });

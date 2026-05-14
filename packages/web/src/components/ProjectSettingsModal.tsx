@@ -74,8 +74,10 @@ interface ProjectSettingsModalProps {
   canEditGanttDayMode: boolean;
   canEditTimelineMarkers: boolean;
   canEditTaskListColumnsDefault: boolean;
+  canClearTasks?: boolean;
   onClose: () => void;
   onOpenProjectShift: () => void;
+  onClearTasks?: () => void | Promise<void>;
   onSave: (settings: {
     projectName: string;
     ganttDayMode: 'business' | 'calendar';
@@ -101,8 +103,10 @@ export function ProjectSettingsModal({
   canEditGanttDayMode,
   canEditTimelineMarkers,
   canEditTaskListColumnsDefault,
+  canClearTasks = false,
   onClose,
   onOpenProjectShift,
+  onClearTasks,
   onSave,
 }: ProjectSettingsModalProps) {
   const [draftProjectName, setDraftProjectName] = useState(projectName);
@@ -402,6 +406,7 @@ export function ProjectSettingsModal({
                 </DropdownMenu>
               </div>
             </div>
+
           </section>
 
           <section className="space-y-3">
@@ -426,11 +431,7 @@ export function ProjectSettingsModal({
             </div>
 
             <div className="space-y-3">
-              {draftMarkers.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                  Маркеры не добавлены.
-                </div>
-              ) : draftMarkers.map((marker, index) => (
+              {draftMarkers.map((marker, index) => (
                 <div key={marker.key} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 md:grid-cols-[140px_minmax(0,1fr)_120px_auto]">
                   <label className="space-y-1">
                     <span className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">Дата</span>
@@ -510,6 +511,29 @@ export function ProjectSettingsModal({
                   </div>
                 </div>
               ))}
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-3 border-t border-rose-100 pt-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 sm:max-w-[55%]">
+              <h3 className="text-sm font-semibold text-rose-700">Очистить все задачи</h3>
+              <p className="text-sm text-slate-500">Удаляет все задачи из графика и сохраняет действие в истории.</p>
+            </div>
+            <div className="sm:w-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!window.confirm('Очистить все задачи проекта? Действие можно будет отменить через историю.')) {
+                    return;
+                  }
+                  void onClearTasks?.();
+                }}
+                disabled={!canClearTasks || pending}
+                className="inline-flex h-10 min-w-[220px] items-center justify-center gap-2 rounded-md border border-rose-200 bg-white px-3 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 className="h-4 w-4" />
+                Очистить все задачи
+              </button>
             </div>
           </section>
         </div>

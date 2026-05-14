@@ -1,4 +1,4 @@
-import { AlertCircle, Bot, Clock3, History, MoreHorizontal, Plus, RotateCcw, User, X } from 'lucide-react';
+import { AlertCircle, Bot, Clock3, History, MoreHorizontal, Plus, RotateCcw, SquareChartGantt, User, X } from 'lucide-react';
 
 import type { HistoryItem } from '../lib/apiTypes.ts';
 import { Button } from './ui/button.tsx';
@@ -25,6 +25,7 @@ interface HistoryPanelProps {
 }
 
 const COMMAND_TITLES: Record<string, string> = {
+  initial: 'Пустой график',
   switch_gantt_day_mode: 'Переключение режима дней',
   move_task: 'Перенос задачи',
   resize_task: 'Изменение длительности задачи',
@@ -44,6 +45,10 @@ const COMMAND_TITLES: Record<string, string> = {
   reparent_task: 'Перемещение в иерархии',
   reorder_tasks: 'Изменение порядка задач',
 };
+
+function isInitialHistoryItem(item: Pick<HistoryItem, 'id' | 'title'>): boolean {
+  return item.id === 'initial' || item.title === 'initial';
+}
 
 function formatTimestamp(value: string): string {
   const date = new Date(value);
@@ -154,7 +159,8 @@ export function HistoryPanel({
         ) : (
           <div className="space-y-2">
             {items.map((item) => {
-              const ActorIcon = item.actorType === 'agent' ? Bot : User;
+              const isInitialItem = isInitialHistoryItem(item);
+              const ActorIcon = isInitialItem ? SquareChartGantt : item.actorType === 'agent' ? Bot : User;
               const isPreviewing = previewGroupId === item.id;
               const isLoadingPreview = previewingGroupId === item.id;
               const isRestoring = restoringGroupId === item.id;
@@ -164,6 +170,7 @@ export function HistoryPanel({
               const isActive = hasVersionSelection
                 ? isPreviewing || isLoadingPreview || isRestoring
                 : item.isCurrent;
+              const showVersionActions = item.canRestore;
 
               return (
                 <article
@@ -197,7 +204,7 @@ export function HistoryPanel({
                         <span
                           className={cn(
                             'inline-flex h-4 w-4 shrink-0 items-center justify-center',
-                            item.actorType === 'agent' ? 'text-violet-500' : 'text-slate-400',
+                            isInitialItem ? 'text-sky-500' : item.actorType === 'agent' ? 'text-violet-500' : 'text-slate-400',
                           )}
                           aria-hidden="true"
                         >
@@ -231,7 +238,7 @@ export function HistoryPanel({
                         )}
                       </div>
                     </div>
-                    {(
+                    {showVersionActions && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
@@ -247,16 +254,18 @@ export function HistoryPanel({
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
-                          <DropdownMenuItem
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void onCreateBaselineFromHistory(item);
-                            }}
-                            disabled={createBaselineDisabled}
-                          >
-                            <Plus className="h-4 w-4" />
-                            <span>{isCreatingBaseline ? 'Сохраняем базовый план…' : 'Сохранить как базовый план'}</span>
-                          </DropdownMenuItem>
+                          {!isInitialItem ? (
+                            <DropdownMenuItem
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void onCreateBaselineFromHistory(item);
+                              }}
+                              disabled={createBaselineDisabled}
+                            >
+                              <Plus className="h-4 w-4" />
+                              <span>{isCreatingBaseline ? 'Сохраняем базовый план…' : 'Сохранить как базовый план'}</span>
+                            </DropdownMenuItem>
+                          ) : null}
                           {!item.isCurrent ? (
                             <DropdownMenuItem
                               onClick={(event) => {

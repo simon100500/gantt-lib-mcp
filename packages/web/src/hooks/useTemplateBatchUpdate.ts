@@ -112,6 +112,10 @@ export function useTemplateBatchUpdate({
     setSavingState('saved');
   }, [setSavingState]);
 
+  const handleClearAllTasks = useCallback(async () => {
+    await persist([]);
+  }, [persist]);
+
   const handleAdd = useCallback(async (task: Task) => {
     await persist([...tasks, { ...normalizeTaskDates(task), sortOrder: tasks.length }]);
   }, [persist, tasks]);
@@ -184,6 +188,7 @@ export function useTemplateBatchUpdate({
     handleTasksChange,
     handleShiftProject,
     handleGanttDayModeSwitch,
+    handleClearAllTasks,
     handleAdd,
     handleDelete,
     handleInsertAfter,

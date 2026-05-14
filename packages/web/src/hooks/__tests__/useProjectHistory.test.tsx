@@ -110,12 +110,14 @@ describe('useProjectHistory', () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain('move_task');
+      expect(container.textContent).toContain('initial');
     });
 
     rerender('project-2');
 
     await waitFor(() => {
       expect(container.textContent).toContain('resize_task');
+      expect(container.textContent).toContain('initial');
       expect(container.textContent).not.toContain('move_task');
     });
 

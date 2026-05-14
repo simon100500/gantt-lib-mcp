@@ -162,6 +162,7 @@ export interface UseBatchTaskUpdateResult {
   handleTasksChange: (changedTasks: Task[]) => Promise<void>;
   handleShiftProject: (deltaDays: number) => Promise<void>;
   handleGanttDayModeSwitch: (ganttDayMode: 'business' | 'calendar') => Promise<void>;
+  handleClearAllTasks: () => Promise<void>;
   handleAdd: (task: Task) => Promise<void>;
   handleDelete: (taskId: string) => Promise<void>;
   handleInsertAfter: (taskId: string, newTask: Task) => Promise<void>;
@@ -174,6 +175,7 @@ export interface UseBatchTaskUpdateResult {
 
 export const __batchTaskUpdateInternals = {
   mergeReorderedTasksWithReference,
+  resolveBatchHistoryTitle,
   sanitizeHierarchyDependencies,
 };
 
@@ -334,13 +336,13 @@ export function useBatchTaskUpdate({
 
   const commitCommandsOrThrow = useCallback(async (
     commands: FrontendProjectCommand[],
-    options?: { includeSnapshot?: boolean },
+    options?: { includeSnapshot?: boolean; historyTitle?: string },
   ) => {
     const historySeed = {
       groupId: crypto.randomUUID(),
       requestContextId: crypto.randomUUID(),
     };
-    const historyTitle = resolveBatchHistoryTitle(commands);
+    const historyTitle = options?.historyTitle ?? resolveBatchHistoryTitle(commands);
 
     for (const [index, command] of commands.entries()) {
       console.log('[UI->COMMIT] command', command);
@@ -383,7 +385,7 @@ export function useBatchTaskUpdate({
 
   const commitAuthCommands = useCallback(async (
     commands: FrontendProjectCommand[],
-    options?: { includeSnapshot?: boolean },
+    options?: { includeSnapshot?: boolean; historyTitle?: string },
   ) => {
     if (commands.length === 0) {
       return;
@@ -787,6 +789,31 @@ export function useBatchTaskUpdate({
       throw error;
     }
   }, [commitAuthCommands, isAuthenticatedMode, setSavingStateWithReset]);
+
+  const handleClearAllTasks = useCallback(async () => {
+    const taskIds = (isAuthenticatedMode ? getCurrentAuthTasks() : tasks).map((task) => task.id);
+    if (taskIds.length === 0) {
+      return;
+    }
+
+    if (isAuthenticatedMode) {
+      try {
+        setSavingStateWithReset('saving');
+        await commitAuthCommands(
+          [{ type: 'delete_tasks', taskIds }],
+          { includeSnapshot: true, historyTitle: 'Пользователь — Очистил все задачи' },
+        );
+        setSavingStateWithReset('saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Failed to clear all tasks:', error);
+        setSavingStateWithReset('error');
+        throw error;
+      }
+      return;
+    }
+
+    setTasks([]);
+  }, [commitAuthCommands, getCurrentAuthTasks, isAuthenticatedMode, setSavingStateWithReset, setTasks, tasks]);
 
   const handleAdd = useCallback(async (task: Task) => {
     if (isAuthenticatedMode) {
@@ -1283,6 +1310,7 @@ export function useBatchTaskUpdate({
     handleTasksChange,
     handleShiftProject,
     handleGanttDayModeSwitch,
+    handleClearAllTasks,
     handleAdd,
     handleDelete,
     handleInsertAfter,

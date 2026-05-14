@@ -17,7 +17,7 @@ function renderModal(onSave: (settings: {
   calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
   timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
   hiddenTaskListColumnsDefault: string[] | null;
-}) => void | Promise<void>, hiddenTaskListColumnsDefault: string[] | null) {
+}) => void | Promise<void>, hiddenTaskListColumnsDefault: string[] | null, overrides: Partial<React.ComponentProps<typeof ProjectSettingsModal>> = {}) {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -45,6 +45,7 @@ function renderModal(onSave: (settings: {
         onClose={() => {}}
         onOpenProjectShift={() => {}}
         onSave={onSave}
+        {...overrides}
       />,
     );
   });
@@ -74,5 +75,31 @@ describe('ProjectSettingsModal', () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       hiddenTaskListColumnsDefault: null,
     }));
+  });
+
+  it('does not render an empty marker placeholder', () => {
+    renderModal(vi.fn(), null);
+
+    expect(container!.textContent).not.toContain('Маркеры не добавлены.');
+  });
+
+  it('asks for confirmation before clearing all tasks', async () => {
+    const onClearTasks = vi.fn().mockResolvedValue(undefined);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderModal(vi.fn(), null, {
+      canClearTasks: true,
+      onClearTasks,
+    });
+
+    const clearButton = Array.from(container!.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Очистить все задачи'));
+
+    await act(async () => {
+      clearButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith('Очистить все задачи проекта? Действие можно будет отменить через историю.');
+    expect(onClearTasks).toHaveBeenCalledTimes(1);
   });
 });
