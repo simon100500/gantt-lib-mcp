@@ -88,11 +88,19 @@ describe('persistent session state helpers', () => {
       userMessage: 'добавь работы по отделке',
       assistantResponse: 'В каких секциях это сделать?',
       mutationAccepted: false,
+      latestToolFacts: [{
+        name: 'find_tasks',
+        resolvedTaskIds: ['task-1', 'task-2'],
+        searchQuery: 'отделка',
+        status: 'ok',
+      }],
     });
 
     assert.equal(rebuilt.messagesSnapshot.length, 2);
     assert.equal(rebuilt.openThreads?.unresolved, true);
     assert.match(rebuilt.rollingSummary ?? '', /Open thread:/);
+    assert.deepEqual(rebuilt.openThreads?.lastResolvedTaskIds, ['task-1', 'task-2']);
+    assert.equal(rebuilt.openThreads?.lastSearchQuery, 'отделка');
   });
 
   it('bounds context growth while preserving session memory header', async () => {
@@ -105,6 +113,6 @@ describe('persistent session state helpers', () => {
     ]);
 
     assert.equal(compacted[0]?.content, '[SESSION_MEMORY]\nrollingSummary: keep me');
-    assert.ok(compacted.length <= 32);
+    assert.ok(compacted.length <= 24);
   });
 });

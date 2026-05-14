@@ -26,6 +26,28 @@ describe('pi ordinary agent tool adapter', () => {
     );
   });
 
+  it('exposes only read-only tools in reference mode', () => {
+    const tools = buildPiAgentTools({
+      projectId: 'project-1',
+      runId: 'run-1',
+      historyGroupId: 'group-1',
+      requestContextId: 'run-1',
+      historyTitle: 'AI - reference',
+      mode: 'read_only',
+    });
+
+    assert.deepEqual(
+      tools.map((tool) => tool.name),
+      [
+        'get_project_summary',
+        'get_schedule_slice',
+        'find_tasks',
+        'get_task_context',
+        'validate_schedule',
+      ],
+    );
+  });
+
   it('converts JSON schema primitives, arrays, objects, enums, and optional fields to TypeBox', () => {
     const schema = convertToolInputSchemaToTypeBox({
       type: 'object',

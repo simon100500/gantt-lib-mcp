@@ -98,10 +98,13 @@ export function useAppRouteController(params: {
   }, [isAuthenticated, onLoginRequired, route.pathname, route.search]);
 
   const normalizedPathname = normalizePathname(route.pathname);
+  const isAdminRoute = normalizedPathname === '/admin';
   const templateCreateRoute = parseTemplateCreatePath(normalizedPathname);
   const blockIntentRoute = parseBlockIntentPath(normalizedPathname);
   const projectCreationIntentRoute = parseProjectCreationIntentRoute(normalizedPathname, route.search);
-  const projectOpenRoute = parseProjectOpenSearch(route.search);
+  const projectOpenRoute = !isAdminRoute && normalizedPathname === '/'
+    ? parseProjectOpenSearch(route.search)
+    : null;
   const isLoginRoute = normalizedPathname === '/login';
   const isKnownRoute = SUPPORTED_APP_PATHS.has(normalizedPathname)
     || Boolean(templateCreateRoute)
@@ -197,7 +200,7 @@ export function useAppRouteController(params: {
     isYandexCallbackRoute: normalizedPathname === '/auth/yandex/callback',
     isPurchaseRoute: normalizedPathname === '/purchase',
     isAccountRoute: normalizedPathname === '/account',
-    isAdminRoute: normalizedPathname === '/admin',
+    isAdminRoute,
     isLoginRoute,
     templateCreateIntentId: workspaceTemplateCreateIntentId,
     consumeTemplateCreateIntent: () => setWorkspaceTemplateCreateIntentId(null),

@@ -50,15 +50,25 @@ function normalizeOpenThreads(value: unknown): AgentOpenThreadState | null {
   }
 
   const raw = value as Record<string, unknown>;
+  const stringArray = (input: unknown): string[] => (
+    Array.isArray(input)
+      ? input.filter((item): item is string => typeof item === 'string')
+      : []
+  );
+
   return {
     unresolved: raw.unresolved === true,
     activeOperationKind: typeof raw.activeOperationKind === 'string' ? raw.activeOperationKind as AgentOpenThreadState['activeOperationKind'] : null,
     recentAssistantQuestion: typeof raw.recentAssistantQuestion === 'string' ? raw.recentAssistantQuestion : null,
     lastUserMessage: typeof raw.lastUserMessage === 'string' ? raw.lastUserMessage : null,
     lastAssistantMessage: typeof raw.lastAssistantMessage === 'string' ? raw.lastAssistantMessage : null,
-    targetEntityHints: Array.isArray(raw.targetEntityHints)
-      ? raw.targetEntityHints.filter((item): item is string => typeof item === 'string')
-      : [],
+    targetEntityHints: stringArray(raw.targetEntityHints),
+    lastResolvedTaskIds: stringArray(raw.lastResolvedTaskIds),
+    lastCreatedTaskIds: stringArray(raw.lastCreatedTaskIds),
+    activeParentId: typeof raw.activeParentId === 'string' ? raw.activeParentId : null,
+    lastMutationTool: typeof raw.lastMutationTool === 'string' ? raw.lastMutationTool : null,
+    lastSearchQuery: typeof raw.lastSearchQuery === 'string' ? raw.lastSearchQuery : null,
+    scopeHint: typeof raw.scopeHint === 'string' ? raw.scopeHint as AgentOpenThreadState['scopeHint'] : null,
   };
 }
 

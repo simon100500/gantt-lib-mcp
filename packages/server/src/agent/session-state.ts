@@ -1,4 +1,5 @@
 import type {
+  AgentScopeHint,
   AgentOpenThreadOperationKind,
   AgentOpenThreadState,
   AgentSessionSnapshotMessage,
@@ -6,7 +7,19 @@ import type {
   Message,
 } from '@gantt/runtime-core/types';
 
-const MAX_SNAPSHOT_MESSAGES = 12;
+export const AGENT_SESSION_SCHEMA_VERSION = 2;
+export const AGENT_SESSION_COMPACTION_VERSION = 2;
+
+const MAX_SNAPSHOT_MESSAGES = 8;
+const MAX_ENTITY_HINTS = 6;
+
+export type AgentMemoryToolFact = {
+  name: string;
+  changedTaskIds?: string[];
+  resolvedTaskIds?: string[];
+  searchQuery?: string;
+  status?: 'accepted' | 'rejected' | 'error' | 'ok';
+};
 
 function clipText(value: string, limit: number): string {
   const trimmed = value.trim();
@@ -46,7 +59,78 @@ function extractTargetEntityHints(...values: Array<string | null | undefined>): 
     .filter((part) => part.length >= 3)
     .filter((part) => /[A-Za-zА-Яа-я0-9]/.test(part));
 
-  return [...new Set(hints)].slice(0, 6);
+  return [...new Set(hints)].slice(0, MAX_ENTITY_HINTS);
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))];
+}
+
+function inferScopeHint(input: {
+  userMessage: string;
+  priorScopeHint?: AgentScopeHint | null;
+  resolvedTaskIds: string[];
+  createdTaskIds: string[];
+}): AgentScopeHint | null {
+  const text = input.userMessage.toLowerCase();
+
+  if (/(во всех|все задачи|массов|весь проект|по всему проект)/.test(text)) {
+    return 'project';
+  }
+
+  if (/(ветк|раздел|секци|этап|блок)/.test(text)) {
+    return 'branch';
+  }
+
+  const targetCount = Math.max(input.resolvedTaskIds.length, input.createdTaskIds.length);
+  if (targetCount > 1) {
+    return 'multiple_tasks';
+  }
+  if (targetCount === 1) {
+    return 'single_task';
+  }
+
+  return input.priorScopeHint ?? null;
+}
+
+function deriveStructuredMemory(input: {
+  userMessage: string;
+  priorOpenThreads?: AgentOpenThreadState | null;
+  latestToolFacts?: AgentMemoryToolFact[];
+}): Pick<
+  AgentOpenThreadState,
+  'lastResolvedTaskIds' | 'lastCreatedTaskIds' | 'lastMutationTool' | 'lastSearchQuery' | 'scopeHint'
+> {
+  const acceptedMutationFacts = (input.latestToolFacts ?? []).filter((fact) => (
+    fact.status === 'accepted'
+    && fact.name !== 'find_tasks'
+  ));
+  const latestMutationFact = acceptedMutationFacts.length > 0
+    ? acceptedMutationFacts[acceptedMutationFacts.length - 1]
+    : undefined;
+  const latestSearchFact = [...(input.latestToolFacts ?? [])].reverse().find((fact) => fact.name === 'find_tasks');
+  const resolvedTaskIds = uniqueStrings([
+    ...(latestSearchFact?.resolvedTaskIds ?? []),
+    ...(latestMutationFact?.changedTaskIds ?? []),
+    ...(input.priorOpenThreads?.lastResolvedTaskIds ?? []),
+  ]).slice(0, 12);
+  const createdTaskIds = uniqueStrings([
+    ...(latestMutationFact?.name === 'create_tasks' ? latestMutationFact.changedTaskIds ?? [] : []),
+    ...(input.priorOpenThreads?.lastCreatedTaskIds ?? []),
+  ]).slice(0, 12);
+
+  return {
+    lastResolvedTaskIds: resolvedTaskIds,
+    lastCreatedTaskIds: createdTaskIds,
+    lastMutationTool: latestMutationFact?.name ?? input.priorOpenThreads?.lastMutationTool ?? null,
+    lastSearchQuery: latestSearchFact?.searchQuery ?? input.priorOpenThreads?.lastSearchQuery ?? null,
+    scopeHint: inferScopeHint({
+      userMessage: input.userMessage,
+      priorScopeHint: input.priorOpenThreads?.scopeHint,
+      resolvedTaskIds,
+      createdTaskIds,
+    }),
+  };
 }
 
 function buildRollingSummary(input: {
@@ -63,6 +147,10 @@ function buildRollingSummary(input: {
     input.openThreads?.unresolved && input.openThreads.recentAssistantQuestion
       ? `Open thread: ${clipText(input.openThreads.recentAssistantQuestion, 240)}`
       : null,
+    input.openThreads?.lastMutationTool ? `Last mutation tool: ${input.openThreads.lastMutationTool}` : null,
+    input.openThreads?.lastResolvedTaskIds?.length
+      ? `Resolved task ids: ${input.openThreads.lastResolvedTaskIds.slice(0, 6).join(', ')}`
+      : null,
   ].filter((line): line is string => Boolean(line));
 
   return lines.length > 0 ? lines.join('\n') : null;
@@ -73,19 +161,47 @@ export function buildSessionOpenThreadState(input: {
   assistantResponse?: string | null;
   priorOpenThreads?: AgentOpenThreadState | null;
   mutationAccepted?: boolean;
+  latestToolFacts?: AgentMemoryToolFact[];
 }): AgentOpenThreadState | null {
   const assistantResponse = input.assistantResponse?.trim() ?? '';
   const assistantAskedQuestion = assistantResponse.endsWith('?');
   const operationKind = inferOperationKind(input.userMessage)
     ?? input.priorOpenThreads?.activeOperationKind
     ?? inferOperationKind(assistantResponse);
+  const structuredMemory = deriveStructuredMemory(input);
 
   if (!assistantAskedQuestion && input.mutationAccepted) {
-    return null;
+    return {
+      unresolved: false,
+      activeOperationKind: operationKind,
+      recentAssistantQuestion: null,
+      lastUserMessage: clipText(input.userMessage, 240),
+      lastAssistantMessage: assistantResponse ? clipText(assistantResponse, 240) : null,
+      targetEntityHints: extractTargetEntityHints(
+        input.priorOpenThreads?.lastUserMessage,
+        input.userMessage,
+        assistantResponse,
+      ),
+      activeParentId: input.priorOpenThreads?.activeParentId ?? null,
+      ...structuredMemory,
+    };
   }
 
   if (!assistantAskedQuestion && !isShortFollowUp(input.userMessage) && !input.priorOpenThreads?.unresolved) {
-    return null;
+    return {
+      unresolved: false,
+      activeOperationKind: operationKind,
+      recentAssistantQuestion: null,
+      lastUserMessage: clipText(input.userMessage, 240),
+      lastAssistantMessage: assistantResponse ? clipText(assistantResponse, 240) : input.priorOpenThreads?.lastAssistantMessage ?? null,
+      targetEntityHints: extractTargetEntityHints(
+        input.priorOpenThreads?.lastUserMessage,
+        input.userMessage,
+        assistantResponse,
+      ),
+      activeParentId: input.priorOpenThreads?.activeParentId ?? null,
+      ...structuredMemory,
+    };
   }
 
   return {
@@ -100,6 +216,8 @@ export function buildSessionOpenThreadState(input: {
       input.userMessage,
       assistantResponse,
     ),
+    activeParentId: input.priorOpenThreads?.activeParentId ?? null,
+    ...structuredMemory,
   };
 }
 
@@ -123,6 +241,12 @@ export function buildRouteContextSummary(input: {
     input.sessionState?.openThreads?.unresolved
       ? `Open thread: ${input.sessionState.openThreads.recentAssistantQuestion ?? input.sessionState.openThreads.lastAssistantMessage ?? 'unresolved follow-up'}`
       : null,
+    input.sessionState?.openThreads?.lastMutationTool
+      ? `Last mutation tool: ${input.sessionState.openThreads.lastMutationTool}`
+      : null,
+    input.sessionState?.openThreads?.scopeHint
+      ? `Scope hint: ${input.sessionState.openThreads.scopeHint}`
+      : null,
     ...input.recentMessages.slice(-4).map((message) => `${message.role}: ${clipText(message.content, 160)}`),
   ].filter((line): line is string => Boolean(line));
 
@@ -136,6 +260,7 @@ export function buildSessionStateFromTranscript(input: {
   userMessage?: string;
   assistantResponse?: string | null;
   mutationAccepted?: boolean;
+  latestToolFacts?: AgentMemoryToolFact[];
 }): {
   messagesSnapshot: AgentSessionSnapshotMessage[];
   rollingSummary: string | null;
@@ -152,6 +277,7 @@ export function buildSessionStateFromTranscript(input: {
     assistantResponse: fallbackAssistantResponse,
     priorOpenThreads: input.priorState?.openThreads ?? null,
     mutationAccepted: input.mutationAccepted,
+    latestToolFacts: input.latestToolFacts,
   });
 
   return {

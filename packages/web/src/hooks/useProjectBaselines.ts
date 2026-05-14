@@ -101,9 +101,19 @@ function normalizeRequestError(error: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
+function buildProjectQuery(projectIdOverride?: string | null): string {
+  if (!projectIdOverride) {
+    return '';
+  }
+
+  const searchParams = new URLSearchParams();
+  searchParams.set('projectId', projectIdOverride);
+  return `?${searchParams.toString()}`;
+}
+
 export type UseProjectBaselinesResult = ReturnType<typeof useProjectBaselines>;
 
-export function useProjectBaselines(accessToken: string | null) {
+export function useProjectBaselines(accessToken: string | null, projectIdOverride?: string | null) {
   const [items, setItems] = useState<BaselineItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +134,7 @@ export function useProjectBaselines(accessToken: string | null) {
     const { signal, cleanup } = createRequestSignal();
 
     try {
-      const response = await fetch('/api/baselines', {
+      const response = await fetch(`/api/baselines${buildProjectQuery(projectIdOverride)}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -146,7 +156,7 @@ export function useProjectBaselines(accessToken: string | null) {
       cleanup();
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, projectIdOverride]);
 
   const fetchBaseline = useCallback(async (baselineId: string) => {
     if (!accessToken) {
@@ -164,7 +174,7 @@ export function useProjectBaselines(accessToken: string | null) {
     const { signal, cleanup } = createRequestSignal();
 
     try {
-      const response = await fetch(`/api/baselines/${encodeURIComponent(trimmedBaselineId)}`, {
+      const response = await fetch(`/api/baselines/${encodeURIComponent(trimmedBaselineId)}${buildProjectQuery(projectIdOverride)}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -185,7 +195,7 @@ export function useProjectBaselines(accessToken: string | null) {
       setActiveBaselineId((current) => (current === trimmedBaselineId ? null : current));
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, projectIdOverride]);
 
   const createFromCurrent = useCallback(async (name: string): Promise<BaselineCreateResponse> => {
     if (!accessToken) {

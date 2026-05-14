@@ -32,7 +32,7 @@ import type {
 import { registerWsRoutes, broadcast, broadcastToSession, onChatMessage } from './ws.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
-import { requireCurrentProjectEditor } from './access-control.js';
+import { requireCurrentProjectEditor, resolveReadableProjectId } from './access-control.js';
 import { requireActiveSubscriptionForMutation, requireTrackedLimit } from './middleware/constraint-middleware.js';
 import { incrementAiUsage } from './middleware/subscription-middleware.js';
 import { registerAdminRoutes } from './admin.js';
@@ -283,7 +283,18 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
 fastify.get('/api/health', async () => ({ status: 'ok' }));
 
 fastify.get('/api/project', { preHandler: [authMiddleware] }, async (req, reply) => {
-  const project = await buildProjectLoadResponse(req.user!.projectId, req.user!.email, req.user!.userId);
+  const targetProjectId = await resolveReadableProjectId({
+    userId: req.user!.userId,
+    email: req.user!.email,
+    currentProjectId: req.user!.projectId,
+    requestedProjectId: (req.query as { projectId?: string } | undefined)?.projectId,
+  });
+
+  if (!targetProjectId) {
+    return reply.status(404).send({ error: 'Project not found' });
+  }
+
+  const project = await buildProjectLoadResponse(targetProjectId, req.user!.email, req.user!.userId);
   return reply.send(project);
 });
 
@@ -471,7 +482,18 @@ fastify.post('/api/project-generation-jobs/:jobId/cancel', { preHandler: [authMi
 });
 
 fastify.get('/api/messages', { preHandler: [authMiddleware] }, async (req, reply) => {
-  const messages = await messageService.list(req.user!.projectId);
+  const targetProjectId = await resolveReadableProjectId({
+    userId: req.user!.userId,
+    email: req.user!.email,
+    currentProjectId: req.user!.projectId,
+    requestedProjectId: (req.query as { projectId?: string } | undefined)?.projectId,
+  });
+
+  if (!targetProjectId) {
+    return reply.status(404).send({ error: 'Project not found' });
+  }
+
+  const messages = await messageService.list(targetProjectId);
   return reply.send(messages.slice(-50));
 });
 

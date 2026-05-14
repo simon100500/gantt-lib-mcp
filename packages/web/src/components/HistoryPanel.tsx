@@ -10,12 +10,14 @@ interface HistoryPanelProps {
   loading: boolean;
   error: string | null;
   disabled?: boolean;
+  nextCursor?: string;
   previewGroupId?: string | null;
   previewingGroupId?: string | null;
   restoringGroupId?: string | null;
   creatingBaselineFromHistoryGroupId?: string | null;
   onClose: () => void;
   onRefresh: () => unknown;
+  onLoadMore?: () => unknown;
   onPreviewVersion: (item: HistoryItem) => unknown;
   onRestoreVersion: (groupId: string) => unknown;
   onCreateBaselineFromHistory: (item: HistoryItem) => unknown;
@@ -75,19 +77,21 @@ export function HistoryPanel({
   loading,
   error,
   disabled = false,
+  nextCursor,
   previewGroupId = null,
   previewingGroupId = null,
   restoringGroupId = null,
   creatingBaselineFromHistoryGroupId = null,
   onClose,
   onRefresh,
+  onLoadMore,
   onPreviewVersion,
   onRestoreVersion,
   onCreateBaselineFromHistory,
   onReturnToCurrentVersion,
 }: HistoryPanelProps) {
   return (
-    <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden xl:w-[320px] xl:max-w-[320px] xl:min-w-[320px]">
+    <aside className="flex h-full min-h-0 w-full flex-col overflow-hidden xl:w-[320px] xl:max-w-[320px] xl:min-w-[320px]">
       <div className="flex items-center justify-between gap-3 px-1 py-1">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
@@ -284,6 +288,21 @@ export function HistoryPanel({
           </div>
         )}
       </div>
+
+      {nextCursor && (
+        <div className="border-t border-slate-200 px-1 pb-1 pt-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => { void onLoadMore?.(); }}
+            disabled={loading}
+            className="h-9 w-full rounded-xl border-slate-200 bg-white text-[12px] text-slate-700 hover:bg-slate-50"
+          >
+            {loading ? 'Загрузка…' : 'Загрузить ещё'}
+          </Button>
+        </div>
+      )}
     </aside>
   );
 }

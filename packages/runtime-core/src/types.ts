@@ -333,6 +333,7 @@ export interface Message {
 }
 
 export type AgentOpenThreadOperationKind = 'split' | 'move' | 'create' | 'link' | 'validate' | 'update' | 'delete';
+export type AgentScopeHint = 'single_task' | 'multiple_tasks' | 'branch' | 'project';
 
 export interface AgentSessionSnapshotMessage {
   role: 'user' | 'assistant';
@@ -347,6 +348,12 @@ export interface AgentOpenThreadState {
   lastUserMessage?: string | null;
   lastAssistantMessage?: string | null;
   targetEntityHints?: string[];
+  lastResolvedTaskIds?: string[];
+  lastCreatedTaskIds?: string[];
+  activeParentId?: string | null;
+  lastMutationTool?: string | null;
+  lastSearchQuery?: string | null;
+  scopeHint?: AgentScopeHint | null;
 }
 
 export interface AgentSessionStateRecord {

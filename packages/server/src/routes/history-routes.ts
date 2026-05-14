@@ -3,7 +3,7 @@ import { historyService } from '@gantt/mcp/services';
 import { messageService } from '@gantt/mcp/services';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { broadcastToSession } from '../ws.js';
-import { requireCurrentProjectEditor } from '../access-control.js';
+import { requireCurrentProjectEditor, resolveReadableProjectId } from '../access-control.js';
 
 type HistoryFailureCode = 'version_conflict' | 'validation_error';
 
@@ -52,7 +52,7 @@ function isHistoryValidationError(error: unknown): error is { code: 'validation_
 
 export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/api/history', { preHandler: [authMiddleware] }, async (req, reply) => {
-    const query = (req.query ?? {}) as { cursor?: string; limit?: string | number };
+    const query = (req.query ?? {}) as { cursor?: string; limit?: string | number; projectId?: string };
     const limit = parseLimit(query.limit);
 
     if (query.limit !== undefined && limit === undefined) {
@@ -62,12 +62,26 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
       });
     }
 
+    const targetProjectId = await resolveReadableProjectId({
+      userId: req.user!.userId,
+      email: req.user!.email,
+      currentProjectId: req.user!.projectId,
+      requestedProjectId: query.projectId,
+    });
+
+    if (!targetProjectId) {
+      return reply.status(404).send({
+        reason: 'not_found',
+        error: 'Project not found',
+      });
+    }
+
     const response = await historyService.listHistoryGroups({
-      projectId: req.user!.projectId,
+      projectId: targetProjectId,
       cursor: query.cursor,
       limit,
     });
-    const redoGroupId = await historyService.getRedoableGroupId(req.user!.projectId);
+    const redoGroupId = await historyService.getRedoableGroupId(targetProjectId);
 
     return reply.send({
       items: response.items.map((item) => ({
@@ -89,6 +103,7 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
 
   fastify.get('/api/history/:groupId/snapshot', { preHandler: [authMiddleware] }, async (req, reply) => {
     const params = req.params as { groupId?: string };
+    const query = (req.query ?? {}) as { projectId?: string };
     if (!params.groupId) {
       return reply.status(400).send({
         reason: 'validation_error',
@@ -96,9 +111,23 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
       });
     }
 
+    const targetProjectId = await resolveReadableProjectId({
+      userId: req.user!.userId,
+      email: req.user!.email,
+      currentProjectId: req.user!.projectId,
+      requestedProjectId: query.projectId,
+    });
+
+    if (!targetProjectId) {
+      return reply.status(404).send({
+        reason: 'not_found',
+        error: 'Project not found',
+      });
+    }
+
     try {
       const response = await historyService.getHistorySnapshot({
-        projectId: req.user!.projectId,
+        projectId: targetProjectId,
         groupId: params.groupId,
       });
 

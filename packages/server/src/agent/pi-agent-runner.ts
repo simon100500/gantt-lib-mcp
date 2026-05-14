@@ -38,6 +38,8 @@ export type PiToolExecutionFact = {
   status: 'accepted' | 'rejected' | 'error' | 'ok';
   changedTaskIds: string[];
   changedDependencyIds: string[];
+  resolvedTaskIds?: string[];
+  searchQuery?: string;
   error?: string;
   durationMs?: number;
 };
@@ -55,6 +57,12 @@ export type PiAgentRunResult = {
     durationMs: number;
     timeToFirstToolCallMs: number | null;
     timeToFirstAssistantTextMs: number | null;
+    restoreMessageCount: number;
+    restoreMessageChars: number;
+    sessionMemoryChars: number;
+    systemPromptChars: number;
+    approxInputChars: number;
+    activePolicyCount: number;
   };
 };
 
@@ -110,6 +118,7 @@ export type BuildPiAgentToolsInput = {
   requestContextId: string;
   historyTitle: string;
   userId?: string;
+  mode?: 'all' | 'read_only';
   createContext?: typeof createToolContext;
   executeTool?: typeof executeToolCall;
 };
@@ -139,7 +148,7 @@ export const GANTT_PI_AGENT_CARD = {
   ],
 } as const;
 
-export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
+const BASE_PROMPT_BLOCK = [
   'Ты автономный агент управления Gantt-проектом. Ты работаешь только через инструменты проекта и должен быстро превратить естественный запрос пользователя в минимальный набор tool calls.',
   '',
   'Твоя ответственность:',
@@ -148,6 +157,9 @@ export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
   '3. Вызвать правильный инструмент.',
   '4. Ответить кратко только по факту результата.',
   '',
+].join('\n');
+
+const TOOL_PROMPT_BLOCK = [
   'Инструменты:',
   '- get_project_summary: краткое состояние проекта, версия, диапазон дат, количество задач, health flags.',
   '- find_tasks: быстрый поиск задач по названию. Используй первым, когда пользователь называет задачу без ID.',
@@ -164,6 +176,9 @@ export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
   '- recalculate_project: пересчитать график, только когда пользователь просит пересчёт или это явно нужно после структурного изменения.',
   '- validate_schedule: проверить график, только когда пользователь просит проверку или диагностику.',
   '',
+].join('\n');
+
+const GENERAL_PROCESS_BLOCK = [
   'Дефолты для автономности:',
   '- Если пользователь просит просто добавить новую работу/задачу и не дал даты, не задавай уточняющий вопрос.',
   '- Для такой новой задачи сначала получи get_project_summary, затем создай top-level задачу длительностью 1 день.',
@@ -186,6 +201,9 @@ export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
   '6. Не делай validate_schedule после успешного изменения, если пользователь не просил проверить.',
   '7. Не делай второй проход, если tool уже дал достаточный результат.',
   '',
+].join('\n');
+
+const SAFETY_RULES_BLOCK = [
   'Правила:',
   '- Никогда не выдумывай taskId.',
   '- Не читай весь проект без необходимости.',
@@ -199,14 +217,63 @@ export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
   '- Ответ: 1-2 коротких предложения, только результат.',
 ].join('\n');
 
+const FOLLOW_UP_POLICY_BLOCK = [
+  'Follow-up policy:',
+  '- Если сообщение короткое и похоже на продолжение предыдущего хода, опирайся на session memory и последний unresolved thread.',
+  '- Если в session memory есть lastResolvedTaskIds или lastCreatedTaskIds, используй их как основной кандидатный набор, прежде чем читать больше контекста.',
+  '- Если follow-up по-прежнему неоднозначен для mutating действия, задай один короткий уточняющий вопрос.',
+].join('\n');
+
+const BULK_EDIT_POLICY_BLOCK = [
+  'Bulk edit policy:',
+  '- Если пользователь просит действие для нескольких задач или для всего ранее найденного набора, предпочитай один batched tool call.',
+  '- Не делай серию однотипных mutation calls, если тот же результат можно выразить одним вызовом.',
+].join('\n');
+
+const VALIDATION_POLICY_BLOCK = [
+  'Validation policy:',
+  '- validate_schedule вызывай только по явному запросу на проверку, диагностику или когда нужно сообщить о целостности графика.',
+].join('\n');
+
+const LINKING_POLICY_BLOCK = [
+  'Linking policy:',
+  '- Для связи существующих задач сначала используй find_tasks или session memory, затем вызывай link_tasks или unlink_tasks.',
+  '- Не редактируй dependencies вручную через другие инструменты.',
+].join('\n');
+
+const REFERENCE_MODE_POLICY_BLOCK = [
+  'Reference mode:',
+  '- Пользователь просит справку, объяснение или инструкцию, а не фактическое изменение проекта.',
+  '- Не выполняй mutating действия и не описывай их как уже выполненные.',
+  '- Используй приложенную краткую справку как основной источник ответа.',
+  '- Read-only tools используй только если без них нельзя ответить по существу.',
+  '- Отвечай как инструкция: короткие шаги, варианты, примеры формулировок.',
+].join('\n');
+
+export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
+  BASE_PROMPT_BLOCK,
+  TOOL_PROMPT_BLOCK,
+  GENERAL_PROCESS_BLOCK,
+  FOLLOW_UP_POLICY_BLOCK,
+  BULK_EDIT_POLICY_BLOCK,
+  LINKING_POLICY_BLOCK,
+  VALIDATION_POLICY_BLOCK,
+  SAFETY_RULES_BLOCK,
+].join('\n\n');
+
 const MUTATING_TOOL_NAMES = new Set<string>(
   NORMALIZED_TOOL_CATALOG
     .filter((definition) => definition.mutating)
     .map((definition) => definition.name),
 );
 const SESSION_MEMORY_PREFIX = '[SESSION_MEMORY]';
-const MAX_SESSION_RESTORE_MESSAGES = 12;
-const MAX_CONTEXT_MESSAGES = 32;
+const MAX_SESSION_RESTORE_MESSAGES = 8;
+const MAX_CONTEXT_MESSAGES = 24;
+const MAX_RESTORED_MESSAGE_CHARS = 1_500;
+
+function uniqueIds(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.length > 0))];
+}
 
 function schemaOptions(property: JsonSchemaProperty | undefined): Record<string, unknown> {
   return {
@@ -358,11 +425,39 @@ function extractStatus(value: unknown): PiToolExecutionFact['status'] {
   return 'ok';
 }
 
+function extractResolvedTaskIds(name: string, value: unknown): string[] {
+  if (name !== 'find_tasks' || !value || typeof value !== 'object') {
+    return [];
+  }
+
+  const matches = (value as { matches?: unknown }).matches;
+  if (!Array.isArray(matches)) {
+    return [];
+  }
+
+  return uniqueIds(matches
+    .filter((match): match is { taskId?: unknown } => Boolean(match) && typeof match === 'object')
+    .map((match) => (typeof match.taskId === 'string' ? match.taskId : ''))
+    .filter((taskId) => taskId.length > 0));
+}
+
+function extractSearchQuery(name: string, value: unknown): string | undefined {
+  if (name !== 'find_tasks' || !value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const query = (value as { query?: unknown }).query;
+  return typeof query === 'string' && query.trim().length > 0 ? query.trim() : undefined;
+}
+
 export function buildPiAgentTools(input: BuildPiAgentToolsInput): AgentTool[] {
   const createContext = input.createContext ?? createToolContext;
   const runTool = input.executeTool ?? executeToolCall;
+  const toolDefinitions = NORMALIZED_TOOL_CATALOG.filter((definition) => (
+    input.mode === 'read_only' ? !definition.mutating : true
+  ));
 
-  return NORMALIZED_TOOL_CATALOG.map((definition) => ({
+  return toolDefinitions.map((definition) => ({
     name: definition.name,
     label: definition.name,
     description: definition.description,
@@ -482,6 +577,57 @@ function createUserContextMessage(content: string, timestamp: number): PiContext
   };
 }
 
+function isShortFollowUpMessage(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 && (
+    normalized.length <= 24
+    || ['да', 'нет', 'во всех', 'туда же', 'сделай так же', 'а теперь свяжи их'].includes(normalized)
+  );
+}
+
+function buildPiSystemPrompt(input: {
+  userMessage: string;
+  mutationRoute: boolean;
+  referenceMode?: boolean;
+  openThreads?: AgentOpenThreadState | null;
+}): { prompt: string; activePolicyCount: number } {
+  const blocks = [
+    BASE_PROMPT_BLOCK,
+    TOOL_PROMPT_BLOCK,
+    GENERAL_PROCESS_BLOCK,
+  ];
+  let activePolicyCount = 0;
+  const lowerMessage = input.userMessage.toLowerCase();
+
+  if (input.openThreads?.unresolved || isShortFollowUpMessage(input.userMessage)) {
+    blocks.push(FOLLOW_UP_POLICY_BLOCK);
+    activePolicyCount += 1;
+  }
+  if (/(во всех|массов|несколько|все найденные|оба|обе)/.test(lowerMessage)) {
+    blocks.push(BULK_EDIT_POLICY_BLOCK);
+    activePolicyCount += 1;
+  }
+  if (/(свяж|убери связь|unlink|link|зависим)/.test(lowerMessage)) {
+    blocks.push(LINKING_POLICY_BLOCK);
+    activePolicyCount += 1;
+  }
+  if (!input.mutationRoute || /(проверь|validate|диагност|ошиб)/.test(lowerMessage)) {
+    blocks.push(VALIDATION_POLICY_BLOCK);
+    activePolicyCount += 1;
+  }
+  if (input.referenceMode) {
+    blocks.push(REFERENCE_MODE_POLICY_BLOCK);
+    activePolicyCount += 1;
+  }
+
+  blocks.push(SAFETY_RULES_BLOCK);
+
+  return {
+    prompt: blocks.join('\n\n'),
+    activePolicyCount,
+  };
+}
+
 function buildSessionMemoryMessage(input: {
   projectId: string;
   rollingSummary?: string | null;
@@ -513,6 +659,25 @@ function buildSessionMemoryMessage(input: {
     }
   }
 
+  if (Array.isArray(openThread?.lastResolvedTaskIds) && openThread.lastResolvedTaskIds.length > 0) {
+    lines.push(`lastResolvedTaskIds: ${openThread.lastResolvedTaskIds.slice(0, 8).join(', ')}`);
+  }
+  if (Array.isArray(openThread?.lastCreatedTaskIds) && openThread.lastCreatedTaskIds.length > 0) {
+    lines.push(`lastCreatedTaskIds: ${openThread.lastCreatedTaskIds.slice(0, 8).join(', ')}`);
+  }
+  if (openThread?.lastMutationTool) {
+    lines.push(`lastMutationTool: ${openThread.lastMutationTool}`);
+  }
+  if (openThread?.lastSearchQuery) {
+    lines.push(`lastSearchQuery: ${clipText(openThread.lastSearchQuery, 120)}`);
+  }
+  if (openThread?.scopeHint) {
+    lines.push(`scopeHint: ${openThread.scopeHint}`);
+  }
+  if (openThread?.activeParentId) {
+    lines.push(`activeParentId: ${openThread.activeParentId}`);
+  }
+
   return lines.length > 2 ? lines.join('\n') : null;
 }
 
@@ -529,7 +694,7 @@ function buildInitialMessages(input: {
   }
 
   for (const message of input.messages.slice(-MAX_SESSION_RESTORE_MESSAGES)) {
-    const content = clipText(message.content, 4_000);
+    const content = clipText(message.content, MAX_RESTORED_MESSAGE_CHARS);
     if (!content || content.startsWith(SESSION_MEMORY_PREFIX)) {
       continue;
     }
@@ -546,6 +711,32 @@ function buildInitialMessages(input: {
   }
 
   return initialMessages as any[];
+}
+
+function measureInitialContext(input: {
+  systemPrompt: string;
+  initialMessages: any[];
+  sessionMemoryMessage: string | null;
+  activePolicyCount: number;
+}) {
+  const restoreMessages = input.initialMessages.filter((message) => {
+    const text = extractMessageTextContent((message as { content?: unknown }).content);
+    return text.length > 0 && !text.startsWith(SESSION_MEMORY_PREFIX);
+  });
+  const restoreMessageChars = restoreMessages.reduce((sum, message) => (
+    sum + extractMessageTextContent((message as { content?: unknown }).content).length
+  ), 0);
+  const sessionMemoryChars = input.sessionMemoryMessage?.length ?? 0;
+  const systemPromptChars = input.systemPrompt.length;
+
+  return {
+    restoreMessageCount: restoreMessages.length,
+    restoreMessageChars,
+    sessionMemoryChars,
+    systemPromptChars,
+    approxInputChars: restoreMessageChars + sessionMemoryChars + systemPromptChars,
+    activePolicyCount: input.activePolicyCount,
+  };
 }
 
 export async function compactSessionContext<TMessage extends { role?: unknown; content?: unknown }>(
@@ -606,6 +797,8 @@ export async function runPiOrdinaryAgent(input: {
   requestContextId: string;
   historyTitle: string;
   mutationRoute: boolean;
+  referenceMode?: boolean;
+  referenceContext?: string | null;
   rollingSummary?: string | null;
   openThreads?: AgentOpenThreadState | null;
   taskService: {
@@ -626,10 +819,39 @@ export async function runPiOrdinaryAgent(input: {
   const toolStarts = new Map<string, number>();
   const toolFacts = new Map<string, PiToolExecutionFact>();
   const model = buildPiOpenAICompletionsModel(input.env);
+  const sessionMemoryMessage = buildSessionMemoryMessage({
+    projectId: input.projectId,
+    rollingSummary: input.rollingSummary,
+    openThreads: input.openThreads,
+  });
+  const { prompt: systemPrompt, activePolicyCount } = buildPiSystemPrompt({
+    userMessage: input.userMessage,
+    mutationRoute: input.mutationRoute,
+    referenceMode: input.referenceMode,
+    openThreads: input.openThreads,
+  });
+  const initialMessages = buildInitialMessages({
+    projectId: input.projectId,
+    messages: input.messages,
+    rollingSummary: input.rollingSummary,
+    openThreads: input.openThreads,
+  });
+  if (input.referenceContext?.trim()) {
+    initialMessages.unshift(createAssistantContextMessage(
+      `[REFERENCE_BRIEF]\n${input.referenceContext.trim()}`,
+      Date.now(),
+    ));
+  }
+  const initialContextMetrics = measureInitialContext({
+    systemPrompt,
+    initialMessages,
+    sessionMemoryMessage,
+    activePolicyCount,
+  });
 
   const agent = new Agent({
     initialState: {
-      systemPrompt: GANTT_PI_AGENT_SYSTEM_PROMPT,
+      systemPrompt,
       model,
       thinkingLevel: 'off',
       tools: buildPiAgentTools({
@@ -639,13 +861,9 @@ export async function runPiOrdinaryAgent(input: {
         requestContextId: input.requestContextId,
         historyTitle: input.historyTitle,
         userId: input.userId,
+        mode: input.referenceMode ? 'read_only' : 'all',
       }),
-      messages: buildInitialMessages({
-        projectId: input.projectId,
-        messages: input.messages,
-        rollingSummary: input.rollingSummary,
-        openThreads: input.openThreads,
-      }),
+      messages: initialMessages,
     },
     transformContext: compactSessionContext,
     toolExecution: 'parallel',
@@ -711,6 +929,8 @@ export async function runPiOrdinaryAgent(input: {
           existing.status = event.isError ? 'error' : extractStatus(details);
           existing.changedTaskIds = extractChangedTaskIds(details);
           existing.changedDependencyIds = extractChangedDependencyIds(details);
+          existing.resolvedTaskIds = extractResolvedTaskIds(existing.name, details);
+          existing.searchQuery = extractSearchQuery(existing.name, details);
           existing.error = event.isError
             ? extractAssistantText({ role: 'assistant', content: (event.result as { content?: unknown })?.content })
             : (
@@ -793,6 +1013,12 @@ export async function runPiOrdinaryAgent(input: {
       durationMs: Date.now() - startedAt,
       timeToFirstToolCallMs,
       timeToFirstAssistantTextMs,
+      restoreMessageCount: initialContextMetrics.restoreMessageCount,
+      restoreMessageChars: initialContextMetrics.restoreMessageChars,
+      sessionMemoryChars: initialContextMetrics.sessionMemoryChars,
+      systemPromptChars: initialContextMetrics.systemPromptChars,
+      approxInputChars: initialContextMetrics.approxInputChars,
+      activePolicyCount: initialContextMetrics.activePolicyCount,
     },
   };
 }

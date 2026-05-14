@@ -11,6 +11,13 @@ import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
 import { runPiOrdinaryAgent } from './agent/pi-agent-runner.js';
 import {
+  buildOfftopicFoolResponse,
+  classifyReferenceIntent,
+  loadReferenceBrief,
+} from './agent/reference-pipeline.js';
+import {
+  AGENT_SESSION_COMPACTION_VERSION,
+  AGENT_SESSION_SCHEMA_VERSION,
   buildRouteContextSummary,
   buildSessionSnapshotMessages,
   buildSessionStateFromTranscript,
@@ -44,6 +51,12 @@ type InitialGenerationRouteDecisionQueryInput = {
   prompt: string;
   model: string;
   stage: 'initial_request_interpretation' | 'initial_request_interpretation_repair';
+  signal?: AbortSignal;
+};
+
+type ReferenceIntentQueryInput = {
+  prompt: string;
+  model: string;
   signal?: AbortSignal;
 };
 
@@ -169,6 +182,27 @@ async function executeInitialGenerationPlannerQuery(
 
 async function executeInitialGenerationRouteDecisionQuery(
   input: InitialGenerationRouteDecisionQueryInput,
+): Promise<{ content: string }> {
+  const env = resolveEnv();
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
+  }
+
+  const content = await completeTextPrompt({
+    env: {
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      OPENAI_MODEL: input.model,
+    },
+    prompt: input.prompt,
+    signal: input.signal,
+  });
+
+  return { content };
+}
+
+async function executeReferenceIntentQuery(
+  input: ReferenceIntentQueryInput,
 ): Promise<{ content: string }> {
   const env = resolveEnv();
   if (!env.OPENAI_API_KEY) {
@@ -499,15 +533,27 @@ export async function runAgentWithHistory(
       sessionState,
       recentMessages,
     }) || summarizeRecentConversation(recentMessages);
-    const routeSelection = await selectAgentRoute({
+    const referenceIntent = await classifyReferenceIntent({
       userMessage,
+      recentConversationSummary,
       taskCount: tasksBefore.length,
       hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
-      recentConversationSummary,
-      model: env.OPENAI_MODEL,
-      routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
+      model: env.OPENAI_CHEAP_MODEL ?? env.OPENAI_MODEL,
+      query: ({ prompt, model }) => executeReferenceIntentQuery({ prompt, model, signal }),
     });
-    const likelyMutationRequest = routeSelection.route === 'mutation';
+    const offtopicFoolRequest = referenceIntent.route === 'offtopic_fool';
+    const referenceRequest = referenceIntent.route === 'reference_help';
+    const routeSelection = referenceRequest || offtopicFoolRequest
+      ? null
+      : await selectAgentRoute({
+          userMessage,
+          taskCount: tasksBefore.length,
+          hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
+          recentConversationSummary,
+          model: env.OPENAI_MODEL,
+          routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
+        });
+    const likelyMutationRequest = routeSelection?.route === 'mutation';
     const simpleMutationRequested = false;
 
     await writeServerDebugLog('agent_run_started', {
@@ -517,12 +563,15 @@ export async function runAgentWithHistory(
       userMessage,
       mutationRequested: likelyMutationRequest,
       likelyMutationRequest,
+      referenceRequest,
+      offtopicFoolRequest,
+      referenceIntent,
       simpleMutationRequested,
       tasksBeforeCount: tasksBefore.length,
       tasksBeforeNames: tasksBefore.map((task) => task.name),
     });
 
-    const checkpointGroupId = likelyMutationRequest || routeSelection.route === 'initial_generation'
+    const checkpointGroupId = likelyMutationRequest || routeSelection?.route === 'initial_generation'
       ? resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(projectId))
       : undefined;
 
@@ -531,37 +580,141 @@ export async function runAgentWithHistory(
       historyGroupId: checkpointGroupId,
     });
 
-    await writeServerDebugLog('route_selection', {
-      runId,
-      projectId,
-      sessionId,
-      userMessage,
-      route: routeSelection.route,
-      reason: routeSelection.reason,
-      confidence: routeSelection.confidence,
-      isEmptyProject: routeSelection.isEmptyProject,
-      hasHierarchy: routeSelection.hasHierarchy,
-      taskCount: routeSelection.taskCount,
-      usedModelDecision: routeSelection.usedModelDecision,
-      recentConversationSummary,
-    });
+    await writeServerDebugLog('route_selection', offtopicFoolRequest
+      ? {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: 'offtopic_fool_guard',
+          reason: 'model_classified_offtopic_request',
+          confidence: referenceIntent.confidence,
+          signals: referenceIntent.signals,
+          usedModelDecision: referenceIntent.usedModelDecision,
+          fallbackReason: referenceIntent.fallbackReason,
+          recentConversationSummary,
+        }
+      : referenceRequest
+      ? {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: 'reference_help',
+          reason: 'model_classified_reference_request',
+          confidence: referenceIntent.confidence,
+          signals: referenceIntent.signals,
+          usedModelDecision: referenceIntent.usedModelDecision,
+          fallbackReason: referenceIntent.fallbackReason,
+          recentConversationSummary,
+        }
+      : {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: routeSelection!.route,
+          reason: routeSelection!.reason,
+          confidence: routeSelection!.confidence,
+          isEmptyProject: routeSelection!.isEmptyProject,
+          hasHierarchy: routeSelection!.hasHierarchy,
+          taskCount: routeSelection!.taskCount,
+          usedModelDecision: routeSelection!.usedModelDecision,
+          recentConversationSummary,
+        });
 
-    await writeServerDebugLog('route_decision_evidence', {
-      runId,
-      projectId,
-      sessionId,
-      userMessage,
-      route: routeSelection.route,
-      confidence: routeSelection.confidence,
-      reason: routeSelection.reason,
-      signals: routeSelection.signals,
-      projectStateSummary: routeSelection.projectStateSummary,
-      usedModelDecision: routeSelection.usedModelDecision,
-      recentConversationSummary,
+    await writeServerDebugLog('route_decision_evidence', offtopicFoolRequest
+      ? {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: 'offtopic_fool_guard',
+          confidence: referenceIntent.confidence,
+          reason: 'model_classified_offtopic_request',
+          signals: referenceIntent.signals,
+          projectStateSummary: `empty_project=${tasksBefore.length === 0}, task_count=${tasksBefore.length}`,
+          usedModelDecision: referenceIntent.usedModelDecision,
+          fallbackReason: referenceIntent.fallbackReason,
+          recentConversationSummary,
+        }
+      : referenceRequest
+      ? {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: 'reference_help',
+          confidence: referenceIntent.confidence,
+          reason: 'model_classified_reference_request',
+          signals: referenceIntent.signals,
+          projectStateSummary: `empty_project=${tasksBefore.length === 0}, task_count=${tasksBefore.length}`,
+          usedModelDecision: referenceIntent.usedModelDecision,
+          fallbackReason: referenceIntent.fallbackReason,
+          recentConversationSummary,
+        }
+      : {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: routeSelection!.route,
+          confidence: routeSelection!.confidence,
+          reason: routeSelection!.reason,
+          signals: routeSelection!.signals,
+          projectStateSummary: routeSelection!.projectStateSummary,
+          usedModelDecision: routeSelection!.usedModelDecision,
+          recentConversationSummary,
     });
     await generationJob?.markRunning('interpreting', 'AI анализирует запрос и контекст проекта');
 
-    if (routeSelection.route === 'initial_generation') {
+    if (offtopicFoolRequest) {
+      const assistantResponse = buildOfftopicFoolResponse(userMessage);
+      broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
+      await messageService.add('assistant', assistantResponse, projectId, {
+        requestContextId: runId,
+        historyGroupId: undefined,
+      });
+      const transcriptAfterRun = await messageService.list(projectId, 24);
+      const rebuiltState = buildSessionStateFromTranscript({
+        projectId,
+        recentMessages: transcriptAfterRun,
+        priorState: sessionState,
+        userMessage,
+        assistantResponse,
+        mutationAccepted: false,
+      });
+      await agentSessionStateService.upsert({
+        projectId,
+        messagesSnapshot: rebuiltState.messagesSnapshot,
+        rollingSummary: rebuiltState.rollingSummary,
+        openThreads: rebuiltState.openThreads,
+        lastRequestContextId: runId,
+        compactionVersion: AGENT_SESSION_COMPACTION_VERSION,
+        schemaVersion: AGENT_SESSION_SCHEMA_VERSION,
+      });
+      broadcastToSession(sessionId, {
+        type: 'done',
+        chatMessage: {
+          requestContextId: runId,
+          historyGroupId: null,
+        },
+      });
+      await generationJob?.markSucceeded({
+        requestContextId: runId,
+        historyGroupId: null,
+        statusMessage: 'Справочный AI-ответ завершён',
+      });
+      await writeServerDebugLog('agent_run_completed', {
+        runId,
+        projectId,
+        sessionId,
+        route: 'offtopic_fool_guard',
+      });
+      return;
+    }
+
+    if (routeSelection?.route === 'initial_generation') {
       await writeServerDebugLog('initial_generation_interpretation', {
         runId,
         projectId,
@@ -627,6 +780,8 @@ export async function runAgentWithHistory(
         rollingSummary: rebuiltState.rollingSummary,
         openThreads: rebuiltState.openThreads,
         lastRequestContextId: runId,
+        compactionVersion: AGENT_SESSION_COMPACTION_VERSION,
+        schemaVersion: AGENT_SESSION_SCHEMA_VERSION,
       });
       return;
     }
@@ -648,7 +803,7 @@ export async function runAgentWithHistory(
 
     const messages = await messageService.list(projectId, 24);
     const piHistoryGroupId = checkpointGroupId ?? crypto.randomUUID();
-    const piResult = await runPiOrdinaryAgent({
+      const piResult = await runPiOrdinaryAgent({
       userMessage,
       projectId,
       sessionId,
@@ -664,8 +819,10 @@ export async function runAgentWithHistory(
         : buildSessionSnapshotMessages(messages.slice(0, -1)),
       historyGroupId: piHistoryGroupId,
       requestContextId: runId,
-      historyTitle: buildAgentHistoryTitle(userMessage, true),
-      mutationRoute: likelyMutationRequest,
+      historyTitle: buildAgentHistoryTitle(userMessage, !referenceRequest),
+      mutationRoute: Boolean(likelyMutationRequest),
+      referenceMode: referenceRequest,
+      referenceContext: referenceRequest ? loadReferenceBrief(PROJECT_ROOT) : null,
       rollingSummary: sessionState?.rollingSummary ?? null,
       openThreads: sessionState?.openThreads ?? null,
       taskService,
@@ -710,6 +867,13 @@ export async function runAgentWithHistory(
       userMessage,
       assistantResponse,
       mutationAccepted: piResult.acceptedMutatingToolCalls.length > 0,
+      latestToolFacts: piResult.toolFacts.map((fact) => ({
+        name: fact.name,
+        changedTaskIds: fact.changedTaskIds,
+        resolvedTaskIds: fact.resolvedTaskIds,
+        searchQuery: fact.searchQuery,
+        status: fact.status,
+      })),
     });
     await agentSessionStateService.upsert({
       projectId,
@@ -717,6 +881,8 @@ export async function runAgentWithHistory(
       rollingSummary: rebuiltState.rollingSummary,
       openThreads: rebuiltState.openThreads,
       lastRequestContextId: runId,
+      compactionVersion: AGENT_SESSION_COMPACTION_VERSION,
+      schemaVersion: AGENT_SESSION_SCHEMA_VERSION,
     });
     await writeServerDebugLog('agent_response_saved', {
       runId,

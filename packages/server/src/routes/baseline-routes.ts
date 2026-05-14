@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { baselineService, BaselineValidationError } from '@gantt/mcp/services';
 import { authMiddleware } from '../middleware/auth-middleware.js';
-import { requireCurrentProjectEditor } from '../access-control.js';
+import { requireCurrentProjectEditor, resolveReadableProjectId } from '../access-control.js';
 
 type CreateBaselineBody = {
   name?: string;
@@ -34,9 +34,23 @@ function isBaselineValidationError(error: unknown): error is BaselineValidationE
 
 export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/api/baselines', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const targetProjectId = await resolveReadableProjectId({
+      userId: req.user!.userId,
+      email: req.user!.email,
+      currentProjectId: req.user!.projectId,
+      requestedProjectId: (req.query as { projectId?: string } | undefined)?.projectId,
+    });
+
+    if (!targetProjectId) {
+      return reply.status(404).send({
+        reason: 'not_found',
+        error: 'Project not found',
+      });
+    }
+
     try {
       const response = await baselineService.listBaselines({
-        projectId: req.user!.projectId,
+        projectId: targetProjectId,
       });
 
       return reply.send({
@@ -56,6 +70,12 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
 
   fastify.get('/api/baselines/:baselineId', { preHandler: [authMiddleware] }, async (req, reply) => {
     const params = req.params as { baselineId?: string };
+    const targetProjectId = await resolveReadableProjectId({
+      userId: req.user!.userId,
+      email: req.user!.email,
+      currentProjectId: req.user!.projectId,
+      requestedProjectId: (req.query as { projectId?: string } | undefined)?.projectId,
+    });
     if (!params.baselineId?.trim()) {
       return reply.status(400).send({
         reason: 'validation_error',
@@ -63,9 +83,16 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
       });
     }
 
+    if (!targetProjectId) {
+      return reply.status(404).send({
+        reason: 'not_found',
+        error: 'Project not found',
+      });
+    }
+
     try {
       const response = await baselineService.getBaseline({
-        projectId: req.user!.projectId,
+        projectId: targetProjectId,
         baselineId: params.baselineId,
       });
 

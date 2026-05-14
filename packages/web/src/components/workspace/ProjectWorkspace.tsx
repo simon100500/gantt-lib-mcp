@@ -117,6 +117,9 @@ interface ProjectWorkspaceProps {
   onStartTemplateSelection?: () => void | Promise<void>;
   templateMode?: boolean;
   onOpenLimitModal?: (denial: Partial<ConstraintDenialPayload>) => Promise<void>;
+  projectIdOverride?: string | null;
+  hiddenTaskListColumnsDefaultOverride?: string[] | null;
+  viewportOffsetPx?: number;
 }
 
 function formatTaskCount(count: number) {
@@ -555,6 +558,9 @@ export function ProjectWorkspace({
   onStartTemplateSelection,
   templateMode = false,
   onOpenLimitModal,
+  projectIdOverride = null,
+  hiddenTaskListColumnsDefaultOverride = null,
+  viewportOffsetPx = 0,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -588,8 +594,9 @@ export function ProjectWorkspace({
       : workspace.kind === 'template'
         ? `template:${workspace.templateId}`
         : null;
-  const persistedProjectId = workspace.kind === 'project' ? workspace.projectId : null;
+  const persistedProjectId = projectIdOverride ?? (workspace.kind === 'project' ? workspace.projectId : null);
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
+  const workspaceViewportHeight = `calc(100dvh - ${132 + viewportOffsetPx}px)`;
 
   useFilterPersistence();
   const taskFilter = useTaskFilter();
@@ -645,14 +652,16 @@ export function ProjectWorkspace({
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
   const projectHiddenTaskListColumnsDefault = useMemo<TaskListColumnId[]>(() => {
-    const configuredDefaults = hasShareToken
-      ? sharedProject?.hiddenTaskListColumnsDefault
-      : (persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault : null);
+    const configuredDefaults = hiddenTaskListColumnsDefaultOverride ?? (
+      hasShareToken
+        ? sharedProject?.hiddenTaskListColumnsDefault
+        : (persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault : null)
+    );
     return resolveHiddenTaskListColumns({
       userOverrideInitialized: false,
       projectHiddenTaskListColumnsDefault: configuredDefaults,
     });
-  }, [authProject, hasShareToken, persistedProjectId, sharedProject]);
+  }, [authProject, hasShareToken, hiddenTaskListColumnsDefaultOverride, persistedProjectId, sharedProject]);
   const hiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => {
     if (!projectId) {
       return [...projectHiddenTaskListColumnsDefault];
@@ -764,7 +773,7 @@ export function ProjectWorkspace({
   const aiMutationLocked = aiMutationLock.active;
   const canOpenChatFromLoader = showChat && !chatSidebarVisible && !hasShareToken && Boolean(onToggleChat);
   const effectiveReadOnly = readOnly || aiMutationLocked || previewRendering || previewFailed || (previewModeActive && !undoPreviewEditMode);
-  const historyPanelDisabled = readOnly || aiMutationLocked || previewRendering || previewFailed || !accessToken;
+  const historyPanelDisabled = aiMutationLocked || previewRendering || previewFailed || !accessToken;
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
   const shareSelectionActive = shareSelectionMode && !effectiveReadOnly;
@@ -787,7 +796,7 @@ export function ProjectWorkspace({
     setProjectState(projectId, { disableTaskDrag: enabled });
   }, [effectiveReadOnly, projectId, setProjectState]);
   const persistTaskListColumnOverride = useCallback(async (hiddenColumns: string[] | null) => {
-    if (!persistedProjectId || !isAuthenticated) {
+    if (!persistedProjectId || !isAuthenticated || projectIdOverride) {
       return;
     }
 
@@ -824,7 +833,7 @@ export function ProjectWorkspace({
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-  }, [accessToken, isAuthenticated, persistedProjectId]);
+  }, [accessToken, isAuthenticated, persistedProjectId, projectIdOverride]);
 
   const handleToggleTaskListColumn = useCallback((columnId: string) => {
     if (!projectId || !KNOWN_TASK_LIST_COLUMN_IDS.has(columnId)) {
@@ -940,14 +949,16 @@ export function ProjectWorkspace({
     items: historyItems,
     loading: historyLoading,
     error: historyError,
+    nextCursor: historyNextCursor,
     previewingGroupId,
     restoringGroupId,
     showVersion,
     showVersionById,
     refreshHistory,
+    loadMoreHistory,
     restoreVersion,
     returnToCurrentVersion,
-  } = useProjectHistory(accessToken, Boolean(accessToken && workspace.kind === 'project'));
+  } = useProjectHistory(accessToken, Boolean(accessToken && persistedProjectId), persistedProjectId);
   const {
     items: baselineItems,
     loading: baselinesLoading,
@@ -963,8 +974,8 @@ export function ProjectWorkspace({
     createFromHistory,
     renamingBaselineId,
     updateBaseline,
-  } = useProjectBaselines(accessToken);
-  const hasBaselineAccess = Boolean(accessToken && workspace.kind === 'project');
+  } = useProjectBaselines(accessToken, persistedProjectId);
+  const hasBaselineAccess = Boolean(accessToken && persistedProjectId);
   const selectedBaselineLabel = selectedBaselineState?.label ?? null;
   const selectedBaselineSnapshot = useMemo(() => {
     if (!selectedBaselineState) {
@@ -2397,7 +2408,7 @@ export function ProjectWorkspace({
   }, [effectiveTasksWithBaseline, getProjectState, loading, projectId, setProjectState]);
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       {/* Toolbar on full width */}
       <div className="px-3 md:px-4">
         <Toolbar
@@ -2509,7 +2520,7 @@ export function ProjectWorkspace({
                 calendarWeeklyPattern={calendarWeeklyPattern}
                 calendarDays={calendarDays}
                 timelineMarkers={timelineMarkers}
-                hiddenTaskListColumnsDefault={persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault ?? null : null}
+                hiddenTaskListColumnsDefault={hiddenTaskListColumnsDefaultOverride ?? (persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault ?? null : null)}
                 taskListColumnRows={TASK_LIST_COLUMN_ROWS}
                 pending={projectSettingsPending}
                 error={projectSettingsError}
@@ -2517,7 +2528,7 @@ export function ProjectWorkspace({
                 canShiftProject={canShiftProject}
                 canEditGanttDayMode={Boolean(onGanttDayModeChange) && !effectiveReadOnly}
                 canEditTimelineMarkers={Boolean(onTimelineMarkersChange) && !effectiveReadOnly}
-                canEditTaskListColumnsDefault={!effectiveReadOnly && Boolean(persistedProjectId && authProject?.id === persistedProjectId)}
+                canEditTaskListColumnsDefault={!effectiveReadOnly && !projectIdOverride && Boolean(persistedProjectId && authProject?.id === persistedProjectId)}
                 onClose={() => {
                   if (!projectSettingsPending) {
                     setProjectSettingsOpen(false);
@@ -2663,7 +2674,7 @@ export function ProjectWorkspace({
                   onTasksChange={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                   rowHeight={36}
-                  containerHeight="calc(100dvh - 132px)"
+                  containerHeight={workspaceViewportHeight}
                   showTaskList={showTaskList}
                   showChart={showChart}
                   taskListWidth={taskListWidth}
@@ -2823,12 +2834,14 @@ export function ProjectWorkspace({
             loading={historyLoading}
             error={historyError}
             disabled={historyPanelDisabled}
+            nextCursor={historyNextCursor}
             previewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
             previewingGroupId={previewingGroupId}
             restoringGroupId={restoringGroupId}
             creatingBaselineFromHistoryGroupId={creatingFromHistoryGroupId}
             onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
+            onLoadMore={() => void loadMoreHistory()}
             onPreviewVersion={(item) => {
               setUndoPreviewEditMode(false);
               return showVersion(item);
