@@ -10,7 +10,11 @@ import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
 import { runPiOrdinaryAgent } from './agent/pi-agent-runner.js';
-import { loadReferenceBrief, looksLikeReferenceRequest } from './agent/reference-pipeline.js';
+import {
+  buildOfftopicFoolResponse,
+  classifyReferenceIntent,
+  loadReferenceBrief,
+} from './agent/reference-pipeline.js';
 import {
   AGENT_SESSION_COMPACTION_VERSION,
   AGENT_SESSION_SCHEMA_VERSION,
@@ -47,6 +51,12 @@ type InitialGenerationRouteDecisionQueryInput = {
   prompt: string;
   model: string;
   stage: 'initial_request_interpretation' | 'initial_request_interpretation_repair';
+  signal?: AbortSignal;
+};
+
+type ReferenceIntentQueryInput = {
+  prompt: string;
+  model: string;
   signal?: AbortSignal;
 };
 
@@ -172,6 +182,27 @@ async function executeInitialGenerationPlannerQuery(
 
 async function executeInitialGenerationRouteDecisionQuery(
   input: InitialGenerationRouteDecisionQueryInput,
+): Promise<{ content: string }> {
+  const env = resolveEnv();
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
+  }
+
+  const content = await completeTextPrompt({
+    env: {
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      OPENAI_MODEL: input.model,
+    },
+    prompt: input.prompt,
+    signal: input.signal,
+  });
+
+  return { content };
+}
+
+async function executeReferenceIntentQuery(
+  input: ReferenceIntentQueryInput,
 ): Promise<{ content: string }> {
   const env = resolveEnv();
   if (!env.OPENAI_API_KEY) {
@@ -502,8 +533,17 @@ export async function runAgentWithHistory(
       sessionState,
       recentMessages,
     }) || summarizeRecentConversation(recentMessages);
-    const referenceRequest = looksLikeReferenceRequest(userMessage);
-    const routeSelection = referenceRequest
+    const referenceIntent = await classifyReferenceIntent({
+      userMessage,
+      recentConversationSummary,
+      taskCount: tasksBefore.length,
+      hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
+      model: env.OPENAI_CHEAP_MODEL ?? env.OPENAI_MODEL,
+      query: ({ prompt, model }) => executeReferenceIntentQuery({ prompt, model, signal }),
+    });
+    const offtopicFoolRequest = referenceIntent.route === 'offtopic_fool';
+    const referenceRequest = referenceIntent.route === 'reference_help';
+    const routeSelection = referenceRequest || offtopicFoolRequest
       ? null
       : await selectAgentRoute({
           userMessage,
@@ -524,6 +564,8 @@ export async function runAgentWithHistory(
       mutationRequested: likelyMutationRequest,
       likelyMutationRequest,
       referenceRequest,
+      offtopicFoolRequest,
+      referenceIntent,
       simpleMutationRequested,
       tasksBeforeCount: tasksBefore.length,
       tasksBeforeNames: tasksBefore.map((task) => task.name),
@@ -538,15 +580,32 @@ export async function runAgentWithHistory(
       historyGroupId: checkpointGroupId,
     });
 
-    await writeServerDebugLog('route_selection', referenceRequest
+    await writeServerDebugLog('route_selection', offtopicFoolRequest
+      ? {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: 'offtopic_fool_guard',
+          reason: 'model_classified_offtopic_request',
+          confidence: referenceIntent.confidence,
+          signals: referenceIntent.signals,
+          usedModelDecision: referenceIntent.usedModelDecision,
+          fallbackReason: referenceIntent.fallbackReason,
+          recentConversationSummary,
+        }
+      : referenceRequest
       ? {
           runId,
           projectId,
           sessionId,
           userMessage,
           route: 'reference_help',
-          reason: 'explicit_reference_request',
-          confidence: 1,
+          reason: 'model_classified_reference_request',
+          confidence: referenceIntent.confidence,
+          signals: referenceIntent.signals,
+          usedModelDecision: referenceIntent.usedModelDecision,
+          fallbackReason: referenceIntent.fallbackReason,
           recentConversationSummary,
         }
       : {
@@ -564,18 +623,34 @@ export async function runAgentWithHistory(
           recentConversationSummary,
         });
 
-    await writeServerDebugLog('route_decision_evidence', referenceRequest
+    await writeServerDebugLog('route_decision_evidence', offtopicFoolRequest
+      ? {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: 'offtopic_fool_guard',
+          confidence: referenceIntent.confidence,
+          reason: 'model_classified_offtopic_request',
+          signals: referenceIntent.signals,
+          projectStateSummary: `empty_project=${tasksBefore.length === 0}, task_count=${tasksBefore.length}`,
+          usedModelDecision: referenceIntent.usedModelDecision,
+          fallbackReason: referenceIntent.fallbackReason,
+          recentConversationSummary,
+        }
+      : referenceRequest
       ? {
           runId,
           projectId,
           sessionId,
           userMessage,
           route: 'reference_help',
-          confidence: 1,
-          reason: 'explicit_reference_request',
-          signals: ['help_intent_detected'],
+          confidence: referenceIntent.confidence,
+          reason: 'model_classified_reference_request',
+          signals: referenceIntent.signals,
           projectStateSummary: `empty_project=${tasksBefore.length === 0}, task_count=${tasksBefore.length}`,
-          usedModelDecision: false,
+          usedModelDecision: referenceIntent.usedModelDecision,
+          fallbackReason: referenceIntent.fallbackReason,
           recentConversationSummary,
         }
       : {
@@ -590,8 +665,54 @@ export async function runAgentWithHistory(
           projectStateSummary: routeSelection!.projectStateSummary,
           usedModelDecision: routeSelection!.usedModelDecision,
           recentConversationSummary,
-        });
+    });
     await generationJob?.markRunning('interpreting', 'AI анализирует запрос и контекст проекта');
+
+    if (offtopicFoolRequest) {
+      const assistantResponse = buildOfftopicFoolResponse(userMessage);
+      broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
+      await messageService.add('assistant', assistantResponse, projectId, {
+        requestContextId: runId,
+        historyGroupId: undefined,
+      });
+      const transcriptAfterRun = await messageService.list(projectId, 24);
+      const rebuiltState = buildSessionStateFromTranscript({
+        projectId,
+        recentMessages: transcriptAfterRun,
+        priorState: sessionState,
+        userMessage,
+        assistantResponse,
+        mutationAccepted: false,
+      });
+      await agentSessionStateService.upsert({
+        projectId,
+        messagesSnapshot: rebuiltState.messagesSnapshot,
+        rollingSummary: rebuiltState.rollingSummary,
+        openThreads: rebuiltState.openThreads,
+        lastRequestContextId: runId,
+        compactionVersion: AGENT_SESSION_COMPACTION_VERSION,
+        schemaVersion: AGENT_SESSION_SCHEMA_VERSION,
+      });
+      broadcastToSession(sessionId, {
+        type: 'done',
+        chatMessage: {
+          requestContextId: runId,
+          historyGroupId: null,
+        },
+      });
+      await generationJob?.markSucceeded({
+        requestContextId: runId,
+        historyGroupId: null,
+        statusMessage: 'Справочный AI-ответ завершён',
+      });
+      await writeServerDebugLog('agent_run_completed', {
+        runId,
+        projectId,
+        sessionId,
+        route: 'offtopic_fool_guard',
+      });
+      return;
+    }
 
     if (routeSelection?.route === 'initial_generation') {
       await writeServerDebugLog('initial_generation_interpretation', {
