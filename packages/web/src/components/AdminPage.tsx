@@ -198,15 +198,13 @@ async function fetchAdminWithRetry(input: string, init: RequestInit = {}): Promi
 function PageHeader({ children }: { children?: React.ReactNode }) {
   return (
     <header className="flex min-h-[56px] items-center gap-2 overflow-hidden border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-4 lg:px-6">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <a href="/" className="flex items-center gap-3 text-slate-900">
-          <img src="/favicon.svg" alt="" width="18" height="18" className="h-[18px] w-[18px]" aria-hidden="true" />
-          <div className="text-sm font-semibold tracking-tight">ГетГант</div>
-        </a>
-        <span className="text-sm text-slate-400" aria-hidden="true">/</span>
-        <span className="text-sm font-medium text-slate-900">Админка</span>
-        {children}
-      </div>
+      <a href="/" className="flex items-center gap-3 text-slate-900">
+        <img src="/favicon.svg" alt="" width="18" height="18" className="h-[18px] w-[18px]" aria-hidden="true" />
+        <div className="text-sm font-semibold tracking-tight">ГетГант</div>
+      </a>
+      <span className="text-sm text-slate-400" aria-hidden="true">/</span>
+      <span className="text-sm font-medium text-slate-900">Админка</span>
+      {children}
     </header>
   );
 }

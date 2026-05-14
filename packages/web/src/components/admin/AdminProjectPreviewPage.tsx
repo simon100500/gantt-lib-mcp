@@ -172,57 +172,55 @@ export function AdminProjectPreviewPage({
   const projectLabel = useMemo(() => project?.name || projectId, [project?.name, projectId]);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
+    <>
       {error ? (
-        <div className="mx-auto mt-4 w-full max-w-[1600px] px-4 sm:px-6">
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="pointer-events-none absolute left-0 right-0 top-[56px] z-50 flex justify-center p-2">
+          <div className="pointer-events-auto max-w-md rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-center text-xs text-red-700 shadow-sm">
             {error}
           </div>
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <ProjectWorkspace
-          ganttRef={ganttRef}
-          projectName={projectLabel}
-          tasks={tasks}
-          setTasks={setTasks}
-          loading={loading}
-          accessToken={accessToken}
-          sharedProject={null}
-          shareToken={null}
-          hasShareToken={false}
-          displayConnected
-          isAuthenticated={isAuthenticated}
-          chatDisabled
-          chatDisabledReason="Админский просмотр открыт в режиме только чтение."
-          onSend={() => ({ accepted: false, message: 'Админский просмотр открыт в режиме только чтение.' })}
-          onLoginRequired={onLoginRequired}
-          onCloseChat={() => setWorkspace((current) => (
-            current.kind === 'project'
-              ? { ...current, chatOpen: false }
-              : current
-          ))}
-          onToggleChat={() => setWorkspace((current) => (
-            current.kind === 'project'
-              ? { ...current, chatOpen: !current.chatOpen }
-              : current
-          ))}
-          onScrollToToday={() => ganttRef.current?.scrollToToday()}
-          onCollapseAll={() => ganttRef.current?.collapseAll()}
-          onExpandAll={() => ganttRef.current?.expandAll()}
-          onValidation={(_result: ValidationResult) => {}}
-          ganttDayMode={project?.ganttDayMode ?? 'calendar'}
-          displayGanttDayMode={project?.ganttDayMode ?? 'calendar'}
-          calendarWeeklyPattern={project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}
-          calendarDays={project?.calendarDays ?? []}
-          timelineMarkers={project?.timelineMarkers ?? []}
-          readOnly
-          showChat
-          projectIdOverride={projectId}
-          hiddenTaskListColumnsDefaultOverride={project?.hiddenTaskListColumnsDefault ?? null}
-        />
-      </div>
-    </div>
+      <ProjectWorkspace
+        ganttRef={ganttRef}
+        projectName={projectLabel}
+        tasks={tasks}
+        setTasks={setTasks}
+        loading={loading}
+        accessToken={accessToken}
+        sharedProject={null}
+        shareToken={null}
+        hasShareToken={false}
+        displayConnected
+        isAuthenticated={isAuthenticated}
+        chatDisabled
+        chatDisabledReason="Админский просмотр открыт в режиме только чтение."
+        onSend={() => ({ accepted: false, message: 'Админский просмотр открыт в режиме только чтение.' })}
+        onLoginRequired={onLoginRequired}
+        onCloseChat={() => setWorkspace((current) => (
+          current.kind === 'project'
+            ? { ...current, chatOpen: false }
+            : current
+        ))}
+        onToggleChat={() => setWorkspace((current) => (
+          current.kind === 'project'
+            ? { ...current, chatOpen: !current.chatOpen }
+            : current
+        ))}
+        onScrollToToday={() => ganttRef.current?.scrollToToday()}
+        onCollapseAll={() => ganttRef.current?.collapseAll()}
+        onExpandAll={() => ganttRef.current?.expandAll()}
+        onValidation={(_result: ValidationResult) => {}}
+        ganttDayMode={project?.ganttDayMode ?? 'calendar'}
+        displayGanttDayMode={project?.ganttDayMode ?? 'calendar'}
+        calendarWeeklyPattern={project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}
+        calendarDays={project?.calendarDays ?? []}
+        timelineMarkers={project?.timelineMarkers ?? []}
+        readOnly
+        showChat
+        projectIdOverride={projectId}
+        hiddenTaskListColumnsDefaultOverride={project?.hiddenTaskListColumnsDefault ?? null}
+      />
+    </>
   );
 }

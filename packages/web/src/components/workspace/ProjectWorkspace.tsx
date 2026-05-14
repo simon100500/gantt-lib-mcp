@@ -1,4 +1,4 @@
-import type { CSSProperties, Ref, RefObject } from 'react';
+import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { Users, ListTree, LoaderCircle, MessageSquare, ToyBrick, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
@@ -597,9 +597,6 @@ export function ProjectWorkspace({
   const persistedProjectId = projectIdOverride ?? (workspace.kind === 'project' ? workspace.projectId : null);
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
   const workspaceViewportHeight = `calc(100dvh - ${132 + viewportOffsetPx}px)`;
-  const workspaceViewportStyle = {
-    '--workspace-viewport-height': workspaceViewportHeight,
-  } as CSSProperties;
 
   useFilterPersistence();
   const taskFilter = useTaskFilter();
@@ -2492,13 +2489,10 @@ export function ProjectWorkspace({
       </div>
 
       {/* Chart and Chat side by side */}
-      <div
-        className="mt-0.5 flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-3 overflow-auto px-3 md:px-4 lg:h-[var(--workspace-viewport-height)] lg:flex-row lg:overflow-hidden"
-        style={workspaceViewportStyle}
-      >
+      <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 md:px-4 lg:flex-row lg:overflow-hidden">
         {/* Chart card - hide on mobile when chat is open */}
         <div className={cn(
-          "flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
+          "flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
           chatSidebarVisible && "hidden md:flex"
         )}>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
@@ -2868,10 +2862,7 @@ export function ProjectWorkspace({
 
         {/* Chat card - full width on mobile when open, side on desktop */}
         {chatSidebarVisible && !hasShareToken && onSend && (
-          <aside
-            className="mb-3 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:h-[var(--workspace-viewport-height)] lg:w-[360px] lg:flex-none lg:max-w-md xl:max-w-[320px]"
-            style={workspaceViewportStyle}
-          >
+          <aside className="mb-3 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:w-[360px] lg:flex-none lg:max-w-md xl:max-w-[320px]">
             <ChatSidebar
               messages={chatMessages}
               streaming={streaming}
