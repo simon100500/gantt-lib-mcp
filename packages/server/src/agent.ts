@@ -11,6 +11,8 @@ import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
 import { runPiOrdinaryAgent } from './agent/pi-agent-runner.js';
 import {
+  AGENT_SESSION_COMPACTION_VERSION,
+  AGENT_SESSION_SCHEMA_VERSION,
   buildRouteContextSummary,
   buildSessionSnapshotMessages,
   buildSessionStateFromTranscript,
@@ -627,6 +629,8 @@ export async function runAgentWithHistory(
         rollingSummary: rebuiltState.rollingSummary,
         openThreads: rebuiltState.openThreads,
         lastRequestContextId: runId,
+        compactionVersion: AGENT_SESSION_COMPACTION_VERSION,
+        schemaVersion: AGENT_SESSION_SCHEMA_VERSION,
       });
       return;
     }
@@ -710,6 +714,13 @@ export async function runAgentWithHistory(
       userMessage,
       assistantResponse,
       mutationAccepted: piResult.acceptedMutatingToolCalls.length > 0,
+      latestToolFacts: piResult.toolFacts.map((fact) => ({
+        name: fact.name,
+        changedTaskIds: fact.changedTaskIds,
+        resolvedTaskIds: fact.resolvedTaskIds,
+        searchQuery: fact.searchQuery,
+        status: fact.status,
+      })),
     });
     await agentSessionStateService.upsert({
       projectId,
@@ -717,6 +728,8 @@ export async function runAgentWithHistory(
       rollingSummary: rebuiltState.rollingSummary,
       openThreads: rebuiltState.openThreads,
       lastRequestContextId: runId,
+      compactionVersion: AGENT_SESSION_COMPACTION_VERSION,
+      schemaVersion: AGENT_SESSION_SCHEMA_VERSION,
     });
     await writeServerDebugLog('agent_response_saved', {
       runId,
