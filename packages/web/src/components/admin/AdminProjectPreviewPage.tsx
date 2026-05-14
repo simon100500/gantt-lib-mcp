@@ -5,8 +5,9 @@ import { ProjectWorkspace } from '../workspace/ProjectWorkspace.tsx';
 import { DEFAULT_CALENDAR_WEEKLY_PATTERN } from '../../lib/projectScheduleOptions.ts';
 import type { ProjectLoadResponse } from '../../lib/apiTypes.ts';
 import { useChatStore } from '../../stores/useChatStore.ts';
+import { useHistoryViewerStore } from '../../stores/useHistoryViewerStore.ts';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
-import { useUIStore } from '../../stores/useUIStore.ts';
+import { readProjectChatOpenState, useUIStore } from '../../stores/useUIStore.ts';
 import type { Task, ValidationResult } from '../../types.ts';
 
 interface AdminProjectPreviewPageProps {
@@ -55,12 +56,14 @@ export function AdminProjectPreviewPage({
   onBack,
 }: AdminProjectPreviewPageProps) {
   const ganttRef = useRef<GanttChartRef>(null);
+  const loadRequestIdRef = useRef(0);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [project, setProject] = useState<ProjectLoadResponse['project'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const setWorkspace = useUIStore((state) => state.setWorkspace);
   const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
+  const exitHistoryPreview = useHistoryViewerStore((state) => state.exitPreview);
 
   const loadPreview = useCallback(async () => {
     if (!isAuthenticated) {
@@ -68,8 +71,22 @@ export function AdminProjectPreviewPage({
       return;
     }
 
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
     setLoading(true);
     setError(null);
+    setProject(null);
+    setTasks([]);
+    exitHistoryPreview();
+    useChatStore.getState().reset();
+    useProjectStore.getState().hydrateConfirmed(0, {
+      tasks: [],
+      dependencies: [],
+    }, {
+      resources: [],
+      assignments: [],
+      progressEntries: [],
+    });
 
     try {
       const projectQuery = encodeURIComponent(projectId);
@@ -77,6 +94,10 @@ export function AdminProjectPreviewPage({
         fetchWithRetry(`/api/project?projectId=${projectQuery}`, accessToken, refreshAccessToken),
         fetchWithRetry(`/api/messages?projectId=${projectQuery}`, accessToken, refreshAccessToken),
       ]);
+
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
 
       if (!projectResponse.ok) {
         throw new Error(`Failed to load project: HTTP ${projectResponse.status}`);
@@ -93,6 +114,10 @@ export function AdminProjectPreviewPage({
         requestContextId?: string | null;
         historyGroupId?: string | null;
       }>;
+
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
 
       useProjectStore.getState().hydrateConfirmed(projectPayload.version, {
         tasks: projectPayload.snapshot.tasks,
@@ -122,22 +147,29 @@ export function AdminProjectPreviewPage({
       setTasks(projectPayload.snapshot.tasks);
       setProject(projectPayload.project);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load admin project preview');
+      if (loadRequestIdRef.current === requestId) {
+        setError(loadError instanceof Error ? loadError.message : 'Failed to load admin project preview');
+      }
     } finally {
-      setLoading(false);
+      if (loadRequestIdRef.current === requestId) {
+        setLoading(false);
+      }
     }
-  }, [accessToken, isAuthenticated, onLoginRequired, projectId, refreshAccessToken]);
+  }, [accessToken, exitHistoryPreview, isAuthenticated, onLoginRequired, projectId, refreshAccessToken]);
 
   useEffect(() => {
-    setWorkspace({ kind: 'project', projectId, chatOpen: true });
+    setWorkspace({ kind: 'project', projectId, chatOpen: readProjectChatOpenState() });
     setShowHistoryPanel(false);
+    exitHistoryPreview();
     void loadPreview();
 
     return () => {
+      loadRequestIdRef.current += 1;
+      exitHistoryPreview();
       useChatStore.getState().reset();
       setShowHistoryPanel(false);
     };
-  }, [loadPreview, projectId, setShowHistoryPanel, setWorkspace]);
+  }, [exitHistoryPreview, loadPreview, projectId, setShowHistoryPanel, setWorkspace]);
 
   const projectLabel = useMemo(() => project?.name || projectId, [project?.name, projectId]);
 
@@ -185,6 +217,7 @@ export function AdminProjectPreviewPage({
           isAuthenticated={isAuthenticated}
           chatDisabled
           chatDisabledReason="Админский просмотр открыт в режиме только чтение."
+          onSend={() => ({ accepted: false, message: 'Админский просмотр открыт в режиме только чтение.' })}
           onLoginRequired={onLoginRequired}
           onCloseChat={() => setWorkspace((current) => (
             current.kind === 'project'

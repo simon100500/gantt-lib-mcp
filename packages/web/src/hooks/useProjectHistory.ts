@@ -170,6 +170,14 @@ export function useProjectHistory(accessToken: string | null, enabled = true, pr
     return loadHistory(cursor);
   }, [loadHistory]);
 
+  const loadMoreHistory = useCallback(async () => {
+    if (!nextCursor) {
+      return { items, nextCursor };
+    }
+
+    return loadHistory(nextCursor);
+  }, [items, loadHistory, nextCursor]);
+
   const refreshHistorySilently = useCallback(async () => {
     if (!enabled) {
       setStale(true);
@@ -377,6 +385,7 @@ export function useProjectHistory(accessToken: string | null, enabled = true, pr
     restoringGroupId,
     historyViewer,
     refreshHistory,
+    loadMoreHistory,
     refreshHistorySilently,
     fetchSnapshot,
     previewVersion: fetchSnapshot,

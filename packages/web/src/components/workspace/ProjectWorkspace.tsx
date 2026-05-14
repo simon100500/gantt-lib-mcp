@@ -770,7 +770,7 @@ export function ProjectWorkspace({
   const aiMutationLocked = aiMutationLock.active;
   const canOpenChatFromLoader = showChat && !chatSidebarVisible && !hasShareToken && Boolean(onToggleChat);
   const effectiveReadOnly = readOnly || aiMutationLocked || previewRendering || previewFailed || (previewModeActive && !undoPreviewEditMode);
-  const historyPanelDisabled = readOnly || aiMutationLocked || previewRendering || previewFailed || !accessToken;
+  const historyPanelDisabled = aiMutationLocked || previewRendering || previewFailed || !accessToken;
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
   const shareSelectionActive = shareSelectionMode && !effectiveReadOnly;
@@ -946,11 +946,13 @@ export function ProjectWorkspace({
     items: historyItems,
     loading: historyLoading,
     error: historyError,
+    nextCursor: historyNextCursor,
     previewingGroupId,
     restoringGroupId,
     showVersion,
     showVersionById,
     refreshHistory,
+    loadMoreHistory,
     restoreVersion,
     returnToCurrentVersion,
   } = useProjectHistory(accessToken, Boolean(accessToken && persistedProjectId), persistedProjectId);
@@ -2484,10 +2486,10 @@ export function ProjectWorkspace({
       </div>
 
       {/* Chart and Chat side by side */}
-      <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 md:px-4 lg:flex-row lg:overflow-hidden">
+      <div className="mt-0.5 flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-3 overflow-auto px-3 md:px-4 lg:h-[calc(100dvh-132px)] lg:flex-row lg:overflow-hidden">
         {/* Chart card - hide on mobile when chat is open */}
         <div className={cn(
-          "flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
+          "flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
           chatSidebarVisible && "hidden md:flex"
         )}>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
@@ -2829,12 +2831,14 @@ export function ProjectWorkspace({
             loading={historyLoading}
             error={historyError}
             disabled={historyPanelDisabled}
+            nextCursor={historyNextCursor}
             previewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
             previewingGroupId={previewingGroupId}
             restoringGroupId={restoringGroupId}
             creatingBaselineFromHistoryGroupId={creatingFromHistoryGroupId}
             onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
+            onLoadMore={() => void loadMoreHistory()}
             onPreviewVersion={(item) => {
               setUndoPreviewEditMode(false);
               return showVersion(item);
@@ -2855,7 +2859,7 @@ export function ProjectWorkspace({
 
         {/* Chat card - full width on mobile when open, side on desktop */}
         {chatSidebarVisible && !hasShareToken && onSend && (
-          <aside className="mb-3 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:w-[360px] lg:flex-none lg:max-w-md xl:max-w-[320px]">
+          <aside className="mb-3 flex min-h-0 flex-1 self-stretch overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:mb-0 lg:h-[calc(100dvh-132px)] lg:max-h-[calc(100dvh-132px)] lg:w-[360px] lg:flex-none lg:max-w-md xl:max-w-[320px]">
             <ChatSidebar
               messages={chatMessages}
               streaming={streaming}
