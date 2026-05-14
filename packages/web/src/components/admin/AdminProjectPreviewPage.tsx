@@ -221,7 +221,6 @@ export function AdminProjectPreviewPage({
           showChat
           projectIdOverride={projectId}
           hiddenTaskListColumnsDefaultOverride={project?.hiddenTaskListColumnsDefault ?? null}
-          viewportOffsetPx={56}
         />
       </div>
     </div>
