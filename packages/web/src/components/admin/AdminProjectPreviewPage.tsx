@@ -16,7 +16,6 @@ interface AdminProjectPreviewPageProps {
   accessToken: string | null;
   refreshAccessToken: () => Promise<string | null>;
   onLoginRequired: () => void;
-  onBack: () => void;
 }
 
 async function fetchWithRetry(
@@ -53,7 +52,6 @@ export function AdminProjectPreviewPage({
   accessToken,
   refreshAccessToken,
   onLoginRequired,
-  onBack,
 }: AdminProjectPreviewPageProps) {
   const ganttRef = useRef<GanttChartRef>(null);
   const loadRequestIdRef = useRef(0);
@@ -174,38 +172,19 @@ export function AdminProjectPreviewPage({
   const projectLabel = useMemo(() => project?.name || projectId, [project?.name, projectId]);
 
   return (
-    <div className="flex min-h-[calc(100dvh-65px)] flex-col bg-[#f4f5f7]">
-      <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            Назад в админку
-          </button>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-slate-900">{projectLabel}</div>
-            <div className="text-xs text-slate-500">Полный readonly-просмотр: график, history, chat</div>
-          </div>
-          <div className="ml-auto rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
-            Только чтение
-          </div>
-        </div>
-      </div>
-
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       {error ? (
-        <div className="mx-auto mt-6 w-full max-w-[1600px] px-4 sm:px-6">
+        <div className="mx-auto mt-4 w-full max-w-[1600px] px-4 sm:px-6">
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <ProjectWorkspace
           ganttRef={ganttRef}
-          projectName={project?.name}
+          projectName={projectLabel}
           tasks={tasks}
           setTasks={setTasks}
           loading={loading}
@@ -242,6 +221,7 @@ export function AdminProjectPreviewPage({
           showChat
           projectIdOverride={projectId}
           hiddenTaskListColumnsDefaultOverride={project?.hiddenTaskListColumnsDefault ?? null}
+          viewportOffsetPx={56}
         />
       </div>
     </div>

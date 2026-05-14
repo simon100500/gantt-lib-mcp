@@ -125,6 +125,7 @@ export function ChatSidebar({
   const [pendingApplyMessage, setPendingApplyMessage] = useState<ChatMessage | null>(null);
   const phraseIteratorRef = useRef(createPhraseIterator());
   const rootRef = useRef<HTMLDivElement>(null);
+  const messagesViewportRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
@@ -155,7 +156,14 @@ export function ChatSidebar({
   }
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "auto" });
+    const viewport = messagesViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      viewport.scrollTop = viewport.scrollHeight;
+    });
   }, [messages, streaming]);
 
   useEffect(() => {
@@ -366,6 +374,7 @@ export function ChatSidebar({
       )}
 
       <div
+        ref={messagesViewportRef}
         role="region"
         aria-label="Сообщения AI ассистента"
         aria-live="polite"
@@ -472,7 +481,7 @@ export function ChatSidebar({
               >
                 <div
                   className={cn(
-                    "max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
+                    "max-w-[88%] overflow-hidden whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
                     msg.role === "user"
                       ? "rounded-br-sm bg-[#e7f0fe] text-slate-800"
                       : "rounded-bl-sm bg-slate-50 text-slate-800",
@@ -502,7 +511,7 @@ export function ChatSidebar({
 
         {streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="max-w-[88%] rounded-lg rounded-bl-sm bg-slate-100 px-3 py-2 text-sm leading-relaxed text-slate-600">
+            <div className="max-w-[88%] overflow-hidden break-words rounded-lg rounded-bl-sm bg-slate-100 px-3 py-2 text-sm leading-relaxed text-slate-600">
               {streaming}
               <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse align-middle bg-slate-500 motion-reduce:animate-none" />
             </div>

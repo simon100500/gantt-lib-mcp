@@ -1,4 +1,4 @@
-import type { Ref, RefObject } from 'react';
+import type { CSSProperties, Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { Users, ListTree, LoaderCircle, MessageSquare, ToyBrick, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
@@ -119,6 +119,7 @@ interface ProjectWorkspaceProps {
   onOpenLimitModal?: (denial: Partial<ConstraintDenialPayload>) => Promise<void>;
   projectIdOverride?: string | null;
   hiddenTaskListColumnsDefaultOverride?: string[] | null;
+  viewportOffsetPx?: number;
 }
 
 function formatTaskCount(count: number) {
@@ -559,6 +560,7 @@ export function ProjectWorkspace({
   onOpenLimitModal,
   projectIdOverride = null,
   hiddenTaskListColumnsDefaultOverride = null,
+  viewportOffsetPx = 0,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -594,6 +596,10 @@ export function ProjectWorkspace({
         : null;
   const persistedProjectId = projectIdOverride ?? (workspace.kind === 'project' ? workspace.projectId : null);
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
+  const workspaceViewportHeight = `calc(100dvh - ${132 + viewportOffsetPx}px)`;
+  const workspaceViewportStyle = {
+    '--workspace-viewport-height': workspaceViewportHeight,
+  } as CSSProperties;
 
   useFilterPersistence();
   const taskFilter = useTaskFilter();
@@ -2405,7 +2411,7 @@ export function ProjectWorkspace({
   }, [effectiveTasksWithBaseline, getProjectState, loading, projectId, setProjectState]);
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       {/* Toolbar on full width */}
       <div className="px-3 md:px-4">
         <Toolbar
@@ -2486,7 +2492,10 @@ export function ProjectWorkspace({
       </div>
 
       {/* Chart and Chat side by side */}
-      <div className="mt-0.5 flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-3 overflow-auto px-3 md:px-4 lg:h-[calc(100dvh-132px)] lg:flex-row lg:overflow-hidden">
+      <div
+        className="mt-0.5 flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-3 overflow-auto px-3 md:px-4 lg:h-[var(--workspace-viewport-height)] lg:flex-row lg:overflow-hidden"
+        style={workspaceViewportStyle}
+      >
         {/* Chart card - hide on mobile when chat is open */}
         <div className={cn(
           "flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
@@ -2671,7 +2680,7 @@ export function ProjectWorkspace({
                   onTasksChange={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                   rowHeight={36}
-                  containerHeight="calc(100dvh - 132px)"
+                  containerHeight={workspaceViewportHeight}
                   showTaskList={showTaskList}
                   showChart={showChart}
                   taskListWidth={taskListWidth}
@@ -2859,7 +2868,10 @@ export function ProjectWorkspace({
 
         {/* Chat card - full width on mobile when open, side on desktop */}
         {chatSidebarVisible && !hasShareToken && onSend && (
-          <aside className="mb-3 flex min-h-0 flex-1 self-stretch overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:mb-0 lg:h-[calc(100dvh-132px)] lg:max-h-[calc(100dvh-132px)] lg:w-[360px] lg:flex-none lg:max-w-md xl:max-w-[320px]">
+          <aside
+            className="mb-3 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:h-[var(--workspace-viewport-height)] lg:w-[360px] lg:flex-none lg:max-w-md xl:max-w-[320px]"
+            style={workspaceViewportStyle}
+          >
             <ChatSidebar
               messages={chatMessages}
               streaming={streaming}

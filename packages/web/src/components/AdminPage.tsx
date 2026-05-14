@@ -770,18 +770,21 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
 
   if (projectPreviewId) {
     return (
-      <div className="flex h-dvh flex-col overflow-hidden bg-[#f4f5f7]">
-        <PageHeader>
-          <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
-        </PageHeader>
-        <AdminProjectPreviewPage
-          projectId={projectPreviewId}
-          isAuthenticated={isAuthenticated}
-          accessToken={accessToken}
-          refreshAccessToken={refreshAccessToken}
-          onLoginRequired={onLoginRequired}
-          onBack={closeProjectPreview}
-        />
+      <div className="flex h-dvh overflow-hidden bg-[#f4f5f7] text-slate-900">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <PageHeader>
+            <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
+          </PageHeader>
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[#f4f5f7]">
+            <AdminProjectPreviewPage
+              projectId={projectPreviewId}
+              isAuthenticated={isAuthenticated}
+              accessToken={accessToken}
+              refreshAccessToken={refreshAccessToken}
+              onLoginRequired={onLoginRequired}
+            />
+          </div>
+        </div>
       </div>
     );
   }
