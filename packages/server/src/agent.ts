@@ -10,6 +10,7 @@ import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
 import { runPiOrdinaryAgent } from './agent/pi-agent-runner.js';
+import { loadReferenceBrief, looksLikeReferenceRequest } from './agent/reference-pipeline.js';
 import {
   AGENT_SESSION_COMPACTION_VERSION,
   AGENT_SESSION_SCHEMA_VERSION,
@@ -501,15 +502,18 @@ export async function runAgentWithHistory(
       sessionState,
       recentMessages,
     }) || summarizeRecentConversation(recentMessages);
-    const routeSelection = await selectAgentRoute({
-      userMessage,
-      taskCount: tasksBefore.length,
-      hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
-      recentConversationSummary,
-      model: env.OPENAI_MODEL,
-      routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
-    });
-    const likelyMutationRequest = routeSelection.route === 'mutation';
+    const referenceRequest = looksLikeReferenceRequest(userMessage);
+    const routeSelection = referenceRequest
+      ? null
+      : await selectAgentRoute({
+          userMessage,
+          taskCount: tasksBefore.length,
+          hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
+          recentConversationSummary,
+          model: env.OPENAI_MODEL,
+          routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
+        });
+    const likelyMutationRequest = routeSelection?.route === 'mutation';
     const simpleMutationRequested = false;
 
     await writeServerDebugLog('agent_run_started', {
@@ -519,12 +523,13 @@ export async function runAgentWithHistory(
       userMessage,
       mutationRequested: likelyMutationRequest,
       likelyMutationRequest,
+      referenceRequest,
       simpleMutationRequested,
       tasksBeforeCount: tasksBefore.length,
       tasksBeforeNames: tasksBefore.map((task) => task.name),
     });
 
-    const checkpointGroupId = likelyMutationRequest || routeSelection.route === 'initial_generation'
+    const checkpointGroupId = likelyMutationRequest || routeSelection?.route === 'initial_generation'
       ? resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(projectId))
       : undefined;
 
@@ -533,37 +538,62 @@ export async function runAgentWithHistory(
       historyGroupId: checkpointGroupId,
     });
 
-    await writeServerDebugLog('route_selection', {
-      runId,
-      projectId,
-      sessionId,
-      userMessage,
-      route: routeSelection.route,
-      reason: routeSelection.reason,
-      confidence: routeSelection.confidence,
-      isEmptyProject: routeSelection.isEmptyProject,
-      hasHierarchy: routeSelection.hasHierarchy,
-      taskCount: routeSelection.taskCount,
-      usedModelDecision: routeSelection.usedModelDecision,
-      recentConversationSummary,
-    });
+    await writeServerDebugLog('route_selection', referenceRequest
+      ? {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: 'reference_help',
+          reason: 'explicit_reference_request',
+          confidence: 1,
+          recentConversationSummary,
+        }
+      : {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: routeSelection!.route,
+          reason: routeSelection!.reason,
+          confidence: routeSelection!.confidence,
+          isEmptyProject: routeSelection!.isEmptyProject,
+          hasHierarchy: routeSelection!.hasHierarchy,
+          taskCount: routeSelection!.taskCount,
+          usedModelDecision: routeSelection!.usedModelDecision,
+          recentConversationSummary,
+        });
 
-    await writeServerDebugLog('route_decision_evidence', {
-      runId,
-      projectId,
-      sessionId,
-      userMessage,
-      route: routeSelection.route,
-      confidence: routeSelection.confidence,
-      reason: routeSelection.reason,
-      signals: routeSelection.signals,
-      projectStateSummary: routeSelection.projectStateSummary,
-      usedModelDecision: routeSelection.usedModelDecision,
-      recentConversationSummary,
-    });
+    await writeServerDebugLog('route_decision_evidence', referenceRequest
+      ? {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: 'reference_help',
+          confidence: 1,
+          reason: 'explicit_reference_request',
+          signals: ['help_intent_detected'],
+          projectStateSummary: `empty_project=${tasksBefore.length === 0}, task_count=${tasksBefore.length}`,
+          usedModelDecision: false,
+          recentConversationSummary,
+        }
+      : {
+          runId,
+          projectId,
+          sessionId,
+          userMessage,
+          route: routeSelection!.route,
+          confidence: routeSelection!.confidence,
+          reason: routeSelection!.reason,
+          signals: routeSelection!.signals,
+          projectStateSummary: routeSelection!.projectStateSummary,
+          usedModelDecision: routeSelection!.usedModelDecision,
+          recentConversationSummary,
+        });
     await generationJob?.markRunning('interpreting', 'AI анализирует запрос и контекст проекта');
 
-    if (routeSelection.route === 'initial_generation') {
+    if (routeSelection?.route === 'initial_generation') {
       await writeServerDebugLog('initial_generation_interpretation', {
         runId,
         projectId,
@@ -652,7 +682,7 @@ export async function runAgentWithHistory(
 
     const messages = await messageService.list(projectId, 24);
     const piHistoryGroupId = checkpointGroupId ?? crypto.randomUUID();
-    const piResult = await runPiOrdinaryAgent({
+      const piResult = await runPiOrdinaryAgent({
       userMessage,
       projectId,
       sessionId,
@@ -668,8 +698,10 @@ export async function runAgentWithHistory(
         : buildSessionSnapshotMessages(messages.slice(0, -1)),
       historyGroupId: piHistoryGroupId,
       requestContextId: runId,
-      historyTitle: buildAgentHistoryTitle(userMessage, true),
-      mutationRoute: likelyMutationRequest,
+      historyTitle: buildAgentHistoryTitle(userMessage, !referenceRequest),
+      mutationRoute: Boolean(likelyMutationRequest),
+      referenceMode: referenceRequest,
+      referenceContext: referenceRequest ? loadReferenceBrief(PROJECT_ROOT) : null,
       rollingSummary: sessionState?.rollingSummary ?? null,
       openThreads: sessionState?.openThreads ?? null,
       taskService,

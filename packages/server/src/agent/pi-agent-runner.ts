@@ -118,6 +118,7 @@ export type BuildPiAgentToolsInput = {
   requestContextId: string;
   historyTitle: string;
   userId?: string;
+  mode?: 'all' | 'read_only';
   createContext?: typeof createToolContext;
   executeTool?: typeof executeToolCall;
 };
@@ -238,6 +239,15 @@ const LINKING_POLICY_BLOCK = [
   'Linking policy:',
   '- Для связи существующих задач сначала используй find_tasks или session memory, затем вызывай link_tasks или unlink_tasks.',
   '- Не редактируй dependencies вручную через другие инструменты.',
+].join('\n');
+
+const REFERENCE_MODE_POLICY_BLOCK = [
+  'Reference mode:',
+  '- Пользователь просит справку, объяснение или инструкцию, а не фактическое изменение проекта.',
+  '- Не выполняй mutating действия и не описывай их как уже выполненные.',
+  '- Используй приложенную краткую справку как основной источник ответа.',
+  '- Read-only tools используй только если без них нельзя ответить по существу.',
+  '- Отвечай как инструкция: короткие шаги, варианты, примеры формулировок.',
 ].join('\n');
 
 export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
@@ -443,8 +453,11 @@ function extractSearchQuery(name: string, value: unknown): string | undefined {
 export function buildPiAgentTools(input: BuildPiAgentToolsInput): AgentTool[] {
   const createContext = input.createContext ?? createToolContext;
   const runTool = input.executeTool ?? executeToolCall;
+  const toolDefinitions = NORMALIZED_TOOL_CATALOG.filter((definition) => (
+    input.mode === 'read_only' ? !definition.mutating : true
+  ));
 
-  return NORMALIZED_TOOL_CATALOG.map((definition) => ({
+  return toolDefinitions.map((definition) => ({
     name: definition.name,
     label: definition.name,
     description: definition.description,
@@ -575,6 +588,7 @@ function isShortFollowUpMessage(value: string): boolean {
 function buildPiSystemPrompt(input: {
   userMessage: string;
   mutationRoute: boolean;
+  referenceMode?: boolean;
   openThreads?: AgentOpenThreadState | null;
 }): { prompt: string; activePolicyCount: number } {
   const blocks = [
@@ -599,6 +613,10 @@ function buildPiSystemPrompt(input: {
   }
   if (!input.mutationRoute || /(проверь|validate|диагност|ошиб)/.test(lowerMessage)) {
     blocks.push(VALIDATION_POLICY_BLOCK);
+    activePolicyCount += 1;
+  }
+  if (input.referenceMode) {
+    blocks.push(REFERENCE_MODE_POLICY_BLOCK);
     activePolicyCount += 1;
   }
 
@@ -779,6 +797,8 @@ export async function runPiOrdinaryAgent(input: {
   requestContextId: string;
   historyTitle: string;
   mutationRoute: boolean;
+  referenceMode?: boolean;
+  referenceContext?: string | null;
   rollingSummary?: string | null;
   openThreads?: AgentOpenThreadState | null;
   taskService: {
@@ -807,6 +827,7 @@ export async function runPiOrdinaryAgent(input: {
   const { prompt: systemPrompt, activePolicyCount } = buildPiSystemPrompt({
     userMessage: input.userMessage,
     mutationRoute: input.mutationRoute,
+    referenceMode: input.referenceMode,
     openThreads: input.openThreads,
   });
   const initialMessages = buildInitialMessages({
@@ -815,6 +836,12 @@ export async function runPiOrdinaryAgent(input: {
     rollingSummary: input.rollingSummary,
     openThreads: input.openThreads,
   });
+  if (input.referenceContext?.trim()) {
+    initialMessages.unshift(createAssistantContextMessage(
+      `[REFERENCE_BRIEF]\n${input.referenceContext.trim()}`,
+      Date.now(),
+    ));
+  }
   const initialContextMetrics = measureInitialContext({
     systemPrompt,
     initialMessages,
@@ -834,6 +861,7 @@ export async function runPiOrdinaryAgent(input: {
         requestContextId: input.requestContextId,
         historyTitle: input.historyTitle,
         userId: input.userId,
+        mode: input.referenceMode ? 'read_only' : 'all',
       }),
       messages: initialMessages,
     },
