@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AdminProjectPreviewPage } from './admin/AdminProjectPreviewPage.tsx';
 import { TemplateAutomationAdminPanel } from './admin/TemplateAutomationAdminPanel.tsx';
 import { LoginButton } from './LoginButton';
 import { PLAN_CATALOG, PLAN_LABELS, formatDate, type BillingPeriod, type PlanId } from '../lib/billing';
@@ -258,6 +259,9 @@ function GuardState({
 }
 
 export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: AdminPageProps) {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const refreshAccessToken = useAuthStore((state) => state.refreshAccessToken);
+  const [projectPreviewId, setProjectPreviewId] = useState<string | null>(() => new URLSearchParams(window.location.search).get('projectId'));
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [pagination, setPagination] = useState<AdminUsersPagination>({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
@@ -285,6 +289,29 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const [deletingUser, setDeletingUser] = useState(false);
   const [copiedLogs, setCopiedLogs] = useState(false);
   const [adminSection, setAdminSection] = useState<'subscriptions' | 'templates'>(() => readInitialAdminSection());
+
+  useEffect(() => {
+    const syncPreviewId = () => {
+      setProjectPreviewId(new URLSearchParams(window.location.search).get('projectId'));
+    };
+
+    window.addEventListener('popstate', syncPreviewId);
+    return () => window.removeEventListener('popstate', syncPreviewId);
+  }, []);
+
+  const openProjectPreview = useCallback((projectId: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('projectId', projectId);
+    window.history.pushState(window.history.state, '', url.toString());
+    setProjectPreviewId(projectId);
+  }, []);
+
+  const closeProjectPreview = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('projectId');
+    window.history.pushState(window.history.state, '', url.toString());
+    setProjectPreviewId(null);
+  }, []);
 
   const loadUsers = useCallback(async (nextQuery: string, nextPage = 1) => {
     setLoading(true);
@@ -739,6 +766,24 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
 
   if (forbidden) {
     return <GuardState isAuthenticated onLoginRequired={onLoginRequired} userEmail={userEmail} forbidden />;
+  }
+
+  if (projectPreviewId) {
+    return (
+      <div className="flex h-dvh flex-col overflow-hidden bg-[#f4f5f7]">
+        <PageHeader>
+          <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
+        </PageHeader>
+        <AdminProjectPreviewPage
+          projectId={projectPreviewId}
+          isAuthenticated={isAuthenticated}
+          accessToken={accessToken}
+          refreshAccessToken={refreshAccessToken}
+          onLoginRequired={onLoginRequired}
+          onBack={closeProjectPreview}
+        />
+      </div>
+    );
   }
 
   return (
@@ -1288,11 +1333,10 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                 </button>
                                 <button
                                   type="button"
-                                  disabled={openingProjectId === project.id}
-                                  onClick={() => void (project.status === 'deleted' ? assumeProjectSession(project.id) : openProjectView(project.id))}
-                                  className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                                  onClick={() => openProjectPreview(project.id)}
+                                  className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-white"
                                 >
-                                  {openingProjectId === project.id ? 'Открытие…' : 'Открыть'}
+                                  Открыть
                                 </button>
                                 <button
                                   type="button"

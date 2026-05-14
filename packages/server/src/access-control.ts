@@ -6,6 +6,7 @@ import type {
   ProjectSectionKey,
   ProjectSectionPermissions,
 } from '@gantt/runtime-core/types';
+import { isAdminEmail } from './middleware/admin-middleware.js';
 
 export type AccessContext = {
   role: ProjectAccessRole;
@@ -150,6 +151,34 @@ export async function resolveProjectAccess(userId: string, projectId: string): P
   }
 
   return resolveGroupAccess(userId, project.groupId);
+}
+
+export async function resolveReadableProjectId(params: {
+  userId: string;
+  email: string;
+  currentProjectId: string;
+  requestedProjectId?: string | null;
+}): Promise<string | null> {
+  const requestedProjectId = params.requestedProjectId?.trim();
+  if (!requestedProjectId || requestedProjectId === params.currentProjectId) {
+    return params.currentProjectId;
+  }
+
+  const directAccess = await resolveProjectAccess(params.userId, requestedProjectId);
+  if (directAccess) {
+    return requestedProjectId;
+  }
+
+  if (!isAdminEmail(params.email)) {
+    return null;
+  }
+
+  const project = await prismaGetter().project.findUnique({
+    where: { id: requestedProjectId },
+    select: { id: true },
+  });
+
+  return project?.id ?? null;
 }
 
 export async function requireCurrentProjectAccess(request: FastifyRequest, reply: FastifyReply): Promise<void> {

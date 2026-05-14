@@ -117,6 +117,8 @@ interface ProjectWorkspaceProps {
   onStartTemplateSelection?: () => void | Promise<void>;
   templateMode?: boolean;
   onOpenLimitModal?: (denial: Partial<ConstraintDenialPayload>) => Promise<void>;
+  projectIdOverride?: string | null;
+  hiddenTaskListColumnsDefaultOverride?: string[] | null;
 }
 
 function formatTaskCount(count: number) {
@@ -555,6 +557,8 @@ export function ProjectWorkspace({
   onStartTemplateSelection,
   templateMode = false,
   onOpenLimitModal,
+  projectIdOverride = null,
+  hiddenTaskListColumnsDefaultOverride = null,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -588,7 +592,7 @@ export function ProjectWorkspace({
       : workspace.kind === 'template'
         ? `template:${workspace.templateId}`
         : null;
-  const persistedProjectId = workspace.kind === 'project' ? workspace.projectId : null;
+  const persistedProjectId = projectIdOverride ?? (workspace.kind === 'project' ? workspace.projectId : null);
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
 
   useFilterPersistence();
@@ -645,14 +649,16 @@ export function ProjectWorkspace({
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
   const projectHiddenTaskListColumnsDefault = useMemo<TaskListColumnId[]>(() => {
-    const configuredDefaults = hasShareToken
-      ? sharedProject?.hiddenTaskListColumnsDefault
-      : (persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault : null);
+    const configuredDefaults = hiddenTaskListColumnsDefaultOverride ?? (
+      hasShareToken
+        ? sharedProject?.hiddenTaskListColumnsDefault
+        : (persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault : null)
+    );
     return resolveHiddenTaskListColumns({
       userOverrideInitialized: false,
       projectHiddenTaskListColumnsDefault: configuredDefaults,
     });
-  }, [authProject, hasShareToken, persistedProjectId, sharedProject]);
+  }, [authProject, hasShareToken, hiddenTaskListColumnsDefaultOverride, persistedProjectId, sharedProject]);
   const hiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => {
     if (!projectId) {
       return [...projectHiddenTaskListColumnsDefault];
@@ -787,7 +793,7 @@ export function ProjectWorkspace({
     setProjectState(projectId, { disableTaskDrag: enabled });
   }, [effectiveReadOnly, projectId, setProjectState]);
   const persistTaskListColumnOverride = useCallback(async (hiddenColumns: string[] | null) => {
-    if (!persistedProjectId || !isAuthenticated) {
+    if (!persistedProjectId || !isAuthenticated || projectIdOverride) {
       return;
     }
 
@@ -824,7 +830,7 @@ export function ProjectWorkspace({
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-  }, [accessToken, isAuthenticated, persistedProjectId]);
+  }, [accessToken, isAuthenticated, persistedProjectId, projectIdOverride]);
 
   const handleToggleTaskListColumn = useCallback((columnId: string) => {
     if (!projectId || !KNOWN_TASK_LIST_COLUMN_IDS.has(columnId)) {
@@ -947,7 +953,7 @@ export function ProjectWorkspace({
     refreshHistory,
     restoreVersion,
     returnToCurrentVersion,
-  } = useProjectHistory(accessToken, Boolean(accessToken && workspace.kind === 'project'));
+  } = useProjectHistory(accessToken, Boolean(accessToken && persistedProjectId), persistedProjectId);
   const {
     items: baselineItems,
     loading: baselinesLoading,
@@ -963,8 +969,8 @@ export function ProjectWorkspace({
     createFromHistory,
     renamingBaselineId,
     updateBaseline,
-  } = useProjectBaselines(accessToken);
-  const hasBaselineAccess = Boolean(accessToken && workspace.kind === 'project');
+  } = useProjectBaselines(accessToken, persistedProjectId);
+  const hasBaselineAccess = Boolean(accessToken && persistedProjectId);
   const selectedBaselineLabel = selectedBaselineState?.label ?? null;
   const selectedBaselineSnapshot = useMemo(() => {
     if (!selectedBaselineState) {
@@ -2509,7 +2515,7 @@ export function ProjectWorkspace({
                 calendarWeeklyPattern={calendarWeeklyPattern}
                 calendarDays={calendarDays}
                 timelineMarkers={timelineMarkers}
-                hiddenTaskListColumnsDefault={persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault ?? null : null}
+                hiddenTaskListColumnsDefault={hiddenTaskListColumnsDefaultOverride ?? (persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault ?? null : null)}
                 taskListColumnRows={TASK_LIST_COLUMN_ROWS}
                 pending={projectSettingsPending}
                 error={projectSettingsError}
@@ -2517,7 +2523,7 @@ export function ProjectWorkspace({
                 canShiftProject={canShiftProject}
                 canEditGanttDayMode={Boolean(onGanttDayModeChange) && !effectiveReadOnly}
                 canEditTimelineMarkers={Boolean(onTimelineMarkersChange) && !effectiveReadOnly}
-                canEditTaskListColumnsDefault={!effectiveReadOnly && Boolean(persistedProjectId && authProject?.id === persistedProjectId)}
+                canEditTaskListColumnsDefault={!effectiveReadOnly && !projectIdOverride && Boolean(persistedProjectId && authProject?.id === persistedProjectId)}
                 onClose={() => {
                   if (!projectSettingsPending) {
                     setProjectSettingsOpen(false);

@@ -56,7 +56,7 @@ async function parseHistorySnapshotResponse(response: Response): Promise<History
   };
 }
 
-export function useProjectHistory(accessToken: string | null, enabled = true) {
+export function useProjectHistory(accessToken: string | null, enabled = true, projectIdOverride?: string | null) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +78,12 @@ export function useProjectHistory(accessToken: string | null, enabled = true) {
       return;
     }
 
-    const response = await fetch('/api/messages', {
+    const searchParams = new URLSearchParams();
+    if (projectIdOverride) {
+      searchParams.set('projectId', projectIdOverride);
+    }
+
+    const response = await fetch(searchParams.size > 0 ? `/api/messages?${searchParams.toString()}` : '/api/messages', {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -103,7 +108,7 @@ export function useProjectHistory(accessToken: string | null, enabled = true) {
       requestContextId: message.requestContextId ?? null,
       historyGroupId: message.historyGroupId ?? null,
     })));
-  }, [accessToken]);
+  }, [accessToken, projectIdOverride]);
 
   const loadHistory = useCallback(async (cursor?: string, options?: { silent?: boolean }) => {
     if (!accessToken) {
@@ -125,6 +130,9 @@ export function useProjectHistory(accessToken: string | null, enabled = true) {
       searchParams.set('limit', String(DEFAULT_HISTORY_LIMIT));
       if (cursor) {
         searchParams.set('cursor', cursor);
+      }
+      if (projectIdOverride) {
+        searchParams.set('projectId', projectIdOverride);
       }
 
       const response = await fetch(`/api/history?${searchParams.toString()}`, {
@@ -156,7 +164,7 @@ export function useProjectHistory(accessToken: string | null, enabled = true) {
         setLoading(false);
       }
     }
-  }, [accessToken]);
+  }, [accessToken, projectIdOverride]);
 
   const refreshHistory = useCallback(async (cursor?: string) => {
     return loadHistory(cursor);
@@ -180,18 +188,28 @@ export function useProjectHistory(accessToken: string | null, enabled = true) {
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(`/api/history/${groupId}/snapshot`, {
+    const searchParams = new URLSearchParams();
+    if (projectIdOverride) {
+      searchParams.set('projectId', projectIdOverride);
+    }
+
+    const response = await fetch(
+      searchParams.size > 0
+        ? `/api/history/${groupId}/snapshot?${searchParams.toString()}`
+        : `/api/history/${groupId}/snapshot`,
+      {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
-    });
+      },
+    );
 
     if (!response.ok) {
       throw new Error(await readErrorMessage(response));
     }
 
     return parseHistorySnapshotResponse(response);
-  }, [accessToken]);
+  }, [accessToken, projectIdOverride]);
 
   const showVersion = useCallback(async (item: Pick<HistoryItem, 'id' | 'isCurrent'>) => {
     if (item.isCurrent) {
