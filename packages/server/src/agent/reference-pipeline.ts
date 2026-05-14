@@ -188,7 +188,7 @@ export function buildOfftopicFoolResponse(userMessage: string): string {
     return 'I am better at Gantt work than cosmic philosophy. I can help create and edit schedules, link tasks, shift dates, validate the plan, manage templates, resources, history, and explain how to use these features.';
   }
 
-  return 'С таким вопросом я вряд ли стану академиком. Зато я хорошо помогаю с графиком: могу подсказать, как создавать и редактировать задачи, связывать их, сдвигать сроки, проверять график, работать с шаблонами, ресурсами и историей версий.';
+  return 'С таким вопросом не помогу. Зато я хорошо помогаю с графиком: могу создавать и редактировать задачи, связывать их, сдвигать сроки, проверять график, работать с шаблонами, ресурсами и историей версий.';
 }
 
 export function loadReferenceBrief(projectRoot: string): string {
