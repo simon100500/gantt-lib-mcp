@@ -16,6 +16,7 @@ interface AdminProjectPreviewPageProps {
   accessToken: string | null;
   refreshAccessToken: () => Promise<string | null>;
   onLoginRequired: () => void;
+  onProjectLoaded?: (project: ProjectLoadResponse['project']) => void;
 }
 
 async function fetchWithRetry(
@@ -52,6 +53,7 @@ export function AdminProjectPreviewPage({
   accessToken,
   refreshAccessToken,
   onLoginRequired,
+  onProjectLoaded,
 }: AdminProjectPreviewPageProps) {
   const ganttRef = useRef<GanttChartRef>(null);
   const loadRequestIdRef = useRef(0);
@@ -144,6 +146,7 @@ export function AdminProjectPreviewPage({
 
       setTasks(projectPayload.snapshot.tasks);
       setProject(projectPayload.project);
+      onProjectLoaded?.(projectPayload.project);
     } catch (loadError) {
       if (loadRequestIdRef.current === requestId) {
         setError(loadError instanceof Error ? loadError.message : 'Failed to load admin project preview');
@@ -153,7 +156,7 @@ export function AdminProjectPreviewPage({
         setLoading(false);
       }
     }
-  }, [accessToken, exitHistoryPreview, isAuthenticated, onLoginRequired, projectId, refreshAccessToken]);
+  }, [accessToken, exitHistoryPreview, isAuthenticated, onLoginRequired, onProjectLoaded, projectId, refreshAccessToken]);
 
   useEffect(() => {
     setWorkspace({ kind: 'project', projectId, chatOpen: readProjectChatOpenState() });

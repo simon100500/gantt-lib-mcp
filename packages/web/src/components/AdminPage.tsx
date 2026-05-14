@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ExternalLink, FileText, MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import { AdminProjectPreviewPage } from './admin/AdminProjectPreviewPage.tsx';
 import { TemplateAutomationAdminPanel } from './admin/TemplateAutomationAdminPanel.tsx';
 import { LoginButton } from './LoginButton';
@@ -195,15 +196,22 @@ async function fetchAdminWithRetry(input: string, init: RequestInit = {}): Promi
   return doFetch(token);
 }
 
-function PageHeader({ children }: { children?: React.ReactNode }) {
+interface PageHeaderProps {
+  children?: React.ReactNode;
+  leading?: React.ReactNode;
+  title?: React.ReactNode;
+}
+
+function PageHeader({ children, leading = null, title = 'Админка' }: PageHeaderProps) {
   return (
     <header className="flex min-h-[56px] items-center gap-2 overflow-hidden border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-4 lg:px-6">
+      {leading}
       <a href="/" className="flex items-center gap-3 text-slate-900">
         <img src="/favicon.svg" alt="" width="18" height="18" className="h-[18px] w-[18px]" aria-hidden="true" />
         <div className="text-sm font-semibold tracking-tight">ГетГант</div>
       </a>
       <span className="text-sm text-slate-400" aria-hidden="true">/</span>
-      <span className="text-sm font-medium text-slate-900">Админка</span>
+      <div className="min-w-0 truncate text-sm font-medium text-slate-900">{title}</div>
       {children}
     </header>
   );
@@ -260,6 +268,10 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const accessToken = useAuthStore((state) => state.accessToken);
   const refreshAccessToken = useAuthStore((state) => state.refreshAccessToken);
   const [projectPreviewId, setProjectPreviewId] = useState<string | null>(() => new URLSearchParams(window.location.search).get('projectId'));
+  const [projectPreviewHeader, setProjectPreviewHeader] = useState<{ projectName: string | null; userLabel: string | null }>({
+    projectName: new URLSearchParams(window.location.search).get('projectName'),
+    userLabel: new URLSearchParams(window.location.search).get('ownerEmail'),
+  });
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [pagination, setPagination] = useState<AdminUsersPagination>({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
@@ -290,25 +302,46 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
 
   useEffect(() => {
     const syncPreviewId = () => {
-      setProjectPreviewId(new URLSearchParams(window.location.search).get('projectId'));
+      const nextProjectId = new URLSearchParams(window.location.search).get('projectId');
+      const nextProjectName = new URLSearchParams(window.location.search).get('projectName');
+      const nextOwnerEmail = new URLSearchParams(window.location.search).get('ownerEmail');
+      setProjectPreviewId(nextProjectId);
+      setProjectPreviewHeader(nextProjectId
+        ? { projectName: nextProjectName, userLabel: nextOwnerEmail }
+        : { projectName: null, userLabel: null });
     };
 
     window.addEventListener('popstate', syncPreviewId);
     return () => window.removeEventListener('popstate', syncPreviewId);
   }, []);
 
-  const openProjectPreview = useCallback((projectId: string) => {
+  const openProjectPreview = useCallback((project: AdminUserDetails['projects'][number]) => {
     const url = new URL(window.location.href);
-    url.searchParams.set('projectId', projectId);
-    window.history.pushState(window.history.state, '', url.toString());
-    setProjectPreviewId(projectId);
-  }, []);
+    url.searchParams.set('projectId', project.id);
+    url.searchParams.set('projectName', project.name);
+    if (selectedUser?.user.email) {
+      url.searchParams.set('ownerEmail', selectedUser.user.email);
+    } else {
+      url.searchParams.delete('ownerEmail');
+    }
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  }, [selectedUser?.user.email]);
 
   const closeProjectPreview = useCallback(() => {
     const url = new URL(window.location.href);
     url.searchParams.delete('projectId');
+    url.searchParams.delete('projectName');
+    url.searchParams.delete('ownerEmail');
     window.history.pushState(window.history.state, '', url.toString());
+    setProjectPreviewHeader({ projectName: null, userLabel: null });
     setProjectPreviewId(null);
+  }, []);
+
+  const handlePreviewProjectLoaded = useCallback((project: AuthProject) => {
+    setProjectPreviewHeader((current) => ({
+      projectName: project.name || current.projectName,
+      userLabel: current.userLabel,
+    }));
   }, []);
 
   const loadUsers = useCallback(async (nextQuery: string, nextPage = 1) => {
@@ -407,6 +440,22 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
     }
     void loadUserDetails(selectedUserId);
   }, [forbidden, isAuthenticated, loadUserDetails, selectedUserId]);
+
+  useEffect(() => {
+    if (!projectPreviewId || !selectedUser) {
+      return;
+    }
+
+    const previewProject = selectedUser.projects.find((project) => project.id === projectPreviewId);
+    if (!previewProject) {
+      return;
+    }
+
+    setProjectPreviewHeader((current) => ({
+      projectName: current.projectName ?? previewProject.name,
+      userLabel: current.userLabel ?? selectedUser.user.email,
+    }));
+  }, [projectPreviewId, selectedUser]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -767,10 +816,34 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   }
 
   if (projectPreviewId) {
+    const previewProjectTitle = projectPreviewHeader.projectName ?? 'График проекта';
+    const previewTitle = projectPreviewHeader.userLabel
+      ? (
+        <span className="inline-flex min-w-0 items-center gap-2">
+          <span className="truncate">{previewProjectTitle}</span>
+          <span className="shrink-0 text-slate-300" aria-hidden="true">|</span>
+          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+            {projectPreviewHeader.userLabel}
+          </span>
+        </span>
+      )
+      : previewProjectTitle;
+
     return (
       <div className="flex h-dvh overflow-hidden bg-[#f4f5f7] text-slate-900">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <PageHeader>
+          <PageHeader
+            leading={(
+              <button
+                type="button"
+                onClick={closeProjectPreview}
+                className="inline-flex h-8 shrink-0 items-center rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              >
+                Назад
+              </button>
+            )}
+            title={previewTitle}
+          >
             <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
           </PageHeader>
           <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[#f4f5f7]">
@@ -780,6 +853,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
               accessToken={accessToken}
               refreshAccessToken={refreshAccessToken}
               onLoginRequired={onLoginRequired}
+              onProjectLoaded={handlePreviewProjectLoaded}
             />
           </div>
         </div>
@@ -790,41 +864,48 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-[#f4f5f7]">
       <PageHeader>
+        <div
+          className="ml-4 flex self-stretch"
+          role="tablist"
+          aria-label="Раздел админки"
+        >
+          <button
+            type="button"
+            onClick={() => setAdminSection('subscriptions')}
+            className={`relative -mb-px inline-flex h-full items-center border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+              adminSection === 'subscriptions'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
+            }`}
+            role="tab"
+            aria-selected={adminSection === 'subscriptions'}
+          >
+            Подписки
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminSection('templates')}
+            className={`relative -mb-px ml-4 inline-flex h-full items-center border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+              adminSection === 'templates'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
+            }`}
+            role="tab"
+            aria-selected={adminSection === 'templates'}
+          >
+            Шаблоны
+          </button>
+        </div>
         <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
       </PageHeader>
 
       <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-        <div className="mx-auto max-w-[1600px] space-y-6">
+        <div className="w-full space-y-6">
           {error && (
             <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
               {error}
             </div>
           )}
-
-          <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setAdminSection('subscriptions')}
-              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-                adminSection === 'subscriptions'
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Подписки
-            </button>
-            <button
-              type="button"
-              onClick={() => setAdminSection('templates')}
-              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-                adminSection === 'templates'
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Шаблоны
-            </button>
-          </div>
 
           {adminSection === 'templates' ? (
             <TemplateAutomationAdminPanel
@@ -1281,80 +1362,93 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                         ) : selectedUser.projects.map((project) => (
                           <div key={project.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
                             <div className="flex flex-col gap-3">
-                              <div className="min-w-0">
-                                <div className="font-medium text-slate-900">{project.name}</div>
-                                <div className="mt-1 flex items-center gap-2">
-                                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                    project.status === 'active'
-                                      ? 'bg-green-100 text-green-700'
-                                      : project.status === 'archived'
-                                        ? 'bg-slate-200 text-slate-600'
-                                        : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {project.status === 'active'
-                                      ? 'активный'
-                                      : project.status === 'archived'
-                                        ? 'архив'
-                                        : 'удалён'}
-                                  </span>
-                                  <span className="text-xs text-slate-500">{formatDate(project.createdAt)}</span>
-                                  {project.archivedAt && project.status === 'archived' && (
-                                    <span className="text-xs text-slate-500">архив: {formatDate(project.archivedAt)}</span>
-                                  )}
-                                  {project.deletedAt && project.status === 'deleted' && (
-                                    <span className="text-xs text-slate-500">удалён: {formatDate(project.deletedAt)}</span>
-                                  )}
-                                  <span className="text-xs text-slate-500">логов: {project.logCount ?? 0}</span>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="font-medium text-slate-900">{project.name}</div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                      project.status === 'active'
+                                        ? 'bg-green-100 text-green-700'
+                                        : project.status === 'archived'
+                                          ? 'bg-slate-200 text-slate-600'
+                                          : 'bg-red-100 text-red-700'
+                                    }`}>
+                                      {project.status === 'active'
+                                        ? 'активный'
+                                        : project.status === 'archived'
+                                          ? 'архив'
+                                          : 'удалён'}
+                                    </span>
+                                    <span className="text-xs text-slate-500">{formatDate(project.createdAt)}</span>
+                                    {project.archivedAt && project.status === 'archived' && (
+                                      <span className="text-xs text-slate-500">архив: {formatDate(project.archivedAt)}</span>
+                                    )}
+                                    {project.deletedAt && project.status === 'deleted' && (
+                                      <span className="text-xs text-slate-500">удалён: {formatDate(project.deletedAt)}</span>
+                                    )}
+                                    <span className="text-xs text-slate-500">логов: {project.logCount ?? 0}</span>
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={openingProjectId === project.id}
+                                    onClick={() => void assumeProjectSession(project.id)}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-400 transition-colors hover:bg-white hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    aria-label={openingProjectId === project.id ? 'Переключение проекта' : 'Редактировать проект'}
+                                    title={openingProjectId === project.id ? 'Переключение...' : 'Редактировать'}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={deletingProjectId === project.id}
+                                    onClick={() => void deleteProject(project.id, project.name)}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-red-100 text-red-400 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    aria-label={deletingProjectId === project.id ? 'Удаление проекта' : 'Удалить проект'}
+                                    title={deletingProjectId === project.id ? 'Удаление...' : 'Удалить'}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
                                 </div>
                               </div>
-                              <div className="flex w-full flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  disabled={loadingChat && chatProjectId === project.id}
-                                  onClick={() => void openProjectChat(project.id, project.name)}
-                                  className={`min-w-0 rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                                    chatProjectId === project.id
-                                      ? 'border-primary bg-primary/[0.08] text-primary'
-                                      : 'border-slate-200 text-slate-700 hover:bg-white'
-                                  }`}
-                                >
-                                  {loadingChat && chatProjectId === project.id ? 'Загрузка…' : `Чат (${project.messageCount ?? 0})`}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={loadingLogs && logProjectId === project.id}
-                                  onClick={() => void openProjectLogs(project.id, project.name)}
-                                  className={`min-w-0 rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                                    logScope === 'project' && logProjectId === project.id
-                                      ? 'border-primary bg-primary/[0.08] text-primary'
-                                      : 'border-slate-200 text-slate-700 hover:bg-white'
-                                  }`}
-                                >
-                                  {loadingLogs && logProjectId === project.id ? 'Загрузка…' : `Логи (${project.logCount ?? 0})`}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => openProjectPreview(project.id)}
-                                  className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-white"
-                                >
-                                  Открыть
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={openingProjectId === project.id}
-                                  onClick={() => void assumeProjectSession(project.id)}
-                                  className="min-w-0 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {openingProjectId === project.id ? 'Переключение…' : 'Редактировать'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={deletingProjectId === project.id}
-                                  onClick={() => void deleteProject(project.id, project.name)}
-                                  className="min-w-0 rounded-lg border border-red-200 px-3 py-2 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {deletingProjectId === project.id ? 'Удаление…' : 'Удалить'}
-                                </button>
+                              <div className="flex w-full flex-col gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => openProjectPreview(project)}
+                                    className="inline-flex min-w-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary/90"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                    <span>Открыть</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={loadingChat && chatProjectId === project.id}
+                                    onClick={() => void openProjectChat(project.id, project.name)}
+                                    className={`inline-flex min-w-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                      chatProjectId === project.id
+                                        ? 'border-primary bg-primary/[0.08] text-primary'
+                                        : 'border-slate-200 text-slate-700 hover:bg-white'
+                                    }`}
+                                  >
+                                    <MessageSquare className="h-3.5 w-3.5" />
+                                    <span>{loadingChat && chatProjectId === project.id ? 'Загрузка…' : `Чат (${project.messageCount ?? 0})`}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={loadingLogs && logProjectId === project.id}
+                                    onClick={() => void openProjectLogs(project.id, project.name)}
+                                    className={`inline-flex min-w-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                      logScope === 'project' && logProjectId === project.id
+                                        ? 'border-primary bg-primary/[0.08] text-primary'
+                                        : 'border-slate-200 text-slate-700 hover:bg-white'
+                                    }`}
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    <span>{loadingLogs && logProjectId === project.id ? 'Загрузка…' : `Логи (${project.logCount ?? 0})`}</span>
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>

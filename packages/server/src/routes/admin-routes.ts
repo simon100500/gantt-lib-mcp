@@ -201,7 +201,6 @@ async function buildAdminUserDetails(userId: string) {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 20,
     }),
     // Fetch trial fields — any cast for worktree Prisma type lag
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
