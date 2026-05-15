@@ -512,9 +512,7 @@ export function ProjectFactWorkspace({
           onExpandAll={onExpandAll}
           onExportPdf={onExportPdf}
           onExportExcel={onExportExcel}
-          onExportBackup={onExportBackup}
           onImportExcel={onImportExcel}
-          onImportBackup={onImportBackup}
           isExportExcelLoading={isExportExcelLoading}
           shareStatus={shareStatus}
           onCreateShareLink={onCreateShareLink}
