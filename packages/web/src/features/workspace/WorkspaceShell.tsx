@@ -928,6 +928,15 @@ export function WorkspaceShell({
     && showProjectSettingsModal
     && Boolean(auth.project)
     && !hasShareToken;
+  const shouldRenderCrossWorkspaceProjectSettingsModal = !showProjectStartScreen
+    && showProjectSettingsModal
+    && Boolean(auth.project)
+    && !hasShareToken
+    && (
+      workspace.kind === 'planner'
+      || workspace.kind === 'finance'
+      || (workspace.kind === 'project' && isFactModeActive)
+    );
 
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
@@ -1277,6 +1286,34 @@ export function WorkspaceShell({
       />
     )}
     {shouldRenderStartScreenProjectSettingsModal && auth.project && (
+      <ProjectSettingsModal
+        projectName={auth.project.name ?? 'Мой проект'}
+        ganttDayMode={effectiveAuthGanttDayMode}
+        calendarWeeklyPattern={auth.project.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}
+        calendarDays={auth.project.calendarDays ?? EMPTY_CALENDAR_DAYS}
+        timelineMarkers={auth.project.timelineMarkers ?? []}
+        hiddenTaskListColumnsDefault={auth.project.hiddenTaskListColumnsDefault ?? null}
+        taskListColumnRows={TASK_LIST_COLUMN_ROWS}
+        pending={startScreenProjectSettingsPending}
+        error={startScreenProjectSettingsError}
+        canEditProjectName={!isScheduleReadOnlyProject}
+        canShiftProject={false}
+        canEditGanttDayMode={!isScheduleReadOnlyProject}
+        canEditTimelineMarkers={!isScheduleReadOnlyProject}
+        canEditTaskListColumnsDefault={!isScheduleReadOnlyProject}
+        onClose={() => {
+          if (!startScreenProjectSettingsPending) {
+            setShowProjectSettingsModal(false);
+            setStartScreenProjectSettingsError(null);
+          }
+        }}
+        onOpenProjectShift={() => {}}
+        onSave={(settings) => {
+          void handleSaveStartScreenProjectSettings(settings);
+        }}
+      />
+    )}
+    {shouldRenderCrossWorkspaceProjectSettingsModal && auth.project && (
       <ProjectSettingsModal
         projectName={auth.project.name ?? 'Мой проект'}
         ganttDayMode={effectiveAuthGanttDayMode}

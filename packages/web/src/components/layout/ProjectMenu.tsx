@@ -370,7 +370,11 @@ export function ProjectMenu({
   // Compute whether toggle button should be hidden on desktop
   // Hidden only in sidebar mode (push), NOT in overlay mode
   const hideToggleOnDesktop = sidebarVisible;
-  const showProjectSettingsButton = workspace.kind === 'project' && !hasShareToken;
+  const showProjectSettingsButton = !hasShareToken && (
+    workspace.kind === 'project'
+    || workspace.kind === 'planner'
+    || workspace.kind === 'finance'
+  );
 
   return (
     <div className="flex h-dvh overflow-hidden bg-[#f4f5f7] text-slate-900">
