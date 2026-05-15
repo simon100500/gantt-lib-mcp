@@ -271,9 +271,9 @@ describe('buildProjectExcelExportBuffer', () => {
     const today = new Date();
     const start = addDays(today, -1);
     const end = addDays(today, 1);
-    const yesterdayColumnName = columnName(8);
-    const todayColumnName = columnName(9);
-    const tomorrowColumnName = columnName(10);
+    const yesterdayColumnName = columnName(10);
+    const todayColumnName = columnName(11);
+    const tomorrowColumnName = columnName(12);
 
     const workbook = await loadWorkbook({
       projectName: 'Fact Demo',
@@ -307,18 +307,25 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('A1').value, 'ГетГант / Fact Demo / План-факт');
     assert.equal(sheet.getCell('C3').value, 'Начало');
     assert.equal(sheet.getCell('D3').value, 'Оконч.');
-    assert.equal(sheet.getCell('E3').value, '');
-    assert.equal(sheet.getCell('F3').value, 'Объём');
+    assert.equal(sheet.getCell('E3').value, 'Объём');
+    assert.equal(sheet.getCell('F3').value, 'Ед.');
     assert.equal(sheet.getCell('G3').value, '');
-    assert.ok((sheet.getColumn('E').width ?? 0) < 10);
-    assert.ok(Math.abs((sheet.getColumn('H').width ?? 0) - (28 / 7)) < 0.25);
-    assert.equal(sheet.getCell('E4').value, 'План');
-    assert.equal(sheet.getCell('E5').value, 'Факт');
-    assert.equal(sheet.getCell('F4').value, 3);
-    assert.equal(sheet.getCell('F5').value, 2);
-    assert.equal(sheet.getCell('G4').value, 'м');
-    assert.equal(sheet.getCell('G5').value, 2 / 3);
-    assert.equal(sheet.getCell('G5').numFmt, '0%');
+    assert.equal(sheet.getCell('H3').value, 'На дату');
+    assert.equal(sheet.getCell('I3').value, '%');
+    assert.ok((sheet.getColumn('G').width ?? 0) < 10);
+    assert.ok(Math.abs((sheet.getColumn('J').width ?? 0) - (28 / 7)) < 0.25);
+    assert.equal(sheet.getCell('E4').value, 3);
+    assert.equal(sheet.getCell('F4').value, 'м');
+    assert.equal(sheet.getCell('G4').value, 'План');
+    assert.equal(sheet.getCell('G5').value, 'Факт');
+    assert.equal(sheet.getCell('H4').value, 1);
+    assert.equal(sheet.getCell('H5').value, 2);
+    assert.equal(sheet.getCell('I4').value, 1 / 3);
+    assert.equal(sheet.getCell('I5').value, 2 / 3);
+    assert.equal(sheet.getCell('I4').numFmt, '0%');
+    assert.equal(sheet.getCell('I5').numFmt, '0%');
+    assert.equal(sheet.getCell('E5').value, null);
+    assert.equal(sheet.getCell('F5').value, null);
     assert.ok((sheet.model.merges ?? []).includes('A4:A5'));
     assert.ok((sheet.model.merges ?? []).includes('B4:B5'));
     assert.equal(sheet.getCell(`${yesterdayColumnName}4`).value, 1);
@@ -335,8 +342,8 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell(`${tomorrowColumnName}5`).value, 2);
     assertArgbColor((sheet.getCell('C5').font as any)?.color, 'FFDC2626');
     assert.equal(sheet.getCell('D5').value, null);
-    assertArgbColor((sheet.getCell('F5').font as any)?.color, 'FFDC2626');
-    assertArgbColor((sheet.getCell('G5').font as any)?.color, 'FFDC2626');
+    assertArgbColor((sheet.getCell('H5').font as any)?.color, 'FF15803D');
+    assertArgbColor((sheet.getCell('I5').font as any)?.color, 'FF15803D');
   });
 });
 

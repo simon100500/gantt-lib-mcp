@@ -824,6 +824,7 @@ function buildPlanFactTimelineData(tasks: ExportTask[]) {
 }
 
 async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Promise<Buffer> {
+  const planFactStaticColumnCount = 9;
   const workbook = new ExcelJS.Workbook();
   (workbook as ExcelJS.Workbook & { _themes?: Record<string, string> })._themes = { theme1: GETGANTT_THEME_XML };
   workbook.creator = 'GetGantt';
@@ -833,17 +834,17 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
   const workbookStyles = createWorkbookStyles();
 
   const sheet = workbook.addWorksheet('План-факт', {
-    views: [{ state: 'frozen', xSplit: STATIC_COLUMN_COUNT, ySplit: HEADER_ROW_COUNT, showGridLines: false }],
+    views: [{ state: 'frozen', xSplit: planFactStaticColumnCount, ySplit: HEADER_ROW_COUNT, showGridLines: false }],
   });
   sheet.properties.defaultRowHeight = 18;
 
   const flattenedRows = buildFlattenedRows(data.tasks);
   const { parentTaskIds, planByTaskId, factByTaskId, timelineDates } = buildPlanFactTimelineData(data.tasks);
   const monthHeaders = suppressRepeatedLabels(timelineDates.map(formatMonthLabel));
-  const totalColumnCount = STATIC_COLUMN_COUNT + timelineDates.length;
+  const totalColumnCount = planFactStaticColumnCount + timelineDates.length;
   const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarWeeklyPattern, data.calendarDays, timelineDates);
   const headerWeekendDates = buildHeaderWeekendSet(data.calendarWeeklyPattern, data.calendarDays, timelineDates);
-  const planFactColumnWidths = [8, 48, 14, 14, 8, 10, 9];
+  const planFactColumnWidths = [8, 48, 14, 14, 10, 7, 8, 12, 8];
   const approximateWidth = planFactColumnWidths.reduce((sum, width) => sum + width, 0) + timelineDates.length * PLAN_FACT_DAY_WIDTH;
   const useLandscape = approximateWidth > 170 || timelineDates.length > 32;
 
@@ -875,6 +876,8 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
     { width: planFactColumnWidths[4] },
     { width: planFactColumnWidths[5] },
     { width: planFactColumnWidths[6] },
+    { width: planFactColumnWidths[7] },
+    { width: planFactColumnWidths[8] },
     ...timelineDates.map(() => ({ width: PLAN_FACT_DAY_WIDTH })),
   ];
 
@@ -890,14 +893,14 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
   });
 
   sheet.addRow([`ГетГант / ${data.projectName} / План-факт`]);
-  sheet.addRow([null, null, null, null, null, null, null, ...monthHeaders.map((value) => value || null)]);
-  sheet.addRow(['№', 'Задача', 'Начало', 'Оконч.', '', 'Объём', '', ...timelineDates.map((value) => formatDayNumber(value))]);
+  sheet.addRow([null, null, null, null, null, null, null, null, null, ...monthHeaders.map((value) => value || null)]);
+  sheet.addRow(['№', 'Задача', 'Начало', 'Оконч.', 'Объём', 'Ед.', '', 'На дату', '%', ...timelineDates.map((value) => formatDayNumber(value))]);
 
   sheet.getRow(TITLE_ROW_INDEX).getCell(1).style = cloneStyle(workbookStyles.styles.title);
 
   for (let rowIndex = MONTH_ROW_INDEX; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
     styleHeaderRow(sheet.getRow(rowIndex));
-    for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
+    for (let columnIndex = 1; columnIndex <= planFactStaticColumnCount; columnIndex += 1) {
       const cell = sheet.getRow(rowIndex).getCell(columnIndex);
       cell.style = mergeStyle(
         rowIndex === MONTH_ROW_INDEX ? workbookStyles.styles.headerTimelineLevel2 : workbookStyles.styles.headerStatic,
@@ -914,11 +917,11 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
       }
     }
 
-    for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+    for (let columnIndex = planFactStaticColumnCount + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
       const cell = sheet.getRow(rowIndex).getCell(columnIndex);
-      const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
+      const timelineDate = timelineDates[columnIndex - planFactStaticColumnCount - 1];
       const isToday = timelineDate === todayIso;
-      const separatorKind = separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day';
+      const separatorKind = separatorKinds[columnIndex - planFactStaticColumnCount - 1] ?? 'day';
       const headerSeparatorKind = rowIndex === MONTH_ROW_INDEX && separatorKind === 'week' ? 'day' : separatorKind;
       cell.style = cloneStyle(
         rowIndex === MONTH_ROW_INDEX ? workbookStyles.styles.headerTimelineLevel2 : workbookStyles.styles.headerTimeline,
@@ -949,7 +952,7 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
 
   if (flattenedRows.length === 0) {
     const emptyRow = sheet.addRow(['', 'Нет задач']);
-    for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
+    for (let columnIndex = 1; columnIndex <= planFactStaticColumnCount; columnIndex += 1) {
       const cell = emptyRow.getCell(columnIndex);
       cell.style = mergeStyle(
         workbookStyles.styles.emptyState,
@@ -958,11 +961,11 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
     }
     emptyRow.getCell(2).font = { italic: true, color: workbookStyles.colors.textPrimary };
     setRowHeightFromContent(emptyRow, 'Нет задач', planFactColumnWidths[1], 0);
-    sheet.pageSetup.printArea = `A1:${columnNumberToName(Math.max(STATIC_COLUMN_COUNT, totalColumnCount))}${emptyRow.number}`;
+    sheet.pageSetup.printArea = `A1:${columnNumberToName(Math.max(planFactStaticColumnCount, totalColumnCount))}${emptyRow.number}`;
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
-  const timelineIndexByDate = new Map(timelineDates.map((date, index) => [date, STATIC_COLUMN_COUNT + 1 + index]));
+  const timelineIndexByDate = new Map(timelineDates.map((date, index) => [date, planFactStaticColumnCount + 1 + index]));
   const planFill = workbookStyles.styles.taskTimeline.default;
   const factFill = solidFill({ argb: 'FFE0F2E9' });
   const factWarningFill = solidFill({ argb: 'FFFCE7F3' });
@@ -974,15 +977,25 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
     const factByDate = factByTaskId.get(rowData.task.id);
     const planTotal = rowData.task.workVolume ?? null;
     const factSummary = getFactSummary(rowData.task, factByDate);
+    const plannedToDate = rowData.isParent
+      ? null
+      : Object.entries(planByDate ?? {}).reduce((sum, [dateKey, value]) => (
+        dateKey < todayIso ? sum + value : sum
+      ), 0);
+    const plannedPercentToDate = (!rowData.isParent && planTotal && planTotal > 0 && plannedToDate !== null)
+      ? plannedToDate / planTotal
+      : null;
 
     const planRow = sheet.addRow([
       rowData.outlineNumber,
       rowData.task.name,
       rowData.task.startDate,
       rowData.task.endDate,
-      rowData.isParent ? null : 'План',
       rowData.isParent ? null : planTotal,
       rowData.isParent ? null : rowData.task.workUnit ?? null,
+      rowData.isParent ? null : 'План',
+      rowData.isParent ? null : plannedToDate,
+      rowData.isParent ? null : plannedPercentToDate,
     ]);
 
     const factRow = rowData.isParent
@@ -992,6 +1005,8 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         rowData.task.name,
         factSummary.actualStartDate,
         factSummary.actualEndDate,
+        null,
+        null,
         'Факт',
         factSummary.total,
         factSummary.percent,
@@ -1006,6 +1021,8 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
       row.getCell(5).alignment = baseAlignment('center');
       row.getCell(6).alignment = baseAlignment('center');
       row.getCell(7).alignment = baseAlignment('center');
+      row.getCell(8).alignment = baseAlignment('center');
+      row.getCell(9).alignment = baseAlignment('center');
 
       const startValue = row.getCell(3).value;
       const endValue = row.getCell(4).value;
@@ -1017,8 +1034,14 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         row.getCell(4).numFmt = 'dd.mm.yyyy';
         row.getCell(4).value = parseIsoDate(endValue);
       }
+      if (row === planRow && plannedPercentToDate !== null) {
+        row.getCell(9).numFmt = '0%';
+      }
       if (row === factRow && factSummary.percent !== null) {
-        row.getCell(7).numFmt = '0%';
+        row.getCell(9).numFmt = '0%';
+      }
+      if (row.getCell(8).value !== null && row.getCell(8).value !== undefined && typeof row.getCell(8).value === 'number') {
+        row.getCell(8).numFmt = '0.00';
       }
       if (row === planRow && !rowData.isParent) {
         row.getCell(3).font = { ...(row.getCell(3).font ?? {}), bold: true, color: workbookStyles.colors.textPrimary };
@@ -1026,6 +1049,8 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         row.getCell(5).font = { ...(row.getCell(5).font ?? {}), bold: true };
         row.getCell(6).font = { ...(row.getCell(6).font ?? {}), bold: true };
         row.getCell(7).font = { ...(row.getCell(7).font ?? {}), bold: true };
+        row.getCell(8).font = { ...(row.getCell(8).font ?? {}), bold: true };
+        row.getCell(9).font = { ...(row.getCell(9).font ?? {}), bold: true };
       }
       if (row === planRow && rowData.isParent) {
         row.getCell(3).font = { ...(row.getCell(3).font ?? {}), bold: true, color: workbookStyles.colors.textPrimary };
@@ -1034,12 +1059,12 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
 
       for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
         const cell = row.getCell(columnIndex);
-        cell.alignment = columnIndex > STATIC_COLUMN_COUNT ? baseAlignment('center') : cell.alignment ?? baseAlignment('left');
-        if (columnIndex > STATIC_COLUMN_COUNT) {
-          const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
+        cell.alignment = columnIndex > planFactStaticColumnCount ? baseAlignment('center') : cell.alignment ?? baseAlignment('left');
+        if (columnIndex > planFactStaticColumnCount) {
+          const timelineDate = timelineDates[columnIndex - planFactStaticColumnCount - 1];
           cell.style = mergeStyle(workbookStyles.styles.timelineBase, { alignment: baseAlignment('center') });
           if (rowData.isParent) {
-            const separatorKind = separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day';
+            const separatorKind = separatorKinds[columnIndex - planFactStaticColumnCount - 1] ?? 'day';
             cell.border = {
               top: { style: 'thin', color: { argb: GRID_BORDER } },
               bottom: { style: 'thin', color: { argb: GRID_BORDER } },
@@ -1051,9 +1076,9 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
               right: undefined,
             };
           } else {
-            applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
+            applyTimelineSeparator(cell, separatorKinds[columnIndex - planFactStaticColumnCount - 1] ?? 'day', {
               verticalLines: true,
-              todayLine: timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1] === todayIso,
+              todayLine: timelineDates[columnIndex - planFactStaticColumnCount - 1] === todayIso,
             });
           }
         } else {
@@ -1067,12 +1092,12 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
       const sharedParentFill = workbookStyles.styles.parentTasklist[paletteIndex];
       for (const row of factRow ? [planRow, factRow] : [planRow]) {
         row.getCell(2).font = { bold: true, color: workbookStyles.colors.textPrimary };
-        for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
+        for (let columnIndex = 1; columnIndex <= planFactStaticColumnCount; columnIndex += 1) {
           const cell = row.getCell(columnIndex);
           cell.border = boxBorder('thin', workbookStyles.colors.gridBorder);
           cell.fill = sharedParentFill;
         }
-        for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+        for (let columnIndex = planFactStaticColumnCount + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
           const cell = row.getCell(columnIndex);
           cell.fill = sharedParentFill;
         }
@@ -1128,8 +1153,8 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
     }
 
     for (const row of factRow ? [planRow, factRow] : [planRow]) {
-      for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
-        const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
+      for (let columnIndex = planFactStaticColumnCount + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+        const timelineDate = timelineDates[columnIndex - planFactStaticColumnCount - 1];
         if (timelineDate && headerWeekendDates.has(timelineDate)) {
           applyWeekendOverlay(row.getCell(columnIndex));
         }
@@ -1146,18 +1171,18 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         factRow.getCell(4).font = { color: isEndDelayed ? negativeFontColor : positiveFontColor, italic: true };
       }
       if (factSummary.total !== null) {
-        factRow.getCell(6).font = {
-          color: (planTotal !== null && factSummary.total < planTotal) ? negativeFontColor : positiveFontColor,
+        factRow.getCell(8).font = {
+          color: (plannedToDate !== null && factSummary.total < plannedToDate) ? negativeFontColor : positiveFontColor,
           italic: true,
         };
       }
       if (factSummary.percent !== null) {
-        factRow.getCell(7).font = {
-          color: factSummary.percent < 1 ? negativeFontColor : positiveFontColor,
+        factRow.getCell(9).font = {
+          color: (plannedPercentToDate !== null && factSummary.percent < plannedPercentToDate) ? negativeFontColor : positiveFontColor,
           italic: true,
         };
       }
-      factRow.getCell(5).font = { italic: true, color: workbookStyles.colors.textPrimary };
+      factRow.getCell(7).font = { italic: true, color: workbookStyles.colors.textPrimary };
     }
 
     if (rowData.isParent && rowData.depth === 0) {
