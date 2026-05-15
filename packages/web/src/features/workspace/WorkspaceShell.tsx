@@ -14,6 +14,7 @@ import type { GanttChartRef } from '../../components/GanttChart.tsx';
 import { ProjectMenu } from '../../components/layout/ProjectMenu.tsx';
 import { DraftWorkspace } from '../../components/workspace/DraftWorkspace.tsx';
 import { GuestWorkspace } from '../../components/workspace/GuestWorkspace.tsx';
+import { ProjectFactWorkspace } from '../../components/workspace/ProjectFactWorkspace.tsx';
 import { ProjectWorkspace } from '../../components/workspace/ProjectWorkspace.tsx';
 import { FinanceWorkspace } from '../../components/workspace/FinanceWorkspace.tsx';
 import { ResourcePlannerWorkspace } from '../../components/workspace/ResourcePlannerWorkspace.tsx';
@@ -1131,7 +1132,35 @@ export function WorkspaceShell({
             />
           )
         : workspace.kind === 'project'
-          ? (
+          ? isFactModeActive
+            ? (
+            <ProjectFactWorkspace
+              ganttRef={ganttRef}
+              tasks={visibleTasks}
+              setTasks={setTasks}
+              loading={loading}
+              accessToken={auth.accessToken}
+              sharedProject={sharedProject.project}
+              shareToken={sharedProject.shareToken}
+              hasShareToken={hasShareToken}
+              isAuthenticated={auth.isAuthenticated}
+              batchUpdate={batchUpdate}
+              onScrollToToday={handleScrollToToday}
+              onCollapseAll={handleCollapseAll}
+              onExpandAll={handleExpandAll}
+              onExportPdf={handleExportPdf}
+              onExportExcel={handleExportExcel}
+              onExportBackup={handleExportBackup}
+              onImportExcel={() => setShowImportExcelModal(true)}
+              onImportBackup={handleOpenBackupImport}
+              isExportExcelLoading={isExportExcelLoading}
+              onValidation={handleValidation}
+              shareStatus={shareStatus}
+              onCreateShareLink={handleCreateShareLink}
+              readOnly={isScheduleReadOnlyProject}
+            />
+          )
+            : (
             <ProjectWorkspace
               ganttRef={ganttRef}
               projectName={currentProjectLabel}

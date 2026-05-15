@@ -64,6 +64,7 @@ vi.mock('../../../hooks/useProjectBaselines.ts', () => ({
 }));
 
 import { ProjectWorkspace } from '../ProjectWorkspace.tsx';
+import { ProjectFactWorkspace } from '../ProjectFactWorkspace.tsx';
 import { useProjectStore } from '../../../stores/useProjectStore.ts';
 import { useProjectUIStore } from '../../../stores/useProjectUIStore.ts';
 import { useUIStore } from '../../../stores/useUIStore.ts';
@@ -140,6 +141,37 @@ async function renderWorkspace(): Promise<{ container: HTMLDivElement; root: Roo
         showChat={true}
         shareStatus="idle"
         ganttDayMode="calendar"
+      />,
+    );
+    await Promise.resolve();
+  });
+
+  return { container, root };
+}
+
+async function renderFactWorkspace(): Promise<{ container: HTMLDivElement; root: Root }> {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <ProjectFactWorkspace
+        ganttRef={ganttRef}
+        tasks={tasks}
+        setTasks={() => {}}
+        loading={false}
+        accessToken="token"
+        sharedProject={null}
+        shareToken={null}
+        hasShareToken={false}
+        isAuthenticated={true}
+        onScrollToToday={() => {}}
+        onCollapseAll={() => {}}
+        onExpandAll={() => {}}
+        onValidation={(_result: ValidationResult) => {}}
+        readOnly={false}
+        shareStatus="idle"
       />,
     );
     await Promise.resolve();
@@ -433,8 +465,7 @@ describe('ProjectWorkspace resource assignments', () => {
     await unmountWorkspace(root);
   });
 
-  it('renders the fact tab through gantt-lib plan-fact mode with progress entries as daily fact values', async () => {
-    useProjectUIStore.getState().setProjectState('project-1', { projectDisplayMode: 'fact' });
+  it('renders the dedicated fact workspace through gantt-lib plan-fact mode with progress entries as daily fact values', async () => {
     useProjectStore.setState((state) => ({
       ...state,
       progressEntries: [
@@ -450,7 +481,9 @@ describe('ProjectWorkspace resource assignments', () => {
       ],
     }));
 
-    const { root } = await renderWorkspace();
+    const { container, root } = await renderFactWorkspace();
+
+    expect(container.querySelector('[data-testid="project-fact-workspace"]')).not.toBeNull();
 
     expect(ganttPropsSpy).toEqual(expect.objectContaining({
       mode: 'plan-fact',
