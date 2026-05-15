@@ -1951,18 +1951,35 @@ export function ProjectWorkspace({
       ganttScrollElement.scrollTop = persistedState.ganttScrollTop;
     }
 
-    const handleScroll = () => {
+    let persistTimer: number | null = null;
+    let lastScrollLeft = ganttScrollElement.scrollLeft;
+    let lastScrollTop = ganttScrollElement.scrollTop;
+
+    const persistScroll = () => {
+      persistTimer = null;
       setProjectState(projectId, {
-        ganttScrollLeft: ganttScrollElement.scrollLeft,
-        ganttScrollTop: ganttScrollElement.scrollTop,
+        ganttScrollLeft: lastScrollLeft,
+        ganttScrollTop: lastScrollTop,
       });
+    };
+
+    const handleScroll = () => {
+      lastScrollLeft = ganttScrollElement.scrollLeft;
+      lastScrollTop = ganttScrollElement.scrollTop;
+      if (persistTimer !== null) {
+        window.clearTimeout(persistTimer);
+      }
+      persistTimer = window.setTimeout(persistScroll, 160);
     };
 
     ganttScrollElement.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       ganttScrollElement.removeEventListener('scroll', handleScroll);
+      if (persistTimer !== null) {
+        window.clearTimeout(persistTimer);
+      }
     };
-  }, [effectiveTasksWithBaseline, getProjectState, loading, projectId, setProjectState]);
+  }, [getProjectState, loading, projectId, setProjectState]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
