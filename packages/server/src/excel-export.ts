@@ -126,6 +126,7 @@ const THEME = {
   dark2: 3,
   accent1: 4,
   accent2: 5,
+  accent3: 6,
 } as const;
 
 type ThemeColor = Partial<ExcelJS.Color> & { tint?: number };
@@ -150,6 +151,36 @@ function solidFill(color: Partial<ExcelJS.Color>): ExcelJS.FillPattern {
 
 function accentColor(accent: 1 | 2, variant: AccentVariant = 'base'): ThemeColor {
   return themeColor(accent === 1 ? THEME.accent1 : THEME.accent2, ACCENT_TINT[variant]);
+}
+
+function accent3Color(variant: AccentVariant = 'base'): ThemeColor {
+  return themeColor(THEME.accent3, ACCENT_TINT[variant]);
+}
+
+function weekendPatternFill(baseColor: Partial<ExcelJS.Color> = { argb: 'FFFFFFFF' }): ExcelJS.FillPattern {
+  return {
+    type: 'pattern',
+    pattern: 'gray0625',
+    fgColor: accent3Color('lighter60'),
+    bgColor: baseColor,
+  };
+}
+
+function extractFillBackgroundColor(fill: ExcelJS.Fill | undefined): Partial<ExcelJS.Color> | undefined {
+  if (!fill || fill.type !== 'pattern') {
+    return undefined;
+  }
+
+  if (fill.pattern === 'solid') {
+    return fill.fgColor ? { ...fill.fgColor } : undefined;
+  }
+
+  return fill.bgColor ? { ...fill.bgColor } : fill.fgColor ? { ...fill.fgColor } : undefined;
+}
+
+function applyWeekendOverlay(cell: ExcelJS.Cell): void {
+  const baseColor = extractFillBackgroundColor(cell.fill) ?? { argb: 'FFFFFFFF' };
+  cell.fill = weekendPatternFill(baseColor);
 }
 
 function accentFill(accent: 1 | 2, variant: AccentVariant = 'base'): ExcelJS.FillPattern {
@@ -892,6 +923,9 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
       cell.style = cloneStyle(
         rowIndex === MONTH_ROW_INDEX ? workbookStyles.styles.headerTimelineLevel2 : workbookStyles.styles.headerTimeline,
       );
+      if (timelineDate && headerWeekendDates.has(timelineDate) && !(rowIndex === HEADER_LABEL_ROW_INDEX && isToday)) {
+        applyWeekendOverlay(cell);
+      }
       cell.font = {
         bold: rowIndex === HEADER_LABEL_ROW_INDEX,
         color: rowIndex === HEADER_LABEL_ROW_INDEX && isToday
@@ -1002,9 +1036,9 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         const cell = row.getCell(columnIndex);
         cell.alignment = columnIndex > STATIC_COLUMN_COUNT ? baseAlignment('center') : cell.alignment ?? baseAlignment('left');
         if (columnIndex > STATIC_COLUMN_COUNT) {
+          const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
           cell.style = mergeStyle(workbookStyles.styles.timelineBase, { alignment: baseAlignment('center') });
           if (rowData.isParent) {
-            const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
             const separatorKind = separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day';
             cell.border = {
               top: { style: 'thin', color: { argb: GRID_BORDER } },
@@ -1089,6 +1123,15 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         }
         if (factValue !== undefined) {
           factRow.getCell(columnIndex).value = factValue;
+        }
+      }
+    }
+
+    for (const row of factRow ? [planRow, factRow] : [planRow]) {
+      for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+        const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
+        if (timelineDate && headerWeekendDates.has(timelineDate)) {
+          applyWeekendOverlay(row.getCell(columnIndex));
         }
       }
     }

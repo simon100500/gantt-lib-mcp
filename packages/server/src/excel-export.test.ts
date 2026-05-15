@@ -328,7 +328,9 @@ describe('buildProjectExcelExportBuffer', () => {
     assertArgbColor((sheet.getCell(`${todayColumnName}5`).fill as any)?.fgColor, 'FFFCE7F3');
     assertArgbColor((sheet.getCell(`${todayColumnName}5`).font as any)?.color, 'FFDC2626');
     assert.equal(sheet.getCell(`${todayColumnName}5`).value, 0);
-    assertArgbColor((sheet.getCell(`${tomorrowColumnName}5`).fill as any)?.fgColor, 'FFE0F2E9');
+    assert.equal((sheet.getCell(`${tomorrowColumnName}5`).fill as any)?.pattern, 'gray0625');
+    assertThemeColor((sheet.getCell(`${tomorrowColumnName}5`).fill as any)?.fgColor, { theme: 6, tint: 0.5999938962981048 });
+    assertArgbColor((sheet.getCell(`${tomorrowColumnName}5`).fill as any)?.bgColor, 'FFE0F2E9');
     assertArgbColor((sheet.getCell(`${tomorrowColumnName}5`).font as any)?.color, 'FF15803D');
     assert.equal(sheet.getCell(`${tomorrowColumnName}5`).value, 2);
     assertArgbColor((sheet.getCell('C5').font as any)?.color, 'FFDC2626');
