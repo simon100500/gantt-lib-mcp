@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { BillingService } from '../services/billing-service.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
-import { buildProjectExcelExportBuffer, loadProjectExcelExportData } from '../excel-export.js';
+import { buildProjectExcelExportBuffer, loadProjectExcelExportData, type ProjectExcelExportMode } from '../excel-export.js';
 
 const billingService = new BillingService();
 
@@ -31,7 +31,7 @@ function buildExportTimestamp(value: Date): string {
 }
 
 export async function registerExcelExportRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.get('/api/export/excel', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.get<{ Querystring: { mode?: ProjectExcelExportMode } }>('/api/export/excel', { preHandler: [authMiddleware] }, async (req, reply) => {
     const status = await billingService.getSubscriptionStatus(req.user!.userId);
 
     if (!status.isActive && status.plan !== 'free') {
@@ -60,8 +60,11 @@ export async function registerExcelExportRoutes(fastify: FastifyInstance): Promi
     }
 
     const data = await loadProjectExcelExportData(req.user!.projectId);
-    const buffer = await buildProjectExcelExportBuffer(data);
-    const fileName = `${sanitizeFileName(data.projectName)} - ${buildExportTimestamp(new Date())}.xlsx`;
+    const mode = req.query.mode === 'plan-fact' ? 'plan-fact' : 'gantt';
+    const buffer = await buildProjectExcelExportBuffer(data, { mode });
+    const fileName = mode === 'plan-fact'
+      ? `${sanitizeFileName(data.projectName)}. План-факт. ${buildExportTimestamp(new Date())}.xlsx`
+      : `${sanitizeFileName(data.projectName)} - ${buildExportTimestamp(new Date())}.xlsx`;
     const asciiFileName = toAsciiFileName(fileName);
     const encodedFileName = encodeURIComponent(fileName);
 

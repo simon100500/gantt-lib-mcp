@@ -115,6 +115,7 @@ interface ToolbarProps {
   onToggleTaskListColumn?: (columnId: string) => void;
   onSetAllTaskListColumnsVisible?: (visible: boolean) => void;
   onResetTaskListColumnOverride?: (() => void) | null;
+  taskListColumnResetLabel?: string;
   onOpenProjectSettings?: (() => void) | null;
   canOpenProjectSettings?: boolean;
   templateSelectionActive?: boolean;
@@ -127,6 +128,9 @@ interface ToolbarProps {
   showExpiredToggle?: boolean;
   showUndoControl?: boolean;
   showOverflowMenuControl?: boolean;
+  showDataMenuControl?: boolean;
+  showViewScaleControl?: boolean;
+  showTaskChartToggle?: boolean;
 }
 
 function TriStateCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate: boolean }) {
@@ -396,6 +400,7 @@ export function Toolbar({
   onToggleTaskListColumn,
   onSetAllTaskListColumnsVisible,
   onResetTaskListColumnOverride,
+  taskListColumnResetLabel = 'Как в настройках проекта',
   onOpenProjectSettings = null,
   canOpenProjectSettings = false,
   templateSelectionActive = false,
@@ -408,6 +413,9 @@ export function Toolbar({
   showExpiredToggle = true,
   showUndoControl = true,
   showOverflowMenuControl = true,
+  showDataMenuControl = true,
+  showViewScaleControl = true,
+  showTaskChartToggle = true,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
@@ -474,7 +482,12 @@ export function Toolbar({
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || onExportBackup || (showShareButton && onCreateShareLink));
   const hasTemplateAction = Boolean(onStartTemplateSelection);
-  const hasDataMenu = hasTemplateAction || Boolean(onInsertTemplateToProject) || Boolean(onImportExcel) || Boolean(onImportBackup);
+  const hasDataMenu = showDataMenuControl && (
+    hasTemplateAction
+    || Boolean(onInsertTemplateToProject)
+    || Boolean(onImportExcel)
+    || Boolean(onImportBackup)
+  );
   const showClosedTaskStrikeToggle = true;
   const hasViewMenu = showStructureControls || Boolean(taskListColumnRows?.length) || showExpiredToggle || showClosedTaskStrikeToggle;
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
@@ -537,34 +550,36 @@ export function Toolbar({
 
   return (
     <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] px-0 py-2">
-      <div className="inline-flex rounded-md">
-        <button
-          type="button"
-          onClick={handleToggleTaskList}
-          className={cn(
-            'relative flex h-8 items-center gap-1.5 rounded-l-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
-            showTaskList
-              ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
-              : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
-          )}
-        >
-          <Rows3 className="h-3.5 w-3.5" />
-          <span className="hidden md:inline">Задачи</span>
-        </button>
-        <button
-          type="button"
-          onClick={handleToggleChart}
-          className={cn(
-            'relative ml-[-1px] flex h-8 items-center gap-1.5 rounded-r-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
-            showChart
-              ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
-              : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
-          )}
-        >
-          <ChartNoAxesGantt className="h-3.5 w-3.5" />
-          <span className="hidden md:inline">Гант</span>
-        </button>
-      </div>
+      {showTaskChartToggle && (
+        <div className="inline-flex rounded-md">
+          <button
+            type="button"
+            onClick={handleToggleTaskList}
+            className={cn(
+              'relative flex h-8 items-center gap-1.5 rounded-l-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
+              showTaskList
+                ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
+                : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
+            )}
+          >
+            <Rows3 className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Задачи</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleChart}
+            className={cn(
+              'relative ml-[-1px] flex h-8 items-center gap-1.5 rounded-r-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
+              showChart
+                ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
+                : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
+            )}
+          >
+            <ChartNoAxesGantt className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Гант</span>
+          </button>
+        </div>
+      )}
 
       <Button
         size="sm"
@@ -638,18 +653,21 @@ export function Toolbar({
                     <span className="text-sm">Выбрать всё</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-                  <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      onResetTaskListColumnOverride?.();
-                    }}
-                    disabled={!onResetTaskListColumnOverride}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    <span className="text-sm">Как в настройках проекта</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                  {onResetTaskListColumnOverride ? (
+                    <>
+                      <DropdownMenuItem
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          onResetTaskListColumnOverride();
+                        }}
+                        className="flex cursor-pointer items-center gap-2"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        <span className="text-sm">{taskListColumnResetLabel}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                    </>
+                  ) : null}
                   {taskListColumnRows.map((column) => {
                     const checked = !hiddenTaskListColumnSet.has(column.id);
                     return (
@@ -1009,69 +1027,73 @@ export function Toolbar({
         </Button>
       </FilterPopup>
 
-      <div className="inline-flex rounded-md">
-        {(['day', 'week', 'month'] as const).map((nextMode, index) => (
-          <button
-            key={nextMode}
-            type="button"
-            onClick={() => handleViewModeChange(nextMode)}
-            className={cn(
-              'hidden h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border sm:flex',
-              index === 0 && 'rounded-l-md',
-              index === 2 && 'rounded-r-md',
-              currentViewMode === nextMode
-                ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
-                : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
-            )}
-          >
-            {nextMode === 'day' && (
-              <>
-                <span className="hidden sm:inline">День</span>
-                <span className="sm:hidden">Д</span>
-              </>
-            )}
-            {nextMode === 'week' && (
-              <>
-                <span className="hidden sm:inline">Неделя</span>
-                <span className="sm:hidden">Н</span>
-              </>
-            )}
-            {nextMode === 'month' && (
-              <>
-                <span className="hidden sm:inline">Месяц</span>
-                <span className="sm:hidden">М</span>
-              </>
-            )}
-          </button>
-        ))}
-      </div>
+      {showViewScaleControl && (
+        <>
+          <div className="inline-flex rounded-md">
+            {(['day', 'week', 'month'] as const).map((nextMode, index) => (
+              <button
+                key={nextMode}
+                type="button"
+                onClick={() => handleViewModeChange(nextMode)}
+                className={cn(
+                  'hidden h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border sm:flex',
+                  index === 0 && 'rounded-l-md',
+                  index === 2 && 'rounded-r-md',
+                  currentViewMode === nextMode
+                    ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
+                    : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
+                )}
+              >
+                {nextMode === 'day' && (
+                  <>
+                    <span className="hidden sm:inline">День</span>
+                    <span className="sm:hidden">Д</span>
+                  </>
+                )}
+                {nextMode === 'week' && (
+                  <>
+                    <span className="hidden sm:inline">Неделя</span>
+                    <span className="sm:hidden">Н</span>
+                  </>
+                )}
+                {nextMode === 'month' && (
+                  <>
+                    <span className="hidden sm:inline">Месяц</span>
+                    <span className="sm:hidden">М</span>
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
 
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none sm:hidden"
-            title="Масштаб"
-          >
-            <span>{currentViewMode === 'day' ? 'День' : currentViewMode === 'week' ? 'Неделя' : 'Месяц'}</span>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-40 sm:hidden">
-          {(['day', 'week', 'month'] as const).map((nextMode) => (
-            <DropdownMenuItem
-              key={nextMode}
-              onClick={() => handleViewModeChange(nextMode)}
-              className={cn(
-                'flex cursor-pointer items-center gap-2',
-                currentViewMode === nextMode && 'bg-primary/5 text-primary',
-              )}
-            >
-              <span className="text-sm">{nextMode === 'day' ? 'День' : nextMode === 'week' ? 'Неделя' : 'Месяц'}</span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none sm:hidden"
+                title="Масштаб"
+              >
+                <span>{currentViewMode === 'day' ? 'День' : currentViewMode === 'week' ? 'Неделя' : 'Месяц'}</span>
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40 sm:hidden">
+              {(['day', 'week', 'month'] as const).map((nextMode) => (
+                <DropdownMenuItem
+                  key={nextMode}
+                  onClick={() => handleViewModeChange(nextMode)}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2',
+                    currentViewMode === nextMode && 'bg-primary/5 text-primary',
+                  )}
+                >
+                  <span className="text-sm">{nextMode === 'day' ? 'День' : nextMode === 'week' ? 'Неделя' : 'Месяц'}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )}
 
       {showOverflowMenuControl && (
         <>
@@ -1140,18 +1162,21 @@ export function Toolbar({
                   })}
 
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-                  <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      onResetTaskListColumnOverride?.();
-                    }}
-                    disabled={!onResetTaskListColumnOverride}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    <span className="text-sm">Как в настройках проекта</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                  {onResetTaskListColumnOverride ? (
+                    <>
+                      <DropdownMenuItem
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          onResetTaskListColumnOverride();
+                        }}
+                        className="flex cursor-pointer items-center gap-2"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        <span className="text-sm">{taskListColumnResetLabel}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                    </>
+                  ) : null}
                 </>
               )}
               {showShareButton && onCreateShareLink && (
@@ -1206,7 +1231,7 @@ export function Toolbar({
                   <span className="text-sm">Резервная копия</span>
                 </DropdownMenuItem>
               )}
-              {onImportBackup && (
+              {showDataMenuControl && onImportBackup && (
                 <DropdownMenuItem
                   onClick={onImportBackup}
                   className="flex cursor-pointer items-center gap-2"
@@ -1215,7 +1240,9 @@ export function Toolbar({
                   <span className="text-sm">Из резервной копии</span>
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+              {showDataMenuControl && (
+                <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+              )}
               {taskListColumnRows && taskListColumnRows.length > 0 && (
                 <>
                   <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">

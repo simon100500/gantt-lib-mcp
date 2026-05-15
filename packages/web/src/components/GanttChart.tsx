@@ -1,7 +1,16 @@
 import { forwardRef, useRef, useImperativeHandle } from 'react';
 import { GanttChart as GanttLibChart } from 'gantt-lib';
 import type { Task, TimelineMarker as AppTimelineMarker, ValidationResult } from '../types.ts';
-import type { CustomDayConfig, TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand, TimelineMarker as GanttTimelineMarker } from 'gantt-lib';
+import type {
+  CustomDayConfig,
+  PlanFactCellCommitContext,
+  TaskDateChangeMode,
+  TaskListColumn,
+  TaskListColumnId,
+  TaskListColumnWidthMap,
+  TaskListMenuCommand,
+  TimelineMarker as GanttTimelineMarker,
+} from 'gantt-lib';
 
 export interface ExportToPdfHeaderOptions {
   logoUrl?: string;
@@ -68,6 +77,8 @@ export interface GanttChartProps {
   taskDateChangeMode?: TaskDateChangeMode;
   onTaskDateChangeModeChange?: (mode: TaskDateChangeMode) => void;
   getTaskListRowClassName?: (task: Task) => string | undefined;
+  mode?: 'gantt' | 'plan-fact';
+  onPlanFactCellCommit?: (context: PlanFactCellCommitContext<Task>) => void;
 }
 
 export interface ScrollToRowOptions {
@@ -132,6 +143,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   taskDateChangeMode,
   onTaskDateChangeModeChange,
   getTaskListRowClassName,
+  mode,
+  onPlanFactCellCommit,
 }, ref) => {
   const ganttLibRef = useRef<{
     scrollToToday: () => void;
@@ -204,6 +217,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       taskDateChangeMode={taskDateChangeMode}
       onTaskDateChangeModeChange={onTaskDateChangeModeChange}
       getTaskListRowClassName={getTaskListRowClassName}
+      mode={mode ?? 'gantt'}
+      onPlanFactCellCommit={onPlanFactCellCommit}
     />
   );
 });

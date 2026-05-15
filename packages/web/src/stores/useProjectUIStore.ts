@@ -17,12 +17,15 @@ interface ProjectBaselineSelectionState {
 
 interface ProjectUIState {
   viewMode: ViewMode;
+  projectDisplayMode: 'gantt' | 'fact';
   activeWorkspace: 'project' | 'planner' | 'finance';
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
   taskDateChangeMode: TaskDateChangeMode;
   taskListColumnsInitialized: boolean;
   hiddenTaskListColumns: string[];
+  factTaskListColumnsInitialized: boolean;
+  hiddenFactTaskListColumns: string[];
   hiddenFinanceTaskListColumns: string[];
   taskListColumnWidths: TaskListColumnWidthMap;
   financeTaskListColumnWidths: TaskListColumnWidthMap;
@@ -47,12 +50,15 @@ interface ProjectUIStore {
 
 const DEFAULT_STATE: ProjectUIState = {
   viewMode: 'day',
+  projectDisplayMode: 'gantt',
   activeWorkspace: 'project',
   collapsedParentIds: [],
   disableTaskDrag: false,
   taskDateChangeMode: 'preserve-duration',
   taskListColumnsInitialized: false,
   hiddenTaskListColumns: [],
+  factTaskListColumnsInitialized: false,
+  hiddenFactTaskListColumns: [],
   hiddenFinanceTaskListColumns: [],
   taskListColumnWidths: {},
   financeTaskListColumnWidths: {},

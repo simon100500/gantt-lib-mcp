@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChartNoAxesGantt, ChevronDown, Eye, Landmark, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Settings2, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, Check, ChevronDown, Eye, Landmark, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Settings2, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -51,11 +51,14 @@ interface ProjectMenuProps {
   onRenameProjectGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteProjectGroup?: (groupId: string) => void | Promise<void>;
   canViewChartMode?: boolean;
+  canViewFactMode?: boolean;
   canViewResourcePool?: boolean;
   canViewFinance?: boolean;
+  isFactModeActive?: boolean;
   onOpenResourcePool?: () => void | Promise<void>;
   onOpenFinance?: () => void | Promise<void>;
   onOpenChartMode?: () => void | Promise<void>;
+  onOpenFactMode?: () => void | Promise<void>;
   onCreateProjectTemplate?: () => void | Promise<void>;
   adminTemplateLinks?: Array<{ id: string; label: string; href: string }>;
   onCreateShareLink: () => Promise<void>;
@@ -90,11 +93,14 @@ export function ProjectMenu({
   onRenameProjectGroup,
   onDeleteProjectGroup,
   canViewChartMode = true,
+  canViewFactMode = true,
   canViewResourcePool = true,
   canViewFinance = true,
+  isFactModeActive = false,
   onOpenResourcePool,
   onOpenFinance,
   onOpenChartMode,
+  onOpenFactMode,
   onCreateProjectTemplate,
   adminTemplateLinks = [],
   onCreateShareLink,
@@ -364,7 +370,11 @@ export function ProjectMenu({
   // Compute whether toggle button should be hidden on desktop
   // Hidden only in sidebar mode (push), NOT in overlay mode
   const hideToggleOnDesktop = sidebarVisible;
-  const showProjectSettingsButton = workspace.kind === 'project' && !hasShareToken;
+  const showProjectSettingsButton = !hasShareToken && (
+    workspace.kind === 'project'
+    || workspace.kind === 'planner'
+    || workspace.kind === 'finance'
+  );
 
   return (
     <div className="flex h-dvh overflow-hidden bg-[#f4f5f7] text-slate-900">
@@ -504,7 +514,7 @@ export function ProjectMenu({
 
               <div className="hidden min-w-0 flex-1 self-stretch grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 px-4 lg:grid lg:px-6">
                 <div className="flex self-stretch justify-self-start">
-                  {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewResourcePool || canViewFinance) && (
+                  {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewFactMode || canViewResourcePool || canViewFinance) && (
                     <div
                       className="inline-flex h-full shrink-0 items-stretch gap-4"
                       data-testid="topbar-workspace-mode-switch"
@@ -517,15 +527,32 @@ export function ProjectMenu({
                         onClick={() => { void onOpenChartMode?.(); }}
                         className={cn(
                           'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                          workspace.kind === 'planner' || workspace.kind === 'finance'
+                          workspace.kind === 'planner' || workspace.kind === 'finance' || isFactModeActive
                             ? 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
                             : 'border-primary text-primary',
                         )}
                         data-testid="topbar-mode-chart"
                         role="tab"
-                        aria-selected={workspace.kind !== 'planner' && workspace.kind !== 'finance'}
+                        aria-selected={workspace.kind !== 'planner' && workspace.kind !== 'finance' && !isFactModeActive}
                       >
                         <span>График</span>
+                      </button>
+                      )}
+                      {canViewFactMode && (
+                      <button
+                        type="button"
+                        onClick={() => { void onOpenFactMode?.(); }}
+                        className={cn(
+                          'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                          workspace.kind !== 'planner' && workspace.kind !== 'finance' && isFactModeActive
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                        )}
+                        data-testid="topbar-mode-fact"
+                        role="tab"
+                        aria-selected={workspace.kind !== 'planner' && workspace.kind !== 'finance' && isFactModeActive}
+                      >
+                        <span>Факт</span>
                       </button>
                       )}
                       {canViewResourcePool && (
@@ -589,7 +616,7 @@ export function ProjectMenu({
 
           {/* User menu */}
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-            {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewResourcePool || canViewFinance) && (
+            {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewFactMode || canViewResourcePool || canViewFinance) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -602,10 +629,12 @@ export function ProjectMenu({
                       <Package className="h-3.5 w-3.5 text-primary" />
                     ) : workspace.kind === 'finance' ? (
                       <Landmark className="h-3.5 w-3.5 text-primary" />
+                    ) : isFactModeActive ? (
+                      <Check className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChartNoAxesGantt className="h-3.5 w-3.5 text-primary" />
                     )}
-                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'finance' ? 'Финансы' : 'Гант'}</span>
+                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'finance' ? 'Финансы' : isFactModeActive ? 'Факт' : 'Гант'}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -615,12 +644,25 @@ export function ProjectMenu({
                     onClick={() => { void onOpenChartMode?.(); }}
                     className={cn(
                       'gap-2 text-slate-700 focus:text-slate-900',
-                      workspace.kind !== 'planner' && workspace.kind !== 'finance' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                      workspace.kind !== 'planner' && workspace.kind !== 'finance' && !isFactModeActive && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
                     )}
                     data-testid="topbar-mode-chart-mobile"
                   >
                     <ChartNoAxesGantt className="h-4 w-4" />
                     <span>Гант</span>
+                  </DropdownMenuItem>
+                  )}
+                  {canViewFactMode && (
+                  <DropdownMenuItem
+                    onClick={() => { void onOpenFactMode?.(); }}
+                    className={cn(
+                      'gap-2 text-slate-700 focus:text-slate-900',
+                      workspace.kind !== 'planner' && workspace.kind !== 'finance' && isFactModeActive && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                    )}
+                    data-testid="topbar-mode-fact-mobile"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span>Факт</span>
                   </DropdownMenuItem>
                   )}
                   {canViewResourcePool && (
