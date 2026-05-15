@@ -75,6 +75,7 @@ export function useExportImportController(params: {
   refreshProjects: () => Promise<void>;
   doExportPdf: () => Promise<void>;
   isPdfHelperDismissed: () => boolean;
+  excelExportMode?: 'gantt' | 'plan-fact';
 }) {
   const {
     auth,
@@ -87,6 +88,7 @@ export function useExportImportController(params: {
     refreshProjects,
     doExportPdf,
     isPdfHelperDismissed,
+    excelExportMode = 'gantt',
   } = params;
 
   // Export/import modal state and file selection workflow.
@@ -187,7 +189,8 @@ export function useExportImportController(params: {
 
     setIsExportExcelLoading(true);
     try {
-      let response = await fetch('/api/export/excel', {
+      const exportUrl = excelExportMode === 'plan-fact' ? '/api/export/excel?mode=plan-fact' : '/api/export/excel';
+      let response = await fetch(exportUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -200,7 +203,7 @@ export function useExportImportController(params: {
           return;
         }
         token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-        response = await fetch('/api/export/excel', {
+        response = await fetch(exportUrl, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -232,7 +235,7 @@ export function useExportImportController(params: {
     } finally {
       setIsExportExcelLoading(false);
     }
-  }, [auth, billingStatus, currentProjectLabel, onLoginRequired, openLimitModal]);
+  }, [auth, billingStatus, currentProjectLabel, excelExportMode, onLoginRequired, openLimitModal]);
 
   const handleExportBackup = useCallback(async () => {
     const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);

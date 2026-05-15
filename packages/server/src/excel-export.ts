@@ -19,8 +19,14 @@ type ExportTask = {
   sortOrder: number;
   color: string | null;
   progress?: number;
+  workVolume?: number | null;
+  workUnit?: string | null;
+  completedVolume?: number;
+  progressEntries?: Array<{ entryDate: string; amount: number }>;
   dependencies: ExportDependency[];
 };
+
+export type ProjectExcelExportMode = 'gantt' | 'plan-fact';
 
 export type ProjectExcelExportData = {
   projectName: string;
@@ -342,6 +348,48 @@ function normalizeProgressValue(progress: number): number {
   return Math.min(progress / 100, 1);
 }
 
+function buildDateKeysInRange(startIso: string, endIso: string): string[] {
+  const start = parseIsoDate(startIso);
+  const end = parseIsoDate(endIso);
+  const cursor = start.getTime() <= end.getTime() ? start : end;
+  const last = start.getTime() <= end.getTime() ? end : start;
+  const dates: string[] = [];
+
+  while (cursor.getTime() <= last.getTime()) {
+    dates.push(toIsoDate(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
+function buildPlanByDate(task: ExportTask, parentTaskIds: Set<string>): Record<string, number> | undefined {
+  if (parentTaskIds.has(task.id) || !task.workVolume || task.workVolume <= 0) {
+    return undefined;
+  }
+
+  const dateKeys = buildDateKeysInRange(task.startDate, task.endDate);
+  if (dateKeys.length === 0) {
+    return undefined;
+  }
+
+  const dailyValue = task.workVolume / dateKeys.length;
+  return Object.fromEntries(dateKeys.map((dateKey) => [dateKey, Number(dailyValue.toFixed(6))]));
+}
+
+function buildFactByDate(task: ExportTask): Record<string, number> | undefined {
+  const values: Record<string, number> = {};
+
+  for (const entry of task.progressEntries ?? []) {
+    if (!entry.entryDate || !Number.isFinite(entry.amount)) {
+      continue;
+    }
+    values[entry.entryDate] = (values[entry.entryDate] ?? 0) + entry.amount;
+  }
+
+  return Object.keys(values).length > 0 ? values : undefined;
+}
+
 function buildTimelineRange(tasks: ExportTask[]): string[] {
   if (tasks.length === 0) return [];
   const minDate = tasks.reduce((min, task) => task.startDate < min ? task.startDate : min, tasks[0]!.startDate);
@@ -587,6 +635,13 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
               depTask: { select: { id: true, name: true } },
             },
           },
+          progressEntries: {
+            select: {
+              entryDate: true,
+              amount: true,
+            },
+            orderBy: [{ entryDate: 'asc' }],
+          },
         },
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       },
@@ -613,6 +668,13 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
       sortOrder: task.sortOrder,
       color: task.color,
       progress: task.progress,
+      workVolume: task.workVolume ?? null,
+      workUnit: task.workUnit ?? null,
+      completedVolume: task.completedVolume ?? 0,
+      progressEntries: task.progressEntries.map((entry) => ({
+        entryDate: toIsoDate(entry.entryDate),
+        amount: Number(entry.amount),
+      })),
       dependencies: task.dependencies.map((dependency) => ({
         predecessorTaskId: dependency.depTaskId,
         predecessorTaskName: dependency.depTask?.name ?? null,
@@ -623,7 +685,302 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
   };
 }
 
-export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData): Promise<Buffer> {
+function buildPlanFactTimelineData(tasks: ExportTask[]) {
+  const parentTaskIds = new Set(tasks.filter((task) => task.parentId).map((task) => task.parentId!));
+  const planByTaskId = new Map<string, Record<string, number> | undefined>();
+  const factByTaskId = new Map<string, Record<string, number> | undefined>();
+  const rangeTasks: ExportTask[] = [];
+
+  for (const task of tasks) {
+    rangeTasks.push(task);
+    const planByDate = buildPlanByDate(task, parentTaskIds);
+    const factByDate = buildFactByDate(task);
+    planByTaskId.set(task.id, planByDate);
+    factByTaskId.set(task.id, factByDate);
+    for (const dateKey of Object.keys(planByDate ?? {})) {
+      rangeTasks.push({
+        id: `${task.id}:plan:${dateKey}`,
+        name: '',
+        parentId: null,
+        startDate: dateKey,
+        endDate: dateKey,
+        sortOrder: 0,
+        color: null,
+        dependencies: [],
+      });
+    }
+    for (const dateKey of Object.keys(factByDate ?? {})) {
+      rangeTasks.push({
+        id: `${task.id}:fact:${dateKey}`,
+        name: '',
+        parentId: null,
+        startDate: dateKey,
+        endDate: dateKey,
+        sortOrder: 0,
+        color: null,
+        dependencies: [],
+      });
+    }
+  }
+
+  const timelineDates = buildTimelineRange(rangeTasks);
+  return { parentTaskIds, planByTaskId, factByTaskId, timelineDates };
+}
+
+async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  (workbook as ExcelJS.Workbook & { _themes?: Record<string, string> })._themes = { theme1: GETGANTT_THEME_XML };
+  workbook.creator = 'GetGantt';
+  const exportDate = new Date();
+  const todayIso = toIsoDate(exportDate);
+  workbook.created = exportDate;
+  const workbookStyles = createWorkbookStyles();
+
+  const sheet = workbook.addWorksheet('План-факт', {
+    views: [{ state: 'frozen', xSplit: STATIC_COLUMN_COUNT, ySplit: HEADER_ROW_COUNT, showGridLines: false }],
+  });
+  sheet.properties.defaultRowHeight = 18;
+
+  const flattenedRows = buildFlattenedRows(data.tasks);
+  const { parentTaskIds, planByTaskId, factByTaskId, timelineDates } = buildPlanFactTimelineData(data.tasks);
+  const monthHeaders = suppressRepeatedLabels(timelineDates.map(formatMonthLabel));
+  const totalColumnCount = STATIC_COLUMN_COUNT + timelineDates.length;
+  const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarWeeklyPattern, data.calendarDays, timelineDates);
+  const approximateWidth = STATIC_COLUMN_WIDTHS.reduce((sum, width) => sum + width, 0) + timelineDates.length * DAY_WIDTH;
+  const useLandscape = approximateWidth > 170 || timelineDates.length > 32;
+
+  sheet.pageSetup = {
+    paperSize: A4_PAPER_SIZE,
+    orientation: useLandscape ? 'landscape' : 'portrait',
+    fitToPage: true,
+    fitToWidth: useLandscape ? 0 : 1,
+    fitToHeight: useLandscape ? 1 : 0,
+    horizontalCentered: false,
+    verticalCentered: false,
+    margins: {
+      left: 0.25,
+      right: 0.25,
+      top: 0.3,
+      bottom: 0.3,
+      header: 0.12,
+      footer: 0.12,
+    },
+  };
+  sheet.pageSetup.printTitlesRow = '2:3';
+  sheet.headerFooter.oddFooter = `&LGetGantt.ru&CДата экспорта: ${formatExportDate(exportDate)}&RСтраница &P из &N`;
+
+  sheet.columns = [
+    { width: STATIC_COLUMN_WIDTHS[0] },
+    { width: STATIC_COLUMN_WIDTHS[1] },
+    { width: 10 },
+    { width: STATIC_COLUMN_WIDTHS[2] },
+    { width: STATIC_COLUMN_WIDTHS[3] },
+    { width: 12 },
+    { width: 12 },
+    ...timelineDates.map(() => ({ width: DAY_WIDTH })),
+  ];
+
+  const separatorKinds = timelineDates.map((date, index) => {
+    const current = parseIsoDate(date);
+    const previous = index > 0 ? parseIsoDate(timelineDates[index - 1]!) : null;
+    if (!previous) return 'month' as const;
+    if (current.getUTCMonth() !== previous.getUTCMonth() || current.getUTCFullYear() !== previous.getUTCFullYear()) {
+      return 'month' as const;
+    }
+    if (current.getUTCDay() === 1) return 'week' as const;
+    return 'day' as const;
+  });
+
+  sheet.addRow([`ГетГант / ${data.projectName} / План-факт`]);
+  sheet.addRow([null, null, null, null, null, null, null, ...monthHeaders.map((value) => value || null)]);
+  sheet.addRow(['№', 'Задача', 'Строка', 'Начало', 'Оконч.', 'Объём', 'Факт', ...timelineDates.map((value) => formatDayNumber(value))]);
+
+  sheet.getRow(TITLE_ROW_INDEX).getCell(1).style = cloneStyle(workbookStyles.styles.title);
+
+  for (let rowIndex = MONTH_ROW_INDEX; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
+    styleHeaderRow(sheet.getRow(rowIndex));
+    for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
+      const cell = sheet.getRow(rowIndex).getCell(columnIndex);
+      cell.style = mergeStyle(
+        rowIndex === MONTH_ROW_INDEX ? workbookStyles.styles.headerTimelineLevel2 : workbookStyles.styles.headerStatic,
+        {
+          alignment: rowIndex === HEADER_LABEL_ROW_INDEX
+            ? columnIndex === 1
+              ? workbookStyles.alignments.headerLeft
+              : workbookStyles.alignments.headerCenter
+            : workbookStyles.alignments.headerLeft,
+        },
+      );
+      if (rowIndex === HEADER_LABEL_ROW_INDEX) {
+        cell.font = { ...(cell.font ?? {}), bold: true };
+      }
+    }
+
+    for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+      const cell = sheet.getRow(rowIndex).getCell(columnIndex);
+      const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
+      const isToday = timelineDate === todayIso;
+      const separatorKind = separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day';
+      const headerSeparatorKind = rowIndex === MONTH_ROW_INDEX && separatorKind === 'week' ? 'day' : separatorKind;
+      cell.style = cloneStyle(
+        rowIndex === MONTH_ROW_INDEX ? workbookStyles.styles.headerTimelineLevel2 : workbookStyles.styles.headerTimeline,
+      );
+      cell.font = {
+        bold: true,
+        color: rowIndex === HEADER_LABEL_ROW_INDEX && isToday
+          ? workbookStyles.colors.todayFont
+          : rowIndex === HEADER_LABEL_ROW_INDEX && timelineDate && nonWorkingDates.has(timelineDate)
+            ? workbookStyles.colors.weekendHeader
+            : workbookStyles.colors.textPrimary,
+      };
+      if (rowIndex === HEADER_LABEL_ROW_INDEX && isToday) {
+        cell.fill = solidFill(workbookStyles.colors.today);
+      }
+      cell.alignment = rowIndex === MONTH_ROW_INDEX
+        ? workbookStyles.alignments.headerLeft
+        : workbookStyles.alignments.headerCenter;
+      applyTimelineSeparator(cell, headerSeparatorKind, {
+        verticalLines: false,
+        todayLine: isToday,
+      });
+    }
+  }
+
+  if (flattenedRows.length === 0) {
+    const emptyRow = sheet.addRow(['', 'Нет задач']);
+    for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
+      const cell = emptyRow.getCell(columnIndex);
+      cell.style = mergeStyle(
+        workbookStyles.styles.emptyState,
+        { alignment: baseAlignment(columnIndex === 2 ? 'center' : 'left') },
+      );
+    }
+    emptyRow.getCell(2).font = { italic: true, color: workbookStyles.colors.textPrimary };
+    setRowHeightFromContent(emptyRow, 'Нет задач', STATIC_COLUMN_WIDTHS[1], 0);
+    sheet.pageSetup.printArea = `A1:${columnNumberToName(Math.max(STATIC_COLUMN_COUNT, totalColumnCount))}${emptyRow.number}`;
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  const timelineIndexByDate = new Map(timelineDates.map((date, index) => [date, STATIC_COLUMN_COUNT + 1 + index]));
+  const planFill = workbookStyles.styles.taskTimeline.default;
+  const factFill = solidFill({ argb: 'FFE0F2E9' });
+  const factWarningFill = solidFill({ argb: 'FFFCE7F3' });
+
+  for (const rowData of flattenedRows) {
+    const planByDate = planByTaskId.get(rowData.task.id);
+    const factByDate = factByTaskId.get(rowData.task.id);
+    const planTotal = rowData.isParent ? null : rowData.task.workVolume ?? null;
+    const factTotal = rowData.isParent ? null : Object.values(factByDate ?? {}).reduce((sum, value) => sum + value, 0);
+
+    const planRow = sheet.addRow([
+      rowData.outlineNumber,
+      rowData.task.name,
+      'План',
+      rowData.task.startDate,
+      rowData.task.endDate,
+      planTotal,
+      null,
+    ]);
+    const factRow = sheet.addRow([
+      rowData.outlineNumber,
+      rowData.task.name,
+      'Факт',
+      rowData.task.startDate,
+      rowData.task.endDate,
+      null,
+      factTotal,
+    ]);
+
+    for (const row of [planRow, factRow]) {
+      row.height = 18;
+      row.getCell(1).alignment = baseAlignment('left');
+      row.getCell(2).alignment = { ...baseAlignment('left'), indent: rowData.depth };
+      row.getCell(3).alignment = baseAlignment('center');
+      row.getCell(4).alignment = baseAlignment('center');
+      row.getCell(5).alignment = baseAlignment('center');
+      row.getCell(6).alignment = baseAlignment('center');
+      row.getCell(7).alignment = baseAlignment('center');
+      row.getCell(4).numFmt = 'dd.mm.yyyy';
+      row.getCell(5).numFmt = 'dd.mm.yyyy';
+      row.getCell(4).value = parseIsoDate(rowData.task.startDate);
+      row.getCell(5).value = parseIsoDate(rowData.task.endDate);
+
+      for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+        const cell = row.getCell(columnIndex);
+        cell.alignment = columnIndex > STATIC_COLUMN_COUNT ? baseAlignment('center') : cell.alignment ?? baseAlignment('left');
+        if (columnIndex > STATIC_COLUMN_COUNT) {
+          cell.style = mergeStyle(workbookStyles.styles.timelineBase, { alignment: baseAlignment('center') });
+          applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
+            verticalLines: true,
+            todayLine: timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1] === todayIso,
+          });
+        } else {
+          applyCellBorder(cell);
+        }
+      }
+    }
+
+    if (rowData.isParent) {
+      const paletteIndex = Math.min(rowData.depth, workbookStyles.styles.parentTasklist.length - 1);
+      for (const row of [planRow, factRow]) {
+        row.getCell(2).font = { bold: true, color: workbookStyles.colors.textPrimary };
+        for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
+          const cell = row.getCell(columnIndex);
+          cell.border = boxBorder('thin', workbookStyles.colors.gridBorder);
+          cell.fill = workbookStyles.styles.parentTasklist[paletteIndex];
+        }
+      }
+    }
+
+    for (const [dateKey, columnIndex] of timelineIndexByDate) {
+      const planValue = planByDate?.[dateKey];
+      const factValue = factByDate?.[dateKey];
+      const isPastReportDate = dateKey < todayIso;
+      const hasPlannedWork = (planValue ?? 0) > 0;
+      const isMissingOrZeroFact = factValue === undefined || factValue === 0;
+      const isFactBelowPlan = factValue !== undefined && planValue !== undefined && factValue < planValue;
+      const isPastDueMissingFact = isPastReportDate && hasPlannedWork && isMissingOrZeroFact;
+
+      if (!rowData.isParent && dateKey >= rowData.task.startDate && dateKey <= rowData.task.endDate) {
+        planRow.getCell(columnIndex).fill = planFill;
+      }
+      if (planValue !== undefined) {
+        planRow.getCell(columnIndex).value = planValue;
+      }
+
+      if (isFactBelowPlan || isPastDueMissingFact) {
+        factRow.getCell(columnIndex).fill = factWarningFill;
+        factRow.getCell(columnIndex).font = { color: { argb: 'FFDC2626' } };
+      } else if (factValue !== undefined) {
+        factRow.getCell(columnIndex).fill = factFill;
+        factRow.getCell(columnIndex).font = { color: { argb: 'FF15803D' } };
+      }
+      if (factValue !== undefined) {
+        factRow.getCell(columnIndex).value = factValue;
+      }
+    }
+
+    if (rowData.isParent && rowData.depth === 0) {
+      for (const row of [planRow, factRow]) {
+        for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+          applyGroupSeparatorTop(row.getCell(columnIndex));
+        }
+      }
+    }
+  }
+
+  sheet.pageSetup.printArea = `A1:${columnNumberToName(totalColumnCount)}${sheet.rowCount}`;
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
+export async function buildProjectExcelExportBuffer(
+  data: ProjectExcelExportData,
+  options: { mode?: ProjectExcelExportMode } = {},
+): Promise<Buffer> {
+  if (options.mode === 'plan-fact') {
+    return buildPlanFactExcelExportBuffer(data);
+  }
+
   const workbook = new ExcelJS.Workbook();
   (workbook as ExcelJS.Workbook & { _themes?: Record<string, string> })._themes = { theme1: GETGANTT_THEME_XML };
   workbook.creator = 'GetGantt';

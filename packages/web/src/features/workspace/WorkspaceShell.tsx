@@ -1033,6 +1033,7 @@ export function WorkspaceShell({
     refreshProjects,
     doExportPdf,
     isPdfHelperDismissed,
+    excelExportMode: isFactModeActive ? 'plan-fact' : 'gantt',
   });
   const {
     backupImportInputRef,

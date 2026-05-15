@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import ExcelJS from 'exceljs';
-import type { ProjectExcelExportData } from './excel-export.js';
+import type { ProjectExcelExportData, ProjectExcelExportMode } from './excel-export.js';
 
 function assertThemeColor(
   color: { theme?: number; tint?: number; argb?: string } | undefined,
@@ -61,9 +61,9 @@ function columnName(columnNumber: number): string {
   return label;
 }
 
-async function loadWorkbook(data: ProjectExcelExportData) {
+async function loadWorkbook(data: ProjectExcelExportData, mode: ProjectExcelExportMode = 'gantt') {
   const { buildProjectExcelExportBuffer } = await import(new URL('./excel-export.ts', import.meta.url).href);
-  const buffer = await buildProjectExcelExportBuffer(data);
+  const buffer = await buildProjectExcelExportBuffer(data, { mode });
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer as any);
   return workbook;
@@ -82,7 +82,7 @@ describe('buildProjectExcelExportBuffer', () => {
       ? columnName(8 + Math.floor((mondayDate.getTime() - monthStart.getTime()) / 86_400_000))
       : null;
     const timelineDays = Math.floor((timelineEnd.getTime() - monthStart.getTime()) / 86_400_000) + 1;
-    const approximateWidth = (10 + 42 + 14 + 14 + 12 + 9 + 14) + timelineDays * DAY_WIDTH;
+    const approximateWidth = (8 + 44 + 14 + 14 + 12 + 8 + 20) + timelineDays * DAY_WIDTH;
     const expectedLandscape = approximateWidth > 170 || timelineDays > 32;
 
     const workbook = await loadWorkbook({
@@ -266,6 +266,62 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.ok(sheet);
     assert.equal(sheet.getCell('B4').value, 'Нет задач');
   });
+
+  it('renders a two-row plan-fact export with fact warning coloring', async () => {
+    const today = new Date();
+    const start = addDays(today, -1);
+    const end = addDays(today, 1);
+    const yesterdayColumnName = columnName(8);
+    const todayColumnName = columnName(9);
+    const tomorrowColumnName = columnName(10);
+
+    const workbook = await loadWorkbook({
+      projectName: 'Fact Demo',
+      ganttDayMode: 'business',
+      calendarWeeklyPattern: { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false },
+      calendarDays: [],
+      tasks: [
+        {
+          id: 'task-1',
+          name: 'Бетон',
+          parentId: null,
+          startDate: toIsoDate(start),
+          endDate: toIsoDate(end),
+          sortOrder: 1,
+          color: '#2563EB',
+          progress: 0,
+          workVolume: 3,
+          completedVolume: 2,
+          progressEntries: [
+            { entryDate: toIsoDate(today), amount: 0 },
+            { entryDate: toIsoDate(end), amount: 2 },
+          ],
+          dependencies: [],
+        },
+      ],
+    }, 'plan-fact');
+
+    const sheet = workbook.getWorksheet('План-факт');
+    assert.ok(sheet);
+    assert.equal(sheet.getCell('A1').value, 'ГетГант / Fact Demo / План-факт');
+    assert.equal(sheet.getCell('C3').value, 'Строка');
+    assert.equal(sheet.getCell('F3').value, 'Объём');
+    assert.equal(sheet.getCell('G3').value, 'Факт');
+    assert.equal(sheet.getCell('C4').value, 'План');
+    assert.equal(sheet.getCell('C5').value, 'Факт');
+    assert.equal(sheet.getCell('F4').value, 3);
+    assert.equal(sheet.getCell('G5').value, 2);
+    assert.equal(sheet.getCell(`${yesterdayColumnName}4`).value, 1);
+    assert.equal(sheet.getCell(`${todayColumnName}4`).value, 1);
+    assert.equal(sheet.getCell(`${tomorrowColumnName}4`).value, 1);
+    assertArgbColor((sheet.getCell(`${yesterdayColumnName}5`).fill as any)?.fgColor, 'FFFCE7F3');
+    assertArgbColor((sheet.getCell(`${todayColumnName}5`).fill as any)?.fgColor, 'FFFCE7F3');
+    assertArgbColor((sheet.getCell(`${todayColumnName}5`).font as any)?.color, 'FFDC2626');
+    assert.equal(sheet.getCell(`${todayColumnName}5`).value, 0);
+    assertArgbColor((sheet.getCell(`${tomorrowColumnName}5`).fill as any)?.fgColor, 'FFE0F2E9');
+    assertArgbColor((sheet.getCell(`${tomorrowColumnName}5`).font as any)?.color, 'FF15803D');
+    assert.equal(sheet.getCell(`${tomorrowColumnName}5`).value, 2);
+  });
 });
 
-const DAY_WIDTH = 20 / 7;
+const DAY_WIDTH = 21 / 7;
