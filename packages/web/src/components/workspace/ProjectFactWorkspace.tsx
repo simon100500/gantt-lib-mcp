@@ -27,7 +27,6 @@ import {
   formatFactMetric,
   numberMapsEqual,
   omitPlanFactFields,
-  sumTaskFactAmount,
   type PlanFactTask,
 } from './projectFactAdapter.ts';
 
@@ -130,6 +129,30 @@ export function ProjectFactWorkspace({
     }
     return ids;
   }, [tasks]);
+
+  const progressEntriesByTaskId = useMemo(() => {
+    const entriesByTaskId = new Map<string, typeof progressEntries>();
+    for (const entry of progressEntries) {
+      const taskEntries = entriesByTaskId.get(entry.taskId);
+      if (taskEntries) {
+        taskEntries.push(entry);
+      } else {
+        entriesByTaskId.set(entry.taskId, [entry]);
+      }
+    }
+    return entriesByTaskId;
+  }, [progressEntries]);
+
+  const factAmountByTaskId = useMemo(() => {
+    const amountsByTaskId = new Map<string, number>();
+    for (const entry of progressEntries) {
+      if (!Number.isFinite(entry.amount)) {
+        continue;
+      }
+      amountsByTaskId.set(entry.taskId, (amountsByTaskId.get(entry.taskId) ?? 0) + entry.amount);
+    }
+    return amountsByTaskId;
+  }, [progressEntries]);
 
   const {
     workProgressLoadingTaskIds,
@@ -236,9 +259,9 @@ export function ProjectFactWorkspace({
     tasks.map((task) => ({
       ...task,
       planByDate: buildPlanByDate(task, parentTaskIds),
-      factByDate: buildFactByDate(task.id, progressEntries),
+      factByDate: buildFactByDate(task.id, progressEntriesByTaskId.get(task.id) ?? []),
     }))
-  ), [tasks, parentTaskIds, progressEntries]);
+  ), [tasks, parentTaskIds, progressEntriesByTaskId]);
 
   const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => [
     {
@@ -265,7 +288,7 @@ export function ProjectFactWorkspace({
       after: 'plan-fact-volume',
       renderCell: ({ task }) => (
         <TaskCompletedVolumeCell
-          entries={progressEntries.filter((entry) => entry.taskId === task.id)}
+          entries={progressEntriesByTaskId.get(task.id) ?? []}
           disabled={parentTaskIds.has(task.id)}
           loading={workProgressLoadingTaskIds.has(task.id)}
           onUpdateMetadata={handleUpdateTaskWorkMetadata}
@@ -287,11 +310,11 @@ export function ProjectFactWorkspace({
         if (parentTaskIds.has(task.id) || !task.workVolume || task.workVolume <= 0) {
           return '';
         }
-        const factAmount = sumTaskFactAmount(task.id, progressEntries);
+        const factAmount = factAmountByTaskId.get(task.id) ?? 0;
         return `${formatFactMetric((factAmount / task.workVolume) * 100, 1)}%`;
       },
     },
-  ], [effectiveReadOnly, handleUpdateTaskWorkMetadata, parentTaskIds, progressEntries]);
+  ], [effectiveReadOnly, factAmountByTaskId, handleUpdateTaskWorkMetadata, parentTaskIds, progressEntriesByTaskId]);
 
   const handleTaskListColumnWidthsChange = useCallback((widths: TaskListColumnWidthMap) => {
     if (!projectId) {
@@ -435,18 +458,35 @@ export function ProjectFactWorkspace({
       ganttScrollElement.scrollTop = persistedState.ganttScrollTop;
     }
 
-    const handleScroll = () => {
+    let persistTimer: number | null = null;
+    let lastScrollLeft = ganttScrollElement.scrollLeft;
+    let lastScrollTop = ganttScrollElement.scrollTop;
+
+    const persistScroll = () => {
+      persistTimer = null;
       setProjectState(projectId, {
-        ganttScrollLeft: ganttScrollElement.scrollLeft,
-        ganttScrollTop: ganttScrollElement.scrollTop,
+        ganttScrollLeft: lastScrollLeft,
+        ganttScrollTop: lastScrollTop,
       });
+    };
+
+    const handleScroll = () => {
+      lastScrollLeft = ganttScrollElement.scrollLeft;
+      lastScrollTop = ganttScrollElement.scrollTop;
+      if (persistTimer !== null) {
+        window.clearTimeout(persistTimer);
+      }
+      persistTimer = window.setTimeout(persistScroll, 160);
     };
 
     ganttScrollElement.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       ganttScrollElement.removeEventListener('scroll', handleScroll);
+      if (persistTimer !== null) {
+        window.clearTimeout(persistTimer);
+      }
     };
-  }, [getProjectState, loading, planFactTasks, projectId, setProjectState]);
+  }, [getProjectState, loading, projectId, setProjectState]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]" data-testid="project-fact-workspace">

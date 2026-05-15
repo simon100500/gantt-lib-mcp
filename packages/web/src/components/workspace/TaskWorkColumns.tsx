@@ -402,7 +402,7 @@ export function TaskCompletedVolumeCell({
         <div
           aria-labelledby={`task-progress-modal-title-${task.id}`}
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-3 py-4 sm:px-4 sm:py-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-3 py-3 sm:px-5 sm:py-6"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !pending) {
               setOpen(false);
@@ -411,7 +411,7 @@ export function TaskCompletedVolumeCell({
           role="dialog"
         >
           <form
-            className="max-h-[calc(100vh-2rem)] w-full max-w-[24rem] overflow-hidden rounded-xl border border-[#dfe1e6] bg-white shadow-[0_20px_60px_rgba(9,30,66,0.22)] sm:max-h-[calc(100vh-3rem)]"
+            className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[#dfe1e6] bg-white text-[#172b4d] shadow-[0_24px_70px_rgba(9,30,66,0.22)] sm:max-h-[calc(100dvh-3rem)]"
             onMouseDown={(event) => event.stopPropagation()}
             onSubmit={async (event) => {
               event.preventDefault();
@@ -446,12 +446,12 @@ export function TaskCompletedVolumeCell({
               }
             }}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-[#dfe1e6] px-4 py-4 sm:px-5">
-              <div className="min-w-0 flex-1">
-                <h4 className="break-words text-[15px] font-bold leading-6 text-[#172b4d]" id={`task-progress-modal-title-${task.id}`}>
+            <div className="flex items-start justify-between gap-4 border-b border-[#dfe1e6] px-4 py-4 sm:px-6">
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <h4 className="whitespace-normal break-words pr-1 text-lg font-bold leading-snug text-[#172b4d]" id={`task-progress-modal-title-${task.id}`}>
                   {task.name}
                 </h4>
-                <p className="mt-1 text-[12px] text-[#6b778c]">
+                <p className="mt-1.5 whitespace-normal break-words text-sm leading-5 text-[#6b778c]">
                   {primarySetupMode
                     ? 'Сначала задайте общий объём работы'
                     : `Факт: ${formatMetricValue(completedVolume, 2)} из ${formatMetricValue(totalVolume, 2)} ${normalizedUnitValue || task.workUnit?.trim() || ''}`}
@@ -468,11 +468,11 @@ export function TaskCompletedVolumeCell({
               </button>
             </div>
 
-            <div className="flex min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-5">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-6">
               {primarySetupMode ? (
                 <>
-                  <div className="flex min-w-0 flex-wrap gap-3">
-                    <label className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1.5">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+                    <label className="flex min-w-0 flex-col gap-1.5">
                       <span className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Общий объём</span>
                       <Input
                         ref={totalVolumeInputRef}
@@ -502,7 +502,7 @@ export function TaskCompletedVolumeCell({
                         value={totalVolumeValue}
                       />
                     </label>
-                    <label className="flex min-w-0 flex-[0_1_8rem] flex-col gap-1.5">
+                    <label className="flex min-w-0 flex-col gap-1.5">
                       <span className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Ед. изм.</span>
                       <Input
                         ref={unitInputRef}
@@ -521,9 +521,9 @@ export function TaskCompletedVolumeCell({
 
               {!primarySetupMode ? (
                 <>
-                  <div className="flex min-w-0 flex-wrap gap-3">
-                    <label className="flex min-w-0 flex-[1_1_10rem] flex-col gap-1.5">
-                      <span className="block truncate text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="flex min-w-0 flex-col gap-1.5">
+                      <span className="block break-words text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
                         Добавить ({normalizedUnitValue || task.workUnit?.trim() || 'ед.'})
                       </span>
                       <Input
@@ -548,8 +548,8 @@ export function TaskCompletedVolumeCell({
                         value={valueInUnits}
                       />
                     </label>
-                    <label className="flex min-w-0 flex-[1_1_10rem] flex-col gap-1.5">
-                      <span className="block truncate text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
+                    <label className="flex min-w-0 flex-col gap-1.5">
+                      <span className="block break-words text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
                         Итоговый %
                       </span>
                       <Input
@@ -636,8 +636,8 @@ export function TaskCompletedVolumeCell({
                     </div>
                   )}
 
-                  <div className="flex min-w-0 items-end gap-3">
-                    <label className="flex min-w-0 flex-[1_1_10rem] flex-col gap-1.5">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="flex min-w-0 flex-col gap-1.5">
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
                         <Calendar className="h-3.5 w-3.5" />
                         Дата работ
@@ -650,7 +650,7 @@ export function TaskCompletedVolumeCell({
                         value={entryDate}
                       />
                     </label>
-                    <div className="flex min-w-0 flex-[0_1_10.5rem] flex-col gap-1.5">
+                    <div className="flex min-w-0 flex-col gap-1.5">
                       <span className="block text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Быстро</span>
                       <Button
                         className="h-9 w-full min-w-0 border-[#dfe1e6] bg-white px-3 text-xs font-bold text-[#44546f] shadow-none hover:bg-[#f4f5f7] hover:text-primary"
@@ -670,12 +670,12 @@ export function TaskCompletedVolumeCell({
                         <History className="h-3.5 w-3.5" />
                         История
                       </div>
-                      <div className="flex max-h-36 flex-col gap-2 overflow-y-auto pr-1">
+                      <div className="flex max-h-44 flex-col gap-2 overflow-y-auto pr-1">
                         {sortedEntries.slice(0, 5).map((entry) => (
                           <div className="rounded-md border border-[#dfe1e6] bg-white px-3 py-2" key={entry.id}>
                             {editingEntryId === entry.id ? (
                               <div className="flex min-w-0 flex-col gap-2">
-                                <div className="flex min-w-0 gap-2">
+                                <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                   <Input
                                     className="h-8 min-w-0 flex-[1_1_0] border-[#dfe1e6] bg-white text-xs text-[#172b4d] shadow-none"
                                     disabled={pending}
@@ -810,8 +810,8 @@ export function TaskCompletedVolumeCell({
               {error ? <p className="text-sm text-rose-600">{error}</p> : null}
             </div>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-[#dfe1e6] bg-[#f7f8fa] px-4 py-4 sm:flex-row sm:items-center sm:px-5">
-              <Button className="w-full px-3 text-[#44546f] sm:w-auto" disabled={pending} size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
+            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-[#dfe1e6] bg-[#f7f8fa] px-4 py-4 sm:flex-row sm:items-center sm:px-6">
+              <Button className="h-10 w-full px-3 text-[#44546f] sm:w-auto" disabled={pending} size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Отмена
               </Button>
               <Button className="h-10 w-full gap-2 px-4 sm:ml-auto sm:w-auto sm:min-w-36" disabled={!canSubmit} type="submit">
