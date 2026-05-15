@@ -229,7 +229,7 @@ export function TaskWorkMetadataCell({
   );
 }
 
-function TaskCompletedVolumeCell({
+export function TaskCompletedVolumeCell({
   task,
   entries,
   loading = false,
@@ -371,31 +371,31 @@ function TaskCompletedVolumeCell({
   return (
     <>
       {disabled ? <span aria-hidden="true" /> : (
-      <button
-        className={`inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-sm transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent ${hasCompletedVolume ? 'text-slate-700' : 'text-slate-400'}`}
-        disabled={readOnly || disabled}
-        onClick={(event) => {
-          event.stopPropagation();
-          setOpen(true);
-          setPending(false);
-          setError(null);
-          setEntryDate(todayIsoDate());
-          setTotalVolumeValue(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
-          setUnitValue(task.workUnit ?? '');
-          setValueInUnits('');
-          setValueInPercent(formatMetricValue(currentPercent, 1));
-          setActiveField('volume');
-          setEditingEntryId(null);
-          setEditingEntryDate('');
-          setEditingEntryAmount('');
-        }}
-        type="button"
-      >
-        <span className="relative inline-flex min-w-6 items-center">
-          <span className={loading ? 'opacity-0' : undefined}>{completedVolumeLabel}</span>
-          {loading ? <span className="absolute left-0 top-1/2 h-3 w-full -translate-y-1/2 animate-pulse rounded bg-slate-300" /> : null}
-        </span>
-      </button>
+        <button
+          className={`inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-sm transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent ${hasCompletedVolume ? 'text-slate-700' : 'text-slate-400'}`}
+          disabled={readOnly || disabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen(true);
+            setPending(false);
+            setError(null);
+            setEntryDate(todayIsoDate());
+            setTotalVolumeValue(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
+            setUnitValue(task.workUnit ?? '');
+            setValueInUnits('');
+            setValueInPercent(formatMetricValue(currentPercent, 1));
+            setActiveField('volume');
+            setEditingEntryId(null);
+            setEditingEntryDate('');
+            setEditingEntryAmount('');
+          }}
+          type="button"
+        >
+          <span className="relative inline-flex min-w-6 items-center">
+            <span className={loading ? 'opacity-0' : undefined}>{completedVolumeLabel}</span>
+            {loading ? <span className="absolute left-0 top-1/2 h-3 w-full -translate-y-1/2 animate-pulse rounded bg-slate-300" /> : null}
+          </span>
+        </button>
       )}
 
       {open && !disabled ? (
@@ -664,11 +664,6 @@ function TaskCompletedVolumeCell({
                       </Button>
                     </div>
                   </div>
-
-                  <p className="block min-w-0 max-w-full flex-none whitespace-normal break-words text-[11px] leading-5 text-[#6b778c]">
-                    Новое значение добавится к уже внесённому факту за выбранную дату.
-                  </p>
-
                   {sortedEntries.length > 0 ? (
                     <div className="flex flex-col gap-3 border-t border-[#dfe1e6] pt-4">
                       <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">

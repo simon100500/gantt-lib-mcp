@@ -19,7 +19,7 @@ import {
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
 import type { Task, ValidationResult } from '../../types.ts';
-import { TaskWorkMetadataCell } from './TaskWorkColumns.tsx';
+import { TaskCompletedVolumeCell, TaskWorkMetadataCell } from './TaskWorkColumns.tsx';
 import { useTaskWorkProgressMutations } from './useTaskWorkProgressMutations.ts';
 import {
   buildFactByDate,
@@ -27,8 +27,8 @@ import {
   formatFactMetric,
   numberMapsEqual,
   omitPlanFactFields,
-  type PlanFactTask,
   sumTaskFactAmount,
+  type PlanFactTask,
 } from './projectFactAdapter.ts';
 
 interface ProjectFactWorkspaceProps {
@@ -132,6 +132,7 @@ export function ProjectFactWorkspace({
   }, [tasks]);
 
   const {
+    workProgressLoadingTaskIds,
     handleUpdateTaskWorkMetadata,
     handleAddTaskProgressEntry,
     handleUpdateTaskProgressEntry,
@@ -259,17 +260,22 @@ export function ProjectFactWorkspace({
     {
       id: 'plan-fact-fact',
       header: 'Факт',
-      width: 78,
-      minWidth: 64,
+      width: 82,
+      minWidth: 50,
       after: 'plan-fact-volume',
-      renderCell: ({ task }) => {
-        if (parentTaskIds.has(task.id)) {
-          return '';
-        }
-        const unit = task.workUnit?.trim();
-        const value = formatFactMetric(sumTaskFactAmount(task.id, progressEntries));
-        return unit && value !== '-' ? `${value} ${unit}` : value;
-      },
+      renderCell: ({ task }) => (
+        <TaskCompletedVolumeCell
+          entries={progressEntries.filter((entry) => entry.taskId === task.id)}
+          disabled={parentTaskIds.has(task.id)}
+          loading={workProgressLoadingTaskIds.has(task.id)}
+          onUpdateMetadata={handleUpdateTaskWorkMetadata}
+          onSubmit={handleAddTaskProgressEntry}
+          onUpdateEntry={handleUpdateTaskProgressEntry}
+          onDeleteEntry={handleDeleteTaskProgressEntry}
+          readOnly={effectiveReadOnly}
+          task={task}
+        />
+      ),
     },
     {
       id: 'plan-fact-percent',
