@@ -480,6 +480,8 @@ describe('ProjectWorkspace resource assignments', () => {
       'status',
       'assigned-resources',
     ]));
+    expect(ganttPropsSpy?.hiddenTaskListColumns).not.toContain('startDate');
+    expect(ganttPropsSpy?.hiddenTaskListColumns).not.toContain('endDate');
     expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-volume')?.renderCell({ task: tasks[1]! })}</>)).toContain('10');
     expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-fact')?.renderCell({ task: tasks[1]! })}</>)).toContain('3');
     expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-percent')?.renderCell({ task: tasks[1]! })}</>)).toContain('30');
