@@ -791,8 +791,6 @@ export function ProjectWorkspace({
       'dependencies',
       'progress',
       'duration',
-      'startDate',
-      'endDate',
       'work-volume',
       'completed-volume',
       'status',
@@ -1054,12 +1052,6 @@ export function ProjectWorkspace({
   const tempHighlightedTaskId = useUIStore((state) => state.tempHighlightedTaskId);
   const projectDisplayMode = projectId ? (projectStates[projectId]?.projectDisplayMode ?? 'gantt') : 'gantt';
   const factDisplayModeActive = projectDisplayMode === 'fact';
-  const handleProjectDisplayModeChange = useCallback((mode: 'gantt' | 'fact') => {
-    if (!projectId) {
-      return;
-    }
-    setProjectState(projectId, { projectDisplayMode: mode });
-  }, [projectId, setProjectState]);
   const highlightedSearchTaskIds = useMemo(() => {
     const ids = new Set(searchResults);
     if (tempHighlightedTaskId) {
@@ -2725,7 +2717,7 @@ export function ProjectWorkspace({
       {/* Toolbar on full width */}
       <div className="px-3 md:px-4">
         <Toolbar
-          showChatToggle={!hasShareToken && showChat}
+          showChatToggle={!factDisplayModeActive && !hasShareToken && showChat}
           isChatOpen={chatSidebarVisible}
           onToggleChat={onToggleChat}
           onScrollToToday={onScrollToToday}
@@ -2742,8 +2734,6 @@ export function ProjectWorkspace({
           shareStatus={shareStatus}
           onCreateShareLink={onCreateShareLink}
           showShareButton={!hasShareToken && isAuthenticated}
-          displayMode={projectDisplayMode}
-          onDisplayModeChange={handleProjectDisplayModeChange}
           templateSelectionActive={templateSelectionActive}
           onCreateTemplateFromProject={effectiveReadOnly || hasShareToken ? null : onCreateTemplateFromProject}
           onStartTemplateSelection={effectiveReadOnly || hasShareToken ? null : onStartTemplateSelection}
@@ -2800,6 +2790,8 @@ export function ProjectWorkspace({
           showExpiredToggle={!templateMode}
           showUndoControl={!templateMode}
           showOverflowMenuControl={!templateMode}
+          showViewScaleControl={!factDisplayModeActive}
+          showTaskChartToggle={!factDisplayModeActive}
         />
       </div>
 

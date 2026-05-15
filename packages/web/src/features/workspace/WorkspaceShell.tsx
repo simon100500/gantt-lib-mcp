@@ -139,6 +139,7 @@ export function WorkspaceShell({
   const aiMutationLock = useUIStore((state) => state.aiMutationLock);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
+  const projectStates = useProjectUIStore((state) => state.projectStates);
   const activeTemplate = useTemplateStore((state) => state.activeTemplate);
   const setActiveTemplate = useTemplateStore((state) => state.setActiveTemplate);
   const updateActiveTemplateTasks = useTemplateStore((state) => state.updateActiveTemplateTasks);
@@ -205,6 +206,10 @@ export function WorkspaceShell({
   const canEditResources = hasShareToken ? false : projectPermissions.resources === 'edit';
   const canViewFinance = hasShareToken || projectPermissions.finance !== 'none';
   const canEditFinance = hasShareToken ? false : projectPermissions.finance === 'edit';
+  const activeProjectDisplayMode = auth.project?.id
+    ? projectStates[auth.project.id]?.projectDisplayMode ?? 'gantt'
+    : 'gantt';
+  const isFactModeActive = workspace.kind === 'project' && activeProjectDisplayMode === 'fact';
   const isArchivedProject = !hasShareToken && workspace.kind === 'project' && auth.project?.status === 'archived';
   const isScheduleReadOnlyProject = isArchivedProject || !canEditSchedule;
   const chatDisabledReason = isScheduleReadOnlyProject
@@ -642,6 +647,29 @@ export function WorkspaceShell({
 
     setWorkspace({ kind: 'planner', projectId: auth.project.id });
   }, [auth.project, canViewResources, setWorkspace]);
+
+  const handleOpenFactMode = useCallback(async () => {
+    if (!auth.project || !canViewSchedule) {
+      return;
+    }
+
+    setPlannerCorrectionTarget(null);
+    setProjectState(auth.project.id, { projectDisplayMode: 'fact' });
+    setWorkspace({ kind: 'project', projectId: auth.project.id, chatOpen: readProjectChatOpenState() });
+  }, [auth.project, canViewSchedule, setPlannerCorrectionTarget, setProjectState, setWorkspace]);
+
+  const handleOpenChartMode = useCallback(async () => {
+    const targetProjectId = workspace.kind === 'planner' || workspace.kind === 'finance'
+      ? workspace.projectId
+      : auth.project?.id;
+    if (!targetProjectId || !canViewSchedule) {
+      return;
+    }
+
+    setPlannerCorrectionTarget(null);
+    setProjectState(targetProjectId, { projectDisplayMode: 'gantt' });
+    setWorkspace({ kind: 'project', projectId: targetProjectId, chatOpen: readProjectChatOpenState() });
+  }, [auth.project?.id, canViewSchedule, setPlannerCorrectionTarget, setProjectState, setWorkspace, workspace]);
 
   const handleOpenFinance = useCallback(async () => {
     if (!auth.project || !canViewFinance) {
@@ -1315,20 +1343,14 @@ export function WorkspaceShell({
       onRenameProjectGroup={handleRenameProjectGroup}
       onDeleteProjectGroup={handleDeleteProjectGroup}
       canViewChartMode={canViewSchedule}
+      canViewFactMode={canViewSchedule}
       canViewResourcePool={canViewResources}
       canViewFinance={canViewFinance}
+      isFactModeActive={isFactModeActive}
       onOpenResourcePool={handleOpenResourcePool}
       onOpenFinance={handleOpenFinance}
-      onOpenChartMode={async () => {
-        const targetProjectId = workspace.kind === 'planner' || workspace.kind === 'finance'
-          ? workspace.projectId
-          : auth.project?.id;
-        if (!targetProjectId) {
-          return;
-        }
-        setPlannerCorrectionTarget(null);
-        setWorkspace({ kind: 'project', projectId: targetProjectId, chatOpen: readProjectChatOpenState() });
-      }}
+      onOpenChartMode={handleOpenChartMode}
+      onOpenFactMode={handleOpenFactMode}
       onCreateProjectTemplate={handleCreateCurrentProjectTemplate}
       adminTemplateLinks={[
         { id: 'admin-template-cms', label: 'CMS шаблонов', href: '/admin?section=templates' },

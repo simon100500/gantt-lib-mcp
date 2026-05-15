@@ -61,8 +61,6 @@ export interface ToolbarTaskListColumnRow {
   label: string;
 }
 
-export type ToolbarDisplayMode = 'gantt' | 'fact';
-
 interface ToolbarProps {
   showChatToggle?: boolean;
   isChatOpen?: boolean;
@@ -81,8 +79,6 @@ interface ToolbarProps {
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   showShareButton?: boolean;
-  displayMode?: ToolbarDisplayMode;
-  onDisplayModeChange?: (mode: ToolbarDisplayMode) => void;
   viewMode?: 'day' | 'week' | 'month';
   onViewModeChange?: (viewMode: 'day' | 'week' | 'month') => void;
   disableTaskDrag?: boolean;
@@ -131,6 +127,8 @@ interface ToolbarProps {
   showExpiredToggle?: boolean;
   showUndoControl?: boolean;
   showOverflowMenuControl?: boolean;
+  showViewScaleControl?: boolean;
+  showTaskChartToggle?: boolean;
 }
 
 function TriStateCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate: boolean }) {
@@ -366,8 +364,6 @@ export function Toolbar({
   shareStatus = 'idle',
   onCreateShareLink,
   showShareButton = false,
-  displayMode = 'gantt',
-  onDisplayModeChange,
   viewMode: externalViewMode,
   onViewModeChange,
   disableTaskDrag: externalDisableTaskDrag,
@@ -414,6 +410,8 @@ export function Toolbar({
   showExpiredToggle = true,
   showUndoControl = true,
   showOverflowMenuControl = true,
+  showViewScaleControl = true,
+  showTaskChartToggle = true,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
@@ -473,7 +471,6 @@ export function Toolbar({
     : null;
 
   const currentViewMode = externalViewMode ?? viewMode;
-  const currentDisplayMode = displayMode;
   const handleViewModeChange = onViewModeChange ?? setViewMode;
   const mutationLocked = readOnly || previewMode;
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
@@ -544,66 +541,36 @@ export function Toolbar({
 
   return (
     <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] px-0 py-2">
-      <div className="inline-flex rounded-md">
-        <button
-          type="button"
-          onClick={handleToggleTaskList}
-          className={cn(
-            'relative flex h-8 items-center gap-1.5 rounded-l-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
-            showTaskList
-              ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
-              : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
-          )}
-        >
-          <Rows3 className="h-3.5 w-3.5" />
-          <span className="hidden md:inline">Задачи</span>
-        </button>
-        <button
-          type="button"
-          onClick={handleToggleChart}
-          className={cn(
-            'relative ml-[-1px] flex h-8 items-center gap-1.5 rounded-r-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
-            showChart
-              ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
-              : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
-          )}
-        >
-          <ChartNoAxesGantt className="h-3.5 w-3.5" />
-          <span className="hidden md:inline">Гант</span>
-        </button>
-      </div>
-
-      <div className="inline-flex rounded-md">
-        {([
-          { mode: 'gantt' as const, label: 'График', shortLabel: 'Г', icon: ChartNoAxesGantt },
-          { mode: 'fact' as const, label: 'Факт', shortLabel: 'Ф', icon: Check },
-        ]).map((item, index, rows) => {
-          const Icon = item.icon;
-          const active = currentDisplayMode === item.mode;
-          return (
-            <button
-              key={item.mode}
-              type="button"
-              onClick={() => onDisplayModeChange?.(item.mode)}
-              disabled={!onDisplayModeChange}
-              className={cn(
-                'relative ml-[-1px] flex h-8 items-center gap-1.5 border px-2.5 text-xs font-medium transition-colors first:ml-0 focus-visible:outline-none disabled:cursor-default disabled:opacity-60',
-                index === 0 && 'rounded-l-md',
-                index === rows.length - 1 && 'rounded-r-md',
-                active
-                  ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
-                  : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
-              )}
-              aria-pressed={active}
-              title={item.label}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">{item.label}</span>
-              <span className="md:hidden">{item.shortLabel}</span>
-            </button>
-          );
-        })}
-      </div>
+      {showTaskChartToggle && (
+        <div className="inline-flex rounded-md">
+          <button
+            type="button"
+            onClick={handleToggleTaskList}
+            className={cn(
+              'relative flex h-8 items-center gap-1.5 rounded-l-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
+              showTaskList
+                ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
+                : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
+            )}
+          >
+            <Rows3 className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Задачи</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleChart}
+            className={cn(
+              'relative ml-[-1px] flex h-8 items-center gap-1.5 rounded-r-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
+              showChart
+                ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
+                : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
+            )}
+          >
+            <ChartNoAxesGantt className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Гант</span>
+          </button>
+        </div>
+      )}
 
       <Button
         size="sm"
@@ -1048,7 +1015,7 @@ export function Toolbar({
         </Button>
       </FilterPopup>
 
-      {currentDisplayMode === 'gantt' && (
+      {showViewScaleControl && (
         <>
           <div className="inline-flex rounded-md">
             {(['day', 'week', 'month'] as const).map((nextMode, index) => (

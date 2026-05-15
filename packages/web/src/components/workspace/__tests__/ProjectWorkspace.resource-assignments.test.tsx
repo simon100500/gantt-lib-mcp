@@ -452,7 +452,6 @@ describe('ProjectWorkspace resource assignments', () => {
 
     const { root } = await renderWorkspace();
 
-    expect(toolbarSpy).toHaveBeenLastCalledWith(expect.objectContaining({ displayMode: 'fact' }));
     expect(ganttPropsSpy).toEqual(expect.objectContaining({
       mode: 'plan-fact',
       rowHeight: 46,
