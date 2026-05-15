@@ -2,7 +2,7 @@ import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { Users, ListTree, LoaderCircle, MessageSquare, ToyBrick, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
-import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand } from 'gantt-lib';
+import type { PlanFactCellCommitContext, TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
@@ -120,6 +120,7 @@ interface ProjectWorkspaceProps {
   projectIdOverride?: string | null;
   hiddenTaskListColumnsDefaultOverride?: string[] | null;
   viewportOffsetPx?: number;
+  presentationMode?: 'gantt' | 'plan-fact';
 }
 
 function formatTaskCount(count: number) {
@@ -246,6 +247,58 @@ function addDaysUtc(date: Date, days: number): Date {
 
 function diffDaysUtc(left: Date, right: Date): number {
   return Math.round((left.getTime() - right.getTime()) / 86_400_000);
+}
+
+function formatIsoDateKey(date: Date): string {
+  return date.toISOString().split('T')[0] ?? '';
+}
+
+function buildDateKeysInclusive(startDate: string | Date, endDate: string | Date): string[] {
+  const start = parseTaskDate(startDate);
+  const end = parseTaskDate(endDate);
+  if (!start || !end || end.getTime() < start.getTime()) {
+    return [];
+  }
+
+  const dateKeys: string[] = [];
+  for (let cursor = new Date(start.getTime()); cursor.getTime() <= end.getTime(); cursor = addDaysUtc(cursor, 1)) {
+    dateKeys.push(formatIsoDateKey(cursor));
+  }
+  return dateKeys;
+}
+
+function roundPlanFactValue(value: number): number {
+  return Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
+}
+
+function buildPlanByDate(task: Task): Record<string, number> {
+  const workVolume = task.workVolume ?? 0;
+  if (!Number.isFinite(workVolume) || workVolume <= 0) {
+    return {};
+  }
+
+  const dateKeys = buildDateKeysInclusive(task.startDate, task.endDate);
+  if (dateKeys.length === 0) {
+    return {};
+  }
+
+  const dailyVolume = roundPlanFactValue(workVolume / dateKeys.length);
+  return Object.fromEntries(dateKeys.map((dateKey) => [dateKey, dailyVolume]));
+}
+
+function buildFactByDate(taskId: string, entries: TaskProgressEntry[]): Record<string, number> {
+  const values: Record<string, number> = {};
+  for (const entry of entries) {
+    if (entry.taskId !== taskId) {
+      continue;
+    }
+    values[entry.entryDate] = roundPlanFactValue((values[entry.entryDate] ?? 0) + entry.amount);
+  }
+  return values;
+}
+
+function sumRecordValues(values: Record<string, number> | undefined): number {
+  return Object.values(values ?? {}).reduce((sum, value) => sum + value, 0);
 }
 
 interface ProjectShiftModalProps {
@@ -561,6 +614,7 @@ export function ProjectWorkspace({
   projectIdOverride = null,
   hiddenTaskListColumnsDefaultOverride = null,
   viewportOffsetPx = 0,
+  presentationMode = 'gantt',
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -587,14 +641,14 @@ export function ProjectWorkspace({
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const authProject = useAuthStore((state) => state.project);
 
-  const projectId = workspace.kind === 'project'
+  const projectId = workspace.kind === 'project' || workspace.kind === 'planfact'
     ? workspace.projectId
     : workspace.kind === 'shared'
       ? `shared:${shareToken ?? sharedProject?.id ?? 'unknown'}`
       : workspace.kind === 'template'
         ? `template:${workspace.templateId}`
         : null;
-  const persistedProjectId = projectIdOverride ?? (workspace.kind === 'project' ? workspace.projectId : null);
+  const persistedProjectId = projectIdOverride ?? (workspace.kind === 'project' || workspace.kind === 'planfact' ? workspace.projectId : null);
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
   const workspaceViewportHeight = `calc(100dvh - ${132 + viewportOffsetPx}px)`;
 
@@ -1172,7 +1226,7 @@ export function ProjectWorkspace({
       throw new Error('Статус можно менять только у конечных задач.');
     }
 
-    if (!accessToken || workspace.kind !== 'project') {
+    if (!accessToken || (workspace.kind !== 'project' && workspace.kind !== 'planfact')) {
       const allNextEntries: TaskProgressEntry[] = [...progressEntries];
       const now = new Date().toISOString();
       const today = new Date().toISOString().split('T')[0] ?? '';
@@ -1275,7 +1329,7 @@ export function ProjectWorkspace({
     task: Task,
     patch: { workVolume?: number | null; workUnit?: string | null },
   ) => {
-    if (!accessToken || workspace.kind !== 'project') {
+    if (!accessToken || (workspace.kind !== 'project' && workspace.kind !== 'planfact')) {
       const nextTask = {
         ...task,
         ...(patch.workVolume !== undefined ? { workVolume: patch.workVolume } : {}),
@@ -1331,7 +1385,7 @@ export function ProjectWorkspace({
       throw new Error('Сначала задайте общий объём работы.');
     }
 
-    if (!accessToken || workspace.kind !== 'project') {
+    if (!accessToken || (workspace.kind !== 'project' && workspace.kind !== 'planfact')) {
       const nextAmount = input.inputMode === 'percent'
         ? task.workVolume * (input.value / 100)
         : input.value;
@@ -1406,7 +1460,7 @@ export function ProjectWorkspace({
       throw new Error('Сначала задайте общий объём работы.');
     }
 
-    if (!accessToken || workspace.kind !== 'project') {
+    if (!accessToken || (workspace.kind !== 'project' && workspace.kind !== 'planfact')) {
       const existingEntries = progressEntries.filter((progressEntry) => progressEntry.taskId === task.id);
       const duplicateEntry = existingEntries.find((progressEntry) => (
         progressEntry.id !== entry.id && progressEntry.entryDate === input.entryDate
@@ -1470,7 +1524,7 @@ export function ProjectWorkspace({
       throw new Error('Сначала задайте общий объём работы.');
     }
 
-    if (!accessToken || workspace.kind !== 'project') {
+    if (!accessToken || (workspace.kind !== 'project' && workspace.kind !== 'planfact')) {
       const nextEntries = progressEntries.filter((progressEntry) => (
         progressEntry.taskId === task.id && progressEntry.id !== entry.id
       ));
@@ -1897,6 +1951,99 @@ export function ProjectWorkspace({
     taskListColumnWidths,
     workProgressLoadingTaskIds,
   ]);
+
+  const planFactTasks = useMemo<Task[]>(() => {
+    if (presentationMode !== 'plan-fact') {
+      return effectiveTasksWithBaseline;
+    }
+
+    return effectiveTasksWithBaseline.map((task) => ({
+      ...task,
+      planByDate: parentTaskIds.has(task.id) ? {} : buildPlanByDate(task),
+      factByDate: parentTaskIds.has(task.id) ? {} : buildFactByDate(task.id, progressEntries),
+    }));
+  }, [effectiveTasksWithBaseline, parentTaskIds, presentationMode, progressEntries]);
+
+  const handlePlanFactCellCommit = useCallback(async (context: PlanFactCellCommitContext<Task>) => {
+    if (presentationMode !== 'plan-fact' || effectiveReadOnly || externalSelectionActive) {
+      return;
+    }
+
+    const task = tasks.find((candidate) => candidate.id === context.task.id);
+    if (!task || parentTaskIds.has(task.id)) {
+      return;
+    }
+
+    const nextValue = context.value;
+    try {
+      await runWithWorkProgressLoader(task.id, async () => {
+        if (context.kind === 'plan') {
+          const nextPlanByDate = { ...buildPlanByDate(task) };
+          if (nextValue === undefined) {
+            delete nextPlanByDate[context.dateKey];
+          } else {
+            nextPlanByDate[context.dateKey] = nextValue;
+          }
+
+          const nextWorkVolume = roundPlanFactValue(sumRecordValues(nextPlanByDate));
+          await handleUpdateTaskWorkMetadata(task, { workVolume: nextWorkVolume > 0 ? nextWorkVolume : null });
+          return;
+        }
+
+        const targetAmount = nextValue ?? 0;
+        if (!Number.isFinite(targetAmount) || targetAmount < 0) {
+          return;
+        }
+
+        const existingEntry = progressEntries.find((entry) => entry.taskId === task.id && entry.entryDate === context.dateKey);
+        if (targetAmount === 0) {
+          if (existingEntry) {
+            await handleDeleteTaskProgressEntry(task, existingEntry);
+          }
+          return;
+        }
+
+        if (existingEntry) {
+          await handleUpdateTaskProgressEntry(task, existingEntry, {
+            entryDate: context.dateKey,
+            amount: targetAmount,
+          });
+          return;
+        }
+
+        await handleAddTaskProgressEntry(task, {
+          entryDate: context.dateKey,
+          value: targetAmount,
+          inputMode: 'volume',
+        });
+      });
+    } catch (error) {
+      setAssignmentError(error instanceof Error ? error.message : 'Не удалось сохранить план-факт.');
+    }
+  }, [
+    effectiveReadOnly,
+    externalSelectionActive,
+    handleAddTaskProgressEntry,
+    handleDeleteTaskProgressEntry,
+    handleUpdateTaskProgressEntry,
+    handleUpdateTaskWorkMetadata,
+    parentTaskIds,
+    presentationMode,
+    progressEntries,
+    runWithWorkProgressLoader,
+    setAssignmentError,
+    tasks,
+  ]);
+  const planFactHiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => (
+    Array.from(new Set([
+      ...hiddenTaskListColumns,
+      'dependencies',
+      'progress',
+      'duration',
+      'startDate',
+      'endDate',
+    ])) as TaskListColumnId[]
+  ), [hiddenTaskListColumns]);
 
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,
@@ -2685,12 +2832,13 @@ export function ProjectWorkspace({
               ) : (
                 <GanttChart
                   ref={ganttRef as Ref<GanttChartRef>}
-                  tasks={effectiveTasksWithBaseline}
+                  mode={presentationMode === 'plan-fact' ? 'plan-fact' : undefined}
+                  tasks={presentationMode === 'plan-fact' ? planFactTasks : effectiveTasksWithBaseline}
                   showBaseline={Boolean(selectedBaselineState && selectedBaselineVisible)}
                   taskFilter={taskFilter}
                   taskListMenuCommands={taskListMenuCommands}
                   additionalColumns={additionalColumns}
-                  hiddenTaskListColumns={hiddenTaskListColumns}
+                  hiddenTaskListColumns={presentationMode === 'plan-fact' ? planFactHiddenTaskListColumns : hiddenTaskListColumns}
                   taskListColumnWidths={taskListColumnWidths}
                   onTaskListColumnWidthsChange={handleTaskListColumnWidthsChange}
                   taskDateChangeMode={taskDateChangeMode}
@@ -2698,29 +2846,30 @@ export function ProjectWorkspace({
                   getTaskListRowClassName={(task) => (
                     strikeClosedTasks && !parentTaskIds.has(task.id) && task.status === 'closed' ? 'gantt-tl-row-closed' : undefined
                   )}
-                  onTasksChange={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
-                  dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
-                  rowHeight={36}
+                  onTasksChange={presentationMode === 'plan-fact' || effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
+                  onPlanFactCellCommit={presentationMode === 'plan-fact' ? (context) => { void handlePlanFactCellCommit(context); } : undefined}
+                  dayWidth={presentationMode === 'plan-fact' ? 42 : viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
+                  rowHeight={presentationMode === 'plan-fact' ? 46 : 36}
                   containerHeight={workspaceViewportHeight}
                   showTaskList={showTaskList}
-                  showChart={showChart}
-                  taskListWidth={taskListWidth}
+                  showChart={presentationMode === 'plan-fact' ? true : showChart}
+                  taskListWidth={presentationMode === 'plan-fact' ? Math.max(taskListWidth, 560) : taskListWidth}
                   onValidateDependencies={onValidation}
                   enableAutoSchedule={autoSchedule}
                   onCascade={effectiveReadOnly || externalSelectionActive ? undefined : onCascade}
-                  disableTaskNameEditing={effectiveReadOnly || externalSelectionActive}
-                  disableDependencyEditing={effectiveReadOnly || externalSelectionActive}
-                  disableTaskDrag={effectiveDisableTaskDrag || externalSelectionActive}
+                  disableTaskNameEditing={presentationMode === 'plan-fact' || effectiveReadOnly || externalSelectionActive}
+                  disableDependencyEditing={presentationMode === 'plan-fact' || effectiveReadOnly || externalSelectionActive}
+                  disableTaskDrag={presentationMode === 'plan-fact' || effectiveDisableTaskDrag || externalSelectionActive}
                   highlightExpiredTasks={highlightExpiredTasks}
                   headerHeight={40}
-                  viewMode={viewMode}
+                  viewMode={presentationMode === 'plan-fact' ? 'day' : viewMode}
                   collapsedParentIds={collapsedParentIds}
                   onToggleCollapse={handleToggleCollapse}
-                  onAdd={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleAdd}
-                  onDelete={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleDelete}
-                  onInsertAfter={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleInsertAfter}
-                  onReorder={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleReorder}
-                  onUngroupTask={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleUngroupTask}
+                  onAdd={presentationMode === 'plan-fact' || effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleAdd}
+                  onDelete={presentationMode === 'plan-fact' || effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleDelete}
+                  onInsertAfter={presentationMode === 'plan-fact' || effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleInsertAfter}
+                  onReorder={presentationMode === 'plan-fact' || effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleReorder}
+                  onUngroupTask={presentationMode === 'plan-fact' || effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleUngroupTask}
                   customDays={customDays}
                   highlightedTaskIds={highlightedSearchTaskIds}
                   enableTaskMultiSelect={externalSelectionActive}

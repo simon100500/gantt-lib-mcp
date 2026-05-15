@@ -205,7 +205,7 @@ export function WorkspaceShell({
   const canEditResources = hasShareToken ? false : projectPermissions.resources === 'edit';
   const canViewFinance = hasShareToken || projectPermissions.finance !== 'none';
   const canEditFinance = hasShareToken ? false : projectPermissions.finance === 'edit';
-  const isArchivedProject = !hasShareToken && workspace.kind === 'project' && auth.project?.status === 'archived';
+  const isArchivedProject = !hasShareToken && (workspace.kind === 'project' || workspace.kind === 'planfact') && auth.project?.status === 'archived';
   const isScheduleReadOnlyProject = isArchivedProject || !canEditSchedule;
   const chatDisabledReason = isScheduleReadOnlyProject
     ? 'Проект доступен только для чтения. AI-изменения недоступны.'
@@ -329,8 +329,8 @@ export function WorkspaceShell({
   const ganttRef = useRef<GanttChartRef>(null);
   const syncProjectTaskCount = auth.syncProjectTaskCount;
   const sessionProjectId = getAccessTokenProjectId(auth.accessToken);
-  const activeWorkspaceProjectId = workspace.kind === 'project' ? workspace.projectId : null;
-  const selectedWorkspaceProject = workspace.kind === 'project'
+  const activeWorkspaceProjectId = workspace.kind === 'project' || workspace.kind === 'planfact' ? workspace.projectId : null;
+  const selectedWorkspaceProject = workspace.kind === 'project' || workspace.kind === 'planfact'
     ? (
       auth.projects.find((project) => project.id === workspace.projectId)
       ?? (sessionProjectId === workspace.projectId ? auth.project : null)
@@ -643,6 +643,14 @@ export function WorkspaceShell({
     setWorkspace({ kind: 'planner', projectId: auth.project.id });
   }, [auth.project, canViewResources, setWorkspace]);
 
+  const handleOpenPlanFact = useCallback(async () => {
+    if (!auth.project || !canViewSchedule) {
+      return;
+    }
+
+    setWorkspace({ kind: 'planfact', projectId: auth.project.id });
+  }, [auth.project, canViewSchedule, setWorkspace]);
+
   const handleOpenFinance = useCallback(async () => {
     if (!auth.project || !canViewFinance) {
       return;
@@ -656,7 +664,7 @@ export function WorkspaceShell({
       return;
     }
 
-    if (workspace.kind === 'project' && !canViewSchedule) {
+    if ((workspace.kind === 'project' || workspace.kind === 'planfact') && !canViewSchedule) {
       if (canViewResources) {
         setWorkspace({ kind: 'planner', projectId: auth.project.id });
       } else if (canViewFinance) {
@@ -686,6 +694,8 @@ export function WorkspaceShell({
   useEffect(() => {
     if (workspace.kind === 'project') {
       setProjectState(workspace.projectId, { activeWorkspace: 'project' });
+    } else if (workspace.kind === 'planfact') {
+      setProjectState(workspace.projectId, { activeWorkspace: 'planfact' });
     } else if (workspace.kind === 'planner') {
       setProjectState(workspace.projectId, { activeWorkspace: 'planner' });
     } else if (workspace.kind === 'finance') {
@@ -835,7 +845,7 @@ export function WorkspaceShell({
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
 
-  const workspaceStateId = workspace.kind === 'project'
+  const workspaceStateId = workspace.kind === 'project' || workspace.kind === 'planfact'
     ? workspace.projectId
     : workspace.kind === 'shared'
       ? `shared:${sharedProject.shareToken ?? sharedProject.project?.id ?? 'unknown'}`
@@ -872,7 +882,7 @@ export function WorkspaceShell({
   const shareStatus = useUIStore((state) => state.shareStatus);
   const showShareManager = useUIStore((state) => state.showShareManager);
   const { updateAvailable, reloadApp } = useAppUpdateCheck();
-  const currentProjectTaskCount = workspace.kind === 'project'
+  const currentProjectTaskCount = workspace.kind === 'project' || workspace.kind === 'planfact'
     ? (
       auth.projects.find((project) => project.id === workspace.projectId)?.taskCount
       ?? selectedWorkspaceProject?.taskCount
@@ -880,7 +890,7 @@ export function WorkspaceShell({
     )
     : undefined;
   const hasActiveProjects = auth.projects.some((project) => project.status !== 'archived');
-  const currentProjectIsEmpty = workspace.kind === 'project' && currentProjectTaskCount === 0;
+  const currentProjectIsEmpty = (workspace.kind === 'project' || workspace.kind === 'planfact') && currentProjectTaskCount === 0;
   const hasQueuedProjectPrompt = workspace.kind === 'project' && Boolean(queuedPromptRef.current);
   const projectChatOpen = workspace.kind === 'project' && workspace.chatOpen;
   const effectivePendingProjectCreation = pendingProjectCreation;
@@ -1102,7 +1112,7 @@ export function WorkspaceShell({
               initialPrompt={startScreenPrefillPrompt ?? undefined}
             />
           )
-        : workspace.kind === 'project'
+        : workspace.kind === 'project' || workspace.kind === 'planfact'
           ? (
             <ProjectWorkspace
               ganttRef={ganttRef}
@@ -1179,6 +1189,7 @@ export function WorkspaceShell({
               onCreateTemplateFromProject={handleCreateCurrentProjectTemplate}
               onStartTemplateSelection={handleStartTemplateSelection}
               onOpenLimitModal={openLimitModal}
+              presentationMode={workspace.kind === 'planfact' ? 'plan-fact' : 'gantt'}
             />
           )
           : (
@@ -1317,10 +1328,11 @@ export function WorkspaceShell({
       canViewChartMode={canViewSchedule}
       canViewResourcePool={canViewResources}
       canViewFinance={canViewFinance}
+      onOpenPlanFact={handleOpenPlanFact}
       onOpenResourcePool={handleOpenResourcePool}
       onOpenFinance={handleOpenFinance}
       onOpenChartMode={async () => {
-        const targetProjectId = workspace.kind === 'planner' || workspace.kind === 'finance'
+        const targetProjectId = workspace.kind === 'planner' || workspace.kind === 'finance' || workspace.kind === 'planfact'
           ? workspace.projectId
           : auth.project?.id;
         if (!targetProjectId) {

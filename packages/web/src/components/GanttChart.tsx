@@ -1,7 +1,7 @@
 import { forwardRef, useRef, useImperativeHandle } from 'react';
 import { GanttChart as GanttLibChart } from 'gantt-lib';
 import type { Task, TimelineMarker as AppTimelineMarker, ValidationResult } from '../types.ts';
-import type { CustomDayConfig, TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand, TimelineMarker as GanttTimelineMarker } from 'gantt-lib';
+import type { CustomDayConfig, PlanFactCellCommitContext, TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand, TimelineMarker as GanttTimelineMarker } from 'gantt-lib';
 
 export interface ExportToPdfHeaderOptions {
   logoUrl?: string;
@@ -22,8 +22,10 @@ export interface ExportToPdfOptions {
 }
 
 export interface GanttChartProps {
+  mode?: 'gantt' | 'plan-fact';
   tasks: Task[];
   onTasksChange?: (tasks: Task[]) => void;
+  onPlanFactCellCommit?: (context: PlanFactCellCommitContext<Task>) => void;
   dayWidth?: number;
   rowHeight?: number;
   containerHeight?: string | number;
@@ -86,8 +88,10 @@ export interface GanttChartRef {
 }
 
 export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
+  mode,
   tasks,
   onTasksChange,
+  onPlanFactCellCommit,
   dayWidth,
   rowHeight,
   containerHeight,
@@ -154,8 +158,10 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   return (
     <GanttLibChart
       ref={ganttLibRef}
+      mode={mode}
       tasks={tasks}
       onTasksChange={onTasksChange}
+      onPlanFactCellCommit={onPlanFactCellCommit}
       dayWidth={dayWidth}
       rowHeight={rowHeight}
       containerHeight={containerHeight}

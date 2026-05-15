@@ -219,6 +219,8 @@ export interface Task {
   workVolume?: number | null;
   workUnit?: string | null;
   completedVolume?: number;
+  planByDate?: Record<string, number>;
+  factByDate?: Record<string, number>;
   accepted?: boolean;        // Controls progress bar color at 100% (green vs yellow)
   locked?: boolean;          // Prevents drag/resize/edit
   divider?: 'top' | 'bottom'; // Visual grouping lines

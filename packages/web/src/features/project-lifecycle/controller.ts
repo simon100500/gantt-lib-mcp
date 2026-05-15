@@ -19,7 +19,7 @@ import type { PendingProjectCreation } from './model.ts';
 import { initialProjectLifecycleState, projectLifecycleReducer } from './reducer.ts';
 
 type ProjectUiLookup = {
-  activeWorkspace: 'project' | 'planner' | 'finance';
+  activeWorkspace: 'project' | 'planfact' | 'planner' | 'finance';
 } | null;
 
 type WorkspaceSetter = (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
@@ -34,6 +34,8 @@ function getProjectWorkspaceMode(projectId: string, getProjectState: (projectId:
     ? { kind: 'planner', projectId }
     : activeWorkspace === 'finance'
       ? { kind: 'finance', projectId }
+      : activeWorkspace === 'planfact'
+        ? { kind: 'planfact', projectId }
       : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
 }
 
@@ -527,6 +529,9 @@ export function useProjectLifecycleController(params: {
         return { kind: 'project', projectId, chatOpen: false };
       }
       if (current.kind === 'project' && current.projectId === projectId) {
+        return current;
+      }
+      if (current.kind === 'planfact' && current.projectId === projectId) {
         return current;
       }
       if (current.kind === 'finance' && current.projectId === projectId) {

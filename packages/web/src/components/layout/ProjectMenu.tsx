@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChartNoAxesGantt, ChevronDown, Eye, Landmark, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Settings2, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, ChevronDown, Eye, Landmark, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Settings2, ShieldCheck, Table2, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -56,6 +56,7 @@ interface ProjectMenuProps {
   onOpenResourcePool?: () => void | Promise<void>;
   onOpenFinance?: () => void | Promise<void>;
   onOpenChartMode?: () => void | Promise<void>;
+  onOpenPlanFact?: () => void | Promise<void>;
   onCreateProjectTemplate?: () => void | Promise<void>;
   adminTemplateLinks?: Array<{ id: string; label: string; href: string }>;
   onCreateShareLink: () => Promise<void>;
@@ -95,6 +96,7 @@ export function ProjectMenu({
   onOpenResourcePool,
   onOpenFinance,
   onOpenChartMode,
+  onOpenPlanFact,
   onCreateProjectTemplate,
   adminTemplateLinks = [],
   onCreateShareLink,
@@ -364,7 +366,7 @@ export function ProjectMenu({
   // Compute whether toggle button should be hidden on desktop
   // Hidden only in sidebar mode (push), NOT in overlay mode
   const hideToggleOnDesktop = sidebarVisible;
-  const showProjectSettingsButton = workspace.kind === 'project' && !hasShareToken;
+  const showProjectSettingsButton = (workspace.kind === 'project' || workspace.kind === 'planfact') && !hasShareToken;
 
   return (
     <div className="flex h-dvh overflow-hidden bg-[#f4f5f7] text-slate-900">
@@ -517,15 +519,32 @@ export function ProjectMenu({
                         onClick={() => { void onOpenChartMode?.(); }}
                         className={cn(
                           'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                          workspace.kind === 'planner' || workspace.kind === 'finance'
+                          workspace.kind === 'planner' || workspace.kind === 'finance' || workspace.kind === 'planfact'
                             ? 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
                             : 'border-primary text-primary',
                         )}
                         data-testid="topbar-mode-chart"
                         role="tab"
-                        aria-selected={workspace.kind !== 'planner' && workspace.kind !== 'finance'}
+                        aria-selected={workspace.kind === 'project'}
                       >
                         <span>График</span>
+                      </button>
+                      )}
+                      {canViewChartMode && (
+                      <button
+                        type="button"
+                        onClick={() => { void onOpenPlanFact?.(); }}
+                        className={cn(
+                          'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                          workspace.kind === 'planfact'
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                        )}
+                        data-testid="topbar-mode-planfact"
+                        role="tab"
+                        aria-selected={workspace.kind === 'planfact'}
+                      >
+                        <span>Факт</span>
                       </button>
                       )}
                       {canViewResourcePool && (
@@ -602,10 +621,12 @@ export function ProjectMenu({
                       <Package className="h-3.5 w-3.5 text-primary" />
                     ) : workspace.kind === 'finance' ? (
                       <Landmark className="h-3.5 w-3.5 text-primary" />
+                    ) : workspace.kind === 'planfact' ? (
+                      <Table2 className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChartNoAxesGantt className="h-3.5 w-3.5 text-primary" />
                     )}
-                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'finance' ? 'Финансы' : 'Гант'}</span>
+                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'finance' ? 'Финансы' : workspace.kind === 'planfact' ? 'Факт' : 'Гант'}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -615,12 +636,25 @@ export function ProjectMenu({
                     onClick={() => { void onOpenChartMode?.(); }}
                     className={cn(
                       'gap-2 text-slate-700 focus:text-slate-900',
-                      workspace.kind !== 'planner' && workspace.kind !== 'finance' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                      workspace.kind === 'project' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
                     )}
                     data-testid="topbar-mode-chart-mobile"
                   >
                     <ChartNoAxesGantt className="h-4 w-4" />
                     <span>Гант</span>
+                  </DropdownMenuItem>
+                  )}
+                  {canViewChartMode && (
+                  <DropdownMenuItem
+                    onClick={() => { void onOpenPlanFact?.(); }}
+                    className={cn(
+                      'gap-2 text-slate-700 focus:text-slate-900',
+                      workspace.kind === 'planfact' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                    )}
+                    data-testid="topbar-mode-planfact-mobile"
+                  >
+                    <Table2 className="h-4 w-4" />
+                    <span>Факт</span>
                   </DropdownMenuItem>
                   )}
                   {canViewResourcePool && (

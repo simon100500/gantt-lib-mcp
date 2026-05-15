@@ -17,7 +17,7 @@ interface ProjectBaselineSelectionState {
 
 interface ProjectUIState {
   viewMode: ViewMode;
-  activeWorkspace: 'project' | 'planner' | 'finance';
+  activeWorkspace: 'project' | 'planfact' | 'planner' | 'finance';
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
   taskDateChangeMode: TaskDateChangeMode;
