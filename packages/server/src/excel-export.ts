@@ -640,6 +640,31 @@ function buildNonWorkingSet(
   return result;
 }
 
+function buildHeaderWeekendSet(
+  calendarWeeklyPattern: CalendarWeeklyPattern,
+  calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>,
+  timelineDates: string[],
+): Set<string> {
+  const overrides = new Map(calendarDays.map((day) => [day.date.slice(0, 10), day.kind]));
+  const result = new Set<string>();
+
+  for (const date of timelineDates) {
+    const override = overrides.get(date);
+    if (override === 'non_working') {
+      result.add(date);
+      continue;
+    }
+    if (override === 'working' || override === 'shortened') {
+      continue;
+    }
+    if (isPatternWeekend(date, calendarWeeklyPattern)) {
+      result.add(date);
+    }
+  }
+
+  return result;
+}
+
 function columnNumberToName(columnNumber: number): string {
   let current = columnNumber;
   let label = '';
@@ -786,6 +811,7 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
   const monthHeaders = suppressRepeatedLabels(timelineDates.map(formatMonthLabel));
   const totalColumnCount = STATIC_COLUMN_COUNT + timelineDates.length;
   const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarWeeklyPattern, data.calendarDays, timelineDates);
+  const headerWeekendDates = buildHeaderWeekendSet(data.calendarWeeklyPattern, data.calendarDays, timelineDates);
   const planFactColumnWidths = [8, 48, 14, 14, 8, 10, 9];
   const approximateWidth = planFactColumnWidths.reduce((sum, width) => sum + width, 0) + timelineDates.length * PLAN_FACT_DAY_WIDTH;
   const useLandscape = approximateWidth > 170 || timelineDates.length > 32;
@@ -870,7 +896,7 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         bold: rowIndex === HEADER_LABEL_ROW_INDEX,
         color: rowIndex === HEADER_LABEL_ROW_INDEX && isToday
           ? workbookStyles.colors.todayFont
-          : timelineDate && nonWorkingDates.has(timelineDate)
+          : timelineDate && headerWeekendDates.has(timelineDate)
             ? workbookStyles.colors.weekendHeader
             : workbookStyles.colors.textPrimary,
       };
