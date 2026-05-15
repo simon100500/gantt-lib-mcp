@@ -3,19 +3,14 @@ import { useEffect, useMemo, useCallback, useRef } from 'react';
 import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap } from 'gantt-lib';
 
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
-import { Toolbar } from '../layout/Toolbar.tsx';
+import { Toolbar, type ToolbarTaskListColumnRow } from '../layout/Toolbar.tsx';
 import { useFilterPersistence } from '../../hooks/useFilterPersistence';
 import { useTaskFilter } from '../../hooks/useTaskFilter';
-import { useAuthStore } from '../../stores/useAuthStore.ts';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
-import {
-  TASK_LIST_COLUMN_WIDTHS,
-  normalizeHiddenTaskListColumns,
-  resolveHiddenTaskListColumns,
-} from '../../lib/taskListColumns.ts';
+import { TASK_LIST_COLUMN_WIDTHS } from '../../lib/taskListColumns.ts';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
 import type { Task, ValidationResult } from '../../types.ts';
@@ -28,6 +23,31 @@ import {
   omitPlanFactFields,
   type PlanFactTask,
 } from './projectFactAdapter.ts';
+
+const FACT_TASK_LIST_COLUMN_ROWS: ToolbarTaskListColumnRow[] = [
+  { id: 'number', label: 'Номер' },
+  { id: 'name', label: 'Имя' },
+  { id: 'startDate', label: 'Начало' },
+  { id: 'endDate', label: 'Окончание' },
+  { id: 'duration', label: 'Дни' },
+  { id: 'progress', label: '% выполнения' },
+  { id: 'plan-fact-volume', label: 'Объём' },
+  { id: 'plan-fact-fact', label: 'Факт' },
+];
+
+const FACT_TASK_LIST_COLUMN_IDS = new Set(FACT_TASK_LIST_COLUMN_ROWS.map((column) => column.id));
+const FACT_ALWAYS_HIDDEN_TASK_LIST_COLUMNS: TaskListColumnId[] = [
+  'dependencies',
+  'work-volume',
+  'completed-volume',
+  'status',
+  'assigned-resources',
+];
+const FACT_TASK_LIST_COLUMN_WIDTHS: Record<string, number> = {
+  ...TASK_LIST_COLUMN_WIDTHS,
+  'plan-fact-volume': 96,
+  'plan-fact-fact': 82,
+};
 
 interface ProjectFactWorkspaceProps {
   ganttRef: RefObject<GanttChartRef | null>;
@@ -78,8 +98,6 @@ export function ProjectFactWorkspace({
   setTasks,
   loading,
   accessToken = null,
-  sharedProject,
-  shareToken,
   hasShareToken,
   isAuthenticated,
   batchUpdate,
@@ -96,8 +114,6 @@ export function ProjectFactWorkspace({
   readOnly = false,
   shareStatus = 'idle',
   onCreateShareLink,
-  projectIdOverride = null,
-  hiddenTaskListColumnsDefaultOverride = null,
   viewportOffsetPx = 0,
 }: ProjectFactWorkspaceProps) {
   const workspace = useUIStore((state) => state.workspace);
@@ -107,12 +123,10 @@ export function ProjectFactWorkspace({
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const projectStates = useProjectUIStore((state) => state.projectStates);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
-  const authProject = useAuthStore((state) => state.project);
   const progressEntries = useProjectStore((state) => state.progressEntries);
   const ganttSectionRef = useRef<HTMLDivElement | null>(null);
 
   const projectId = workspace.kind === 'project' ? workspace.projectId : null;
-  const persistedProjectId = projectIdOverride ?? projectId;
   const effectiveReadOnly = readOnly || aiMutationLock.active;
   const workspaceViewportHeight = `calc(100dvh - ${132 + viewportOffsetPx}px)`;
 
@@ -160,48 +174,25 @@ export function ProjectFactWorkspace({
     progressEntries,
   });
 
-  const projectHiddenTaskListColumnsDefault = useMemo<TaskListColumnId[]>(() => {
-    const configuredDefaults = hiddenTaskListColumnsDefaultOverride ?? (
-      hasShareToken
-        ? sharedProject?.hiddenTaskListColumnsDefault
-        : (persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault : null)
-    );
-    return resolveHiddenTaskListColumns({
-      userOverrideInitialized: false,
-      projectHiddenTaskListColumnsDefault: configuredDefaults,
-    });
-  }, [authProject, hasShareToken, hiddenTaskListColumnsDefaultOverride, persistedProjectId, sharedProject]);
-
-  const hiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => {
+  const hiddenFactTaskListColumns = useMemo<TaskListColumnId[]>(() => {
     if (!projectId) {
-      return [...projectHiddenTaskListColumnsDefault];
+      return [];
     }
 
     const projectState = projectStates[projectId];
-    if (!projectState?.taskListColumnsInitialized) {
-      return [...projectHiddenTaskListColumnsDefault];
+    if (!projectState?.factTaskListColumnsInitialized) {
+      return [];
     }
 
-    return normalizeHiddenTaskListColumns(projectState.hiddenTaskListColumns);
-  }, [projectHiddenTaskListColumnsDefault, projectId, projectStates]);
+    return (projectState.hiddenFactTaskListColumns ?? []).flatMap((columnId) => (
+      FACT_TASK_LIST_COLUMN_IDS.has(columnId) ? [columnId as TaskListColumnId] : []
+    ));
+  }, [projectId, projectStates]);
 
-  const factHiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => {
-    const hiddenColumns = new Set<TaskListColumnId>(hiddenTaskListColumns);
-    hiddenColumns.delete('startDate');
-    hiddenColumns.delete('endDate');
-    hiddenColumns.delete('progress');
-    for (const columnId of [
-      'dependencies',
-      'duration',
-      'work-volume',
-      'completed-volume',
-      'status',
-      'assigned-resources',
-    ] as TaskListColumnId[]) {
-      hiddenColumns.add(columnId);
-    }
-    return Array.from(hiddenColumns);
-  }, [hiddenTaskListColumns]);
+  const factHiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => [
+    ...FACT_ALWAYS_HIDDEN_TASK_LIST_COLUMNS,
+    ...hiddenFactTaskListColumns,
+  ], [hiddenFactTaskListColumns]);
 
   const taskListColumnWidths = useMemo<TaskListColumnWidthMap>(() => {
     if (!projectId) {
@@ -216,10 +207,14 @@ export function ProjectFactWorkspace({
   }, [projectId, projectStates]);
 
   const taskListWidth = useMemo(() => (
-    Object.entries(TASK_LIST_COLUMN_WIDTHS).reduce(
-      (width, [columnId]) => factHiddenTaskListColumns.includes(columnId as TaskListColumnId) ? width : width + (taskListColumnWidths[columnId] ?? 0),
+    Object.entries(FACT_TASK_LIST_COLUMN_WIDTHS).reduce(
+      (width, [columnId, defaultWidth]) => (
+        factHiddenTaskListColumns.includes(columnId as TaskListColumnId)
+          ? width
+          : width + (taskListColumnWidths[columnId] ?? defaultWidth)
+      ),
       0,
-    ) + 232
+    )
   ), [factHiddenTaskListColumns, taskListColumnWidths]);
 
   const taskDateChangeMode = useMemo<TaskDateChangeMode>(() => {
@@ -259,7 +254,7 @@ export function ProjectFactWorkspace({
       header: 'Объём',
       width: 96,
       minWidth: 55,
-      after: 'endDate',
+      after: 'duration',
       renderCell: ({ task }) => (
         <TaskWorkMetadataCell
           compact={true}
@@ -299,6 +294,50 @@ export function ProjectFactWorkspace({
 
     setProjectState(projectId, {
       taskListColumnWidths: normalizeTaskListColumnWidthMap(widths),
+    });
+  }, [projectId, setProjectState]);
+
+  const handleToggleTaskListColumn = useCallback((columnId: string) => {
+    if (!projectId || !FACT_TASK_LIST_COLUMN_IDS.has(columnId)) {
+      return;
+    }
+
+    const projectState = getProjectState(projectId);
+    const currentHiddenColumns = projectState?.factTaskListColumnsInitialized
+      ? (projectState.hiddenFactTaskListColumns ?? [])
+      : [];
+    const nextHiddenColumns = new Set(currentHiddenColumns.filter((id) => FACT_TASK_LIST_COLUMN_IDS.has(id)));
+    if (nextHiddenColumns.has(columnId)) {
+      nextHiddenColumns.delete(columnId);
+    } else {
+      nextHiddenColumns.add(columnId);
+    }
+
+    setProjectState(projectId, {
+      factTaskListColumnsInitialized: true,
+      hiddenFactTaskListColumns: Array.from(nextHiddenColumns),
+    });
+  }, [getProjectState, projectId, setProjectState]);
+
+  const handleSetAllTaskListColumnsVisible = useCallback((visible: boolean) => {
+    if (!projectId) {
+      return;
+    }
+
+    setProjectState(projectId, {
+      factTaskListColumnsInitialized: true,
+      hiddenFactTaskListColumns: visible ? [] : FACT_TASK_LIST_COLUMN_ROWS.map((column) => column.id),
+    });
+  }, [projectId, setProjectState]);
+
+  const handleResetTaskListColumns = useCallback(() => {
+    if (!projectId) {
+      return;
+    }
+
+    setProjectState(projectId, {
+      factTaskListColumnsInitialized: false,
+      hiddenFactTaskListColumns: [],
     });
   }, [projectId, setProjectState]);
 
@@ -481,6 +520,12 @@ export function ProjectFactWorkspace({
           onCreateShareLink={onCreateShareLink}
           showShareButton={!hasShareToken && isAuthenticated}
           readOnly={effectiveReadOnly}
+          taskListColumnRows={FACT_TASK_LIST_COLUMN_ROWS}
+          hiddenTaskListColumns={factHiddenTaskListColumns}
+          onToggleTaskListColumn={handleToggleTaskListColumn}
+          onSetAllTaskListColumnsVisible={handleSetAllTaskListColumnsVisible}
+          onResetTaskListColumnOverride={handleResetTaskListColumns}
+          taskListColumnResetLabel="По умолчанию"
           showChatToggle={false}
           showBaselineControls={false}
           showDataMenuControl={false}

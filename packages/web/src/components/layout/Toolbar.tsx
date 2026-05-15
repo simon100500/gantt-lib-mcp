@@ -115,6 +115,7 @@ interface ToolbarProps {
   onToggleTaskListColumn?: (columnId: string) => void;
   onSetAllTaskListColumnsVisible?: (visible: boolean) => void;
   onResetTaskListColumnOverride?: (() => void) | null;
+  taskListColumnResetLabel?: string;
   onOpenProjectSettings?: (() => void) | null;
   canOpenProjectSettings?: boolean;
   templateSelectionActive?: boolean;
@@ -399,6 +400,7 @@ export function Toolbar({
   onToggleTaskListColumn,
   onSetAllTaskListColumnsVisible,
   onResetTaskListColumnOverride,
+  taskListColumnResetLabel = 'Как в настройках проекта',
   onOpenProjectSettings = null,
   canOpenProjectSettings = false,
   templateSelectionActive = false,
@@ -651,18 +653,21 @@ export function Toolbar({
                     <span className="text-sm">Выбрать всё</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-                  <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      onResetTaskListColumnOverride?.();
-                    }}
-                    disabled={!onResetTaskListColumnOverride}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    <span className="text-sm">Как в настройках проекта</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                  {onResetTaskListColumnOverride ? (
+                    <>
+                      <DropdownMenuItem
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          onResetTaskListColumnOverride();
+                        }}
+                        className="flex cursor-pointer items-center gap-2"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        <span className="text-sm">{taskListColumnResetLabel}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                    </>
+                  ) : null}
                   {taskListColumnRows.map((column) => {
                     const checked = !hiddenTaskListColumnSet.has(column.id);
                     return (
@@ -1157,18 +1162,21 @@ export function Toolbar({
                   })}
 
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-                  <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      onResetTaskListColumnOverride?.();
-                    }}
-                    disabled={!onResetTaskListColumnOverride}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    <span className="text-sm">Как в настройках проекта</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                  {onResetTaskListColumnOverride ? (
+                    <>
+                      <DropdownMenuItem
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          onResetTaskListColumnOverride();
+                        }}
+                        className="flex cursor-pointer items-center gap-2"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        <span className="text-sm">{taskListColumnResetLabel}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                    </>
+                  ) : null}
                 </>
               )}
               {showShareButton && onCreateShareLink && (

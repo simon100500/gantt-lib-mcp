@@ -466,6 +466,10 @@ describe('ProjectWorkspace resource assignments', () => {
   });
 
   it('renders the dedicated fact workspace through gantt-lib plan-fact mode with progress entries as daily fact values', async () => {
+    useProjectUIStore.getState().setProjectState('project-1', {
+      taskListColumnsInitialized: true,
+      hiddenTaskListColumns: ['startDate', 'endDate', 'duration', 'progress'],
+    });
     useProjectStore.setState((state) => ({
       ...state,
       progressEntries: [
@@ -507,17 +511,31 @@ describe('ProjectWorkspace resource assignments', () => {
       'plan-fact-fact',
     ]);
     expect(factModeColumns.find((column) => column.id === 'plan-fact-volume')).toEqual(expect.objectContaining({
-      after: 'endDate',
+      after: 'duration',
     }));
-    expect(ganttPropsSpy?.hiddenTaskListColumns).toEqual(expect.arrayContaining([
+    expect(ganttPropsSpy?.hiddenTaskListColumns).toEqual([
+      'dependencies',
       'work-volume',
       'completed-volume',
       'status',
       'assigned-resources',
-    ]));
+    ]);
     expect(ganttPropsSpy?.hiddenTaskListColumns).not.toContain('startDate');
     expect(ganttPropsSpy?.hiddenTaskListColumns).not.toContain('endDate');
+    expect(ganttPropsSpy?.hiddenTaskListColumns).not.toContain('duration');
     expect(ganttPropsSpy?.hiddenTaskListColumns).not.toContain('progress');
+    const toolbarProps = toolbarSpy.mock.calls[toolbarSpy.mock.calls.length - 1]?.[0] as Record<string, unknown>;
+    expect((toolbarProps.taskListColumnRows as Array<{ id: string }>).map((column) => column.id)).toEqual([
+      'number',
+      'name',
+      'startDate',
+      'endDate',
+      'duration',
+      'progress',
+      'plan-fact-volume',
+      'plan-fact-fact',
+    ]);
+    expect(toolbarProps.taskListColumnResetLabel).toBe('По умолчанию');
     expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-volume')?.renderCell({ task: tasks[1]! })}</>)).toContain('10');
     expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-fact')?.renderCell({ task: tasks[1]! })}</>)).toContain('3');
 

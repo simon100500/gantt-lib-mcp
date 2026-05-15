@@ -24,6 +24,8 @@ interface ProjectUIState {
   taskDateChangeMode: TaskDateChangeMode;
   taskListColumnsInitialized: boolean;
   hiddenTaskListColumns: string[];
+  factTaskListColumnsInitialized: boolean;
+  hiddenFactTaskListColumns: string[];
   hiddenFinanceTaskListColumns: string[];
   taskListColumnWidths: TaskListColumnWidthMap;
   financeTaskListColumnWidths: TaskListColumnWidthMap;
@@ -55,6 +57,8 @@ const DEFAULT_STATE: ProjectUIState = {
   taskDateChangeMode: 'preserve-duration',
   taskListColumnsInitialized: false,
   hiddenTaskListColumns: [],
+  factTaskListColumnsInitialized: false,
+  hiddenFactTaskListColumns: [],
   hiddenFinanceTaskListColumns: [],
   taskListColumnWidths: {},
   financeTaskListColumnWidths: {},

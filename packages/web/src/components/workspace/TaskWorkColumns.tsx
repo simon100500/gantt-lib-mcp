@@ -855,7 +855,7 @@ export function createTaskWorkColumns({
     },
     {
       id: 'completed-volume',
-      header: 'Вып.',
+      header: 'Факт',
       width: 82,
       minWidth: 50,
       after: 'work-volume',
