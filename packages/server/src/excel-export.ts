@@ -61,6 +61,7 @@ const GRID_FILL = 'FFFFFFFF';
 const GRID_BORDER = 'FFE2E8F0';
 const WEEK_BORDER = 'FF93C5FD';
 const MONTH_BORDER = 'FF64748B';
+const PLAN_FACT_PAIR_BORDER = 'FFCCCCCC';
 const PARENT_TASKLIST_FILLS = ['FF64748B', 'FF94A3B8', 'FFCBD5E1'] as const;
 const PARENT_TIMELINE_FILLS = ['FF475569', 'FF6B7280', 'FF94A3B8'] as const;
 const GROUP_SEPARATOR_BORDER = 'FF4B5563';
@@ -68,6 +69,7 @@ const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
 const STATIC_COLUMN_WIDTHS = [8, 44, 14, 14, 12, 8, 20];
 const DAY_WIDTH = 21 / 7;
+const PLAN_FACT_DAY_WIDTH = 28 / 7;
 const A4_PAPER_SIZE = 9;
 const GETGANTT_THEME_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="GetGantt Theme">
@@ -390,6 +392,35 @@ function buildFactByDate(task: ExportTask): Record<string, number> | undefined {
   return Object.keys(values).length > 0 ? values : undefined;
 }
 
+function getFactDateKeys(factByDate: Record<string, number> | undefined): string[] {
+  return Object.keys(factByDate ?? {})
+    .filter((dateKey) => Number.isFinite(factByDate?.[dateKey]))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function getFactSummary(task: ExportTask, factByDate: Record<string, number> | undefined): {
+  total: number | null;
+  actualStartDate: string | null;
+  actualEndDate: string | null;
+  percent: number | null;
+  isComplete: boolean;
+} {
+  const factEntries = Object.entries(factByDate ?? {}).filter(([, value]) => Number.isFinite(value));
+  const factTotal = factEntries.reduce((sum, [, value]) => sum + value, 0);
+  const factDateKeys = getFactDateKeys(factByDate);
+  const planTotal = task.workVolume ?? null;
+  const percent = planTotal && planTotal > 0 ? factTotal / planTotal : null;
+  const isComplete = percent !== null && percent >= 1;
+
+  return {
+    total: factEntries.length > 0 ? factTotal : null,
+    actualStartDate: factDateKeys[0] ?? null,
+    actualEndDate: isComplete ? (factDateKeys[factDateKeys.length - 1] ?? null) : null,
+    percent,
+    isComplete,
+  };
+}
+
 function buildTimelineRange(tasks: ExportTask[]): string[] {
   if (tasks.length === 0) return [];
   const minDate = tasks.reduce((min, task) => task.startDate < min ? task.startDate : min, tasks[0]!.startDate);
@@ -685,6 +716,15 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
   };
 }
 
+function applyPlanFactPairEdge(cell: ExcelJS.Cell, edge: 'top' | 'bottom'): void {
+  cell.border = {
+    top: edge === 'top' ? { style: 'medium', color: { argb: PLAN_FACT_PAIR_BORDER } } : cell.border?.top,
+    left: cell.border?.left,
+    bottom: edge === 'bottom' ? { style: 'medium', color: { argb: PLAN_FACT_PAIR_BORDER } } : cell.border?.bottom,
+    right: cell.border?.right,
+  };
+}
+
 function buildPlanFactTimelineData(tasks: ExportTask[]) {
   const parentTaskIds = new Set(tasks.filter((task) => task.parentId).map((task) => task.parentId!));
   const planByTaskId = new Map<string, Record<string, number> | undefined>();
@@ -746,7 +786,8 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
   const monthHeaders = suppressRepeatedLabels(timelineDates.map(formatMonthLabel));
   const totalColumnCount = STATIC_COLUMN_COUNT + timelineDates.length;
   const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarWeeklyPattern, data.calendarDays, timelineDates);
-  const approximateWidth = STATIC_COLUMN_WIDTHS.reduce((sum, width) => sum + width, 0) + timelineDates.length * DAY_WIDTH;
+  const planFactColumnWidths = [8, 48, 14, 14, 8, 10, 9];
+  const approximateWidth = planFactColumnWidths.reduce((sum, width) => sum + width, 0) + timelineDates.length * PLAN_FACT_DAY_WIDTH;
   const useLandscape = approximateWidth > 170 || timelineDates.length > 32;
 
   sheet.pageSetup = {
@@ -770,14 +811,14 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
   sheet.headerFooter.oddFooter = `&LGetGantt.ru&CДата экспорта: ${formatExportDate(exportDate)}&RСтраница &P из &N`;
 
   sheet.columns = [
-    { width: STATIC_COLUMN_WIDTHS[0] },
-    { width: STATIC_COLUMN_WIDTHS[1] },
-    { width: 10 },
-    { width: STATIC_COLUMN_WIDTHS[2] },
-    { width: STATIC_COLUMN_WIDTHS[3] },
-    { width: 12 },
-    { width: 12 },
-    ...timelineDates.map(() => ({ width: DAY_WIDTH })),
+    { width: planFactColumnWidths[0] },
+    { width: planFactColumnWidths[1] },
+    { width: planFactColumnWidths[2] },
+    { width: planFactColumnWidths[3] },
+    { width: planFactColumnWidths[4] },
+    { width: planFactColumnWidths[5] },
+    { width: planFactColumnWidths[6] },
+    ...timelineDates.map(() => ({ width: PLAN_FACT_DAY_WIDTH })),
   ];
 
   const separatorKinds = timelineDates.map((date, index) => {
@@ -793,7 +834,7 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
 
   sheet.addRow([`ГетГант / ${data.projectName} / План-факт`]);
   sheet.addRow([null, null, null, null, null, null, null, ...monthHeaders.map((value) => value || null)]);
-  sheet.addRow(['№', 'Задача', 'Строка', 'Начало', 'Оконч.', 'Объём', 'Факт', ...timelineDates.map((value) => formatDayNumber(value))]);
+  sheet.addRow(['№', 'Задача', 'Начало', 'Оконч.', '', 'Объём', '', ...timelineDates.map((value) => formatDayNumber(value))]);
 
   sheet.getRow(TITLE_ROW_INDEX).getCell(1).style = cloneStyle(workbookStyles.styles.title);
 
@@ -826,10 +867,10 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         rowIndex === MONTH_ROW_INDEX ? workbookStyles.styles.headerTimelineLevel2 : workbookStyles.styles.headerTimeline,
       );
       cell.font = {
-        bold: true,
+        bold: rowIndex === HEADER_LABEL_ROW_INDEX,
         color: rowIndex === HEADER_LABEL_ROW_INDEX && isToday
           ? workbookStyles.colors.todayFont
-          : rowIndex === HEADER_LABEL_ROW_INDEX && timelineDate && nonWorkingDates.has(timelineDate)
+          : timelineDate && nonWorkingDates.has(timelineDate)
             ? workbookStyles.colors.weekendHeader
             : workbookStyles.colors.textPrimary,
       };
@@ -841,7 +882,7 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         : workbookStyles.alignments.headerCenter;
       applyTimelineSeparator(cell, headerSeparatorKind, {
         verticalLines: false,
-        todayLine: isToday,
+        todayLine: rowIndex !== MONTH_ROW_INDEX && isToday,
       });
     }
   }
@@ -856,7 +897,7 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
       );
     }
     emptyRow.getCell(2).font = { italic: true, color: workbookStyles.colors.textPrimary };
-    setRowHeightFromContent(emptyRow, 'Нет задач', STATIC_COLUMN_WIDTHS[1], 0);
+    setRowHeightFromContent(emptyRow, 'Нет задач', planFactColumnWidths[1], 0);
     sheet.pageSetup.printArea = `A1:${columnNumberToName(Math.max(STATIC_COLUMN_COUNT, totalColumnCount))}${emptyRow.number}`;
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
@@ -865,33 +906,38 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
   const planFill = workbookStyles.styles.taskTimeline.default;
   const factFill = solidFill({ argb: 'FFE0F2E9' });
   const factWarningFill = solidFill({ argb: 'FFFCE7F3' });
+  const positiveFontColor = { argb: 'FF15803D' };
+  const negativeFontColor = { argb: 'FFDC2626' };
 
   for (const rowData of flattenedRows) {
     const planByDate = planByTaskId.get(rowData.task.id);
     const factByDate = factByTaskId.get(rowData.task.id);
-    const planTotal = rowData.isParent ? null : rowData.task.workVolume ?? null;
-    const factTotal = rowData.isParent ? null : Object.values(factByDate ?? {}).reduce((sum, value) => sum + value, 0);
+    const planTotal = rowData.task.workVolume ?? null;
+    const factSummary = getFactSummary(rowData.task, factByDate);
 
     const planRow = sheet.addRow([
       rowData.outlineNumber,
       rowData.task.name,
-      'План',
       rowData.task.startDate,
       rowData.task.endDate,
-      planTotal,
-      null,
-    ]);
-    const factRow = sheet.addRow([
-      rowData.outlineNumber,
-      rowData.task.name,
-      'Факт',
-      rowData.task.startDate,
-      rowData.task.endDate,
-      null,
-      factTotal,
+      rowData.isParent ? null : 'План',
+      rowData.isParent ? null : planTotal,
+      rowData.isParent ? null : rowData.task.workUnit ?? null,
     ]);
 
-    for (const row of [planRow, factRow]) {
+    const factRow = rowData.isParent
+      ? null
+      : sheet.addRow([
+        rowData.outlineNumber,
+        rowData.task.name,
+        factSummary.actualStartDate,
+        factSummary.actualEndDate,
+        'Факт',
+        factSummary.total,
+        factSummary.percent,
+      ]);
+
+    for (const row of factRow ? [planRow, factRow] : [planRow]) {
       row.height = 18;
       row.getCell(1).alignment = baseAlignment('left');
       row.getCell(2).alignment = { ...baseAlignment('left'), indent: rowData.depth };
@@ -900,20 +946,56 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
       row.getCell(5).alignment = baseAlignment('center');
       row.getCell(6).alignment = baseAlignment('center');
       row.getCell(7).alignment = baseAlignment('center');
-      row.getCell(4).numFmt = 'dd.mm.yyyy';
-      row.getCell(5).numFmt = 'dd.mm.yyyy';
-      row.getCell(4).value = parseIsoDate(rowData.task.startDate);
-      row.getCell(5).value = parseIsoDate(rowData.task.endDate);
+
+      const startValue = row.getCell(3).value;
+      const endValue = row.getCell(4).value;
+      if (typeof startValue === 'string' && startValue) {
+        row.getCell(3).numFmt = 'dd.mm.yyyy';
+        row.getCell(3).value = parseIsoDate(startValue);
+      }
+      if (typeof endValue === 'string' && endValue) {
+        row.getCell(4).numFmt = 'dd.mm.yyyy';
+        row.getCell(4).value = parseIsoDate(endValue);
+      }
+      if (row === factRow && factSummary.percent !== null) {
+        row.getCell(7).numFmt = '0%';
+      }
+      if (row === planRow && !rowData.isParent) {
+        row.getCell(3).font = { ...(row.getCell(3).font ?? {}), bold: true, color: workbookStyles.colors.textPrimary };
+        row.getCell(4).font = { ...(row.getCell(4).font ?? {}), bold: true, color: workbookStyles.colors.textPrimary };
+        row.getCell(5).font = { ...(row.getCell(5).font ?? {}), bold: true };
+        row.getCell(6).font = { ...(row.getCell(6).font ?? {}), bold: true };
+        row.getCell(7).font = { ...(row.getCell(7).font ?? {}), bold: true };
+      }
+      if (row === planRow && rowData.isParent) {
+        row.getCell(3).font = { ...(row.getCell(3).font ?? {}), bold: true, color: workbookStyles.colors.textPrimary };
+        row.getCell(4).font = { ...(row.getCell(4).font ?? {}), bold: true, color: workbookStyles.colors.textPrimary };
+      }
 
       for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
         const cell = row.getCell(columnIndex);
         cell.alignment = columnIndex > STATIC_COLUMN_COUNT ? baseAlignment('center') : cell.alignment ?? baseAlignment('left');
         if (columnIndex > STATIC_COLUMN_COUNT) {
           cell.style = mergeStyle(workbookStyles.styles.timelineBase, { alignment: baseAlignment('center') });
-          applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
-            verticalLines: true,
-            todayLine: timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1] === todayIso,
-          });
+          if (rowData.isParent) {
+            const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
+            const separatorKind = separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day';
+            cell.border = {
+              top: { style: 'thin', color: { argb: GRID_BORDER } },
+              bottom: { style: 'thin', color: { argb: GRID_BORDER } },
+              left: timelineDate === todayIso
+                ? { style: 'medium', color: { argb: TODAY_BORDER } }
+                : separatorKind === 'month'
+                  ? { style: 'medium', color: themeColor(THEME.accent1) }
+                  : undefined,
+              right: undefined,
+            };
+          } else {
+            applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
+              verticalLines: true,
+              todayLine: timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1] === todayIso,
+            });
+          }
         } else {
           applyCellBorder(cell);
         }
@@ -922,13 +1004,36 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
 
     if (rowData.isParent) {
       const paletteIndex = Math.min(rowData.depth, workbookStyles.styles.parentTasklist.length - 1);
-      for (const row of [planRow, factRow]) {
+      const sharedParentFill = workbookStyles.styles.parentTasklist[paletteIndex];
+      for (const row of factRow ? [planRow, factRow] : [planRow]) {
         row.getCell(2).font = { bold: true, color: workbookStyles.colors.textPrimary };
         for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
           const cell = row.getCell(columnIndex);
           cell.border = boxBorder('thin', workbookStyles.colors.gridBorder);
-          cell.fill = workbookStyles.styles.parentTasklist[paletteIndex];
+          cell.fill = sharedParentFill;
         }
+        for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+          const cell = row.getCell(columnIndex);
+          cell.fill = sharedParentFill;
+        }
+      }
+    }
+
+    if (factRow) {
+      sheet.mergeCells(planRow.number, 1, factRow.number, 1);
+      sheet.mergeCells(planRow.number, 2, factRow.number, 2);
+      planRow.getCell(1).value = rowData.outlineNumber;
+      planRow.getCell(2).value = rowData.task.name;
+      planRow.getCell(1).alignment = { ...baseAlignment('left'), vertical: 'middle' };
+      planRow.getCell(2).alignment = { ...baseAlignment('left'), indent: rowData.depth, vertical: 'middle' };
+    }
+
+    for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+      applyPlanFactPairEdge(planRow.getCell(columnIndex), 'top');
+      if (factRow) {
+        applyPlanFactPairEdge(factRow.getCell(columnIndex), 'bottom');
+      } else {
+        applyPlanFactPairEdge(planRow.getCell(columnIndex), 'bottom');
       }
     }
 
@@ -948,20 +1053,46 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
         planRow.getCell(columnIndex).value = planValue;
       }
 
-      if (isFactBelowPlan || isPastDueMissingFact) {
-        factRow.getCell(columnIndex).fill = factWarningFill;
-        factRow.getCell(columnIndex).font = { color: { argb: 'FFDC2626' } };
-      } else if (factValue !== undefined) {
-        factRow.getCell(columnIndex).fill = factFill;
-        factRow.getCell(columnIndex).font = { color: { argb: 'FF15803D' } };
-      }
-      if (factValue !== undefined) {
-        factRow.getCell(columnIndex).value = factValue;
+      if (factRow) {
+        if (isFactBelowPlan || isPastDueMissingFact) {
+          factRow.getCell(columnIndex).fill = factWarningFill;
+          factRow.getCell(columnIndex).font = { color: negativeFontColor };
+        } else if (factValue !== undefined) {
+          factRow.getCell(columnIndex).fill = factFill;
+          factRow.getCell(columnIndex).font = { color: positiveFontColor };
+        }
+        if (factValue !== undefined) {
+          factRow.getCell(columnIndex).value = factValue;
+        }
       }
     }
 
+    if (factRow) {
+      const isStartDelayed = factSummary.actualStartDate !== null && factSummary.actualStartDate > rowData.task.startDate;
+      const isEndDelayed = factSummary.actualEndDate !== null && factSummary.actualEndDate > rowData.task.endDate;
+      if (factSummary.actualStartDate !== null) {
+        factRow.getCell(3).font = { color: isStartDelayed ? negativeFontColor : positiveFontColor, italic: true };
+      }
+      if (factSummary.actualEndDate !== null) {
+        factRow.getCell(4).font = { color: isEndDelayed ? negativeFontColor : positiveFontColor, italic: true };
+      }
+      if (factSummary.total !== null) {
+        factRow.getCell(6).font = {
+          color: (planTotal !== null && factSummary.total < planTotal) ? negativeFontColor : positiveFontColor,
+          italic: true,
+        };
+      }
+      if (factSummary.percent !== null) {
+        factRow.getCell(7).font = {
+          color: factSummary.percent < 1 ? negativeFontColor : positiveFontColor,
+          italic: true,
+        };
+      }
+      factRow.getCell(5).font = { italic: true, color: workbookStyles.colors.textPrimary };
+    }
+
     if (rowData.isParent && rowData.depth === 0) {
-      for (const row of [planRow, factRow]) {
+      for (const row of factRow ? [planRow, factRow] : [planRow]) {
         for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
           applyGroupSeparatorTop(row.getCell(columnIndex));
         }

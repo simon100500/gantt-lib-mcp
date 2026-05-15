@@ -291,6 +291,7 @@ describe('buildProjectExcelExportBuffer', () => {
           color: '#2563EB',
           progress: 0,
           workVolume: 3,
+          workUnit: 'м',
           completedVolume: 2,
           progressEntries: [
             { entryDate: toIsoDate(today), amount: 0 },
@@ -304,13 +305,22 @@ describe('buildProjectExcelExportBuffer', () => {
     const sheet = workbook.getWorksheet('План-факт');
     assert.ok(sheet);
     assert.equal(sheet.getCell('A1').value, 'ГетГант / Fact Demo / План-факт');
-    assert.equal(sheet.getCell('C3').value, 'Строка');
+    assert.equal(sheet.getCell('C3').value, 'Начало');
+    assert.equal(sheet.getCell('D3').value, 'Оконч.');
+    assert.equal(sheet.getCell('E3').value, '');
     assert.equal(sheet.getCell('F3').value, 'Объём');
-    assert.equal(sheet.getCell('G3').value, 'Факт');
-    assert.equal(sheet.getCell('C4').value, 'План');
-    assert.equal(sheet.getCell('C5').value, 'Факт');
+    assert.equal(sheet.getCell('G3').value, '');
+    assert.ok((sheet.getColumn('E').width ?? 0) < 10);
+    assert.ok(Math.abs((sheet.getColumn('H').width ?? 0) - (28 / 7)) < 0.25);
+    assert.equal(sheet.getCell('E4').value, 'План');
+    assert.equal(sheet.getCell('E5').value, 'Факт');
     assert.equal(sheet.getCell('F4').value, 3);
-    assert.equal(sheet.getCell('G5').value, 2);
+    assert.equal(sheet.getCell('F5').value, 2);
+    assert.equal(sheet.getCell('G4').value, 'м');
+    assert.equal(sheet.getCell('G5').value, 2 / 3);
+    assert.equal(sheet.getCell('G5').numFmt, '0%');
+    assert.ok((sheet.model.merges ?? []).includes('A4:A5'));
+    assert.ok((sheet.model.merges ?? []).includes('B4:B5'));
     assert.equal(sheet.getCell(`${yesterdayColumnName}4`).value, 1);
     assert.equal(sheet.getCell(`${todayColumnName}4`).value, 1);
     assert.equal(sheet.getCell(`${tomorrowColumnName}4`).value, 1);
@@ -321,6 +331,10 @@ describe('buildProjectExcelExportBuffer', () => {
     assertArgbColor((sheet.getCell(`${tomorrowColumnName}5`).fill as any)?.fgColor, 'FFE0F2E9');
     assertArgbColor((sheet.getCell(`${tomorrowColumnName}5`).font as any)?.color, 'FF15803D');
     assert.equal(sheet.getCell(`${tomorrowColumnName}5`).value, 2);
+    assertArgbColor((sheet.getCell('C5').font as any)?.color, 'FFDC2626');
+    assert.equal(sheet.getCell('D5').value, null);
+    assertArgbColor((sheet.getCell('F5').font as any)?.color, 'FFDC2626');
+    assertArgbColor((sheet.getCell('G5').font as any)?.color, 'FFDC2626');
   });
 });
 

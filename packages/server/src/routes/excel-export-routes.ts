@@ -60,10 +60,11 @@ export async function registerExcelExportRoutes(fastify: FastifyInstance): Promi
     }
 
     const data = await loadProjectExcelExportData(req.user!.projectId);
-    const buffer = await buildProjectExcelExportBuffer(data, {
-      mode: req.query.mode === 'plan-fact' ? 'plan-fact' : 'gantt',
-    });
-    const fileName = `${sanitizeFileName(data.projectName)} - ${buildExportTimestamp(new Date())}.xlsx`;
+    const mode = req.query.mode === 'plan-fact' ? 'plan-fact' : 'gantt';
+    const buffer = await buildProjectExcelExportBuffer(data, { mode });
+    const fileName = mode === 'plan-fact'
+      ? `${sanitizeFileName(data.projectName)}. План-факт. ${buildExportTimestamp(new Date())}.xlsx`
+      : `${sanitizeFileName(data.projectName)} - ${buildExportTimestamp(new Date())}.xlsx`;
     const asciiFileName = toAsciiFileName(fileName);
     const encodedFileName = encodeURIComponent(fileName);
 
