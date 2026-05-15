@@ -107,8 +107,8 @@ installDomPolyfills();
 const ganttRef = { current: null };
 const tasks: Task[] = [
   { id: 'parent-1', name: 'Parent', startDate: '2026-04-01', endDate: '2026-04-02', dependencies: [] },
-  { id: 'leaf-1', name: 'Leaf A', startDate: '2026-04-01', endDate: '2026-04-02', parentId: 'parent-1', dependencies: [] },
-  { id: 'leaf-2', name: 'Leaf B', startDate: '2026-04-02', endDate: '2026-04-03', parentId: 'parent-1', dependencies: [] },
+  { id: 'leaf-1', name: 'Leaf A', startDate: '2026-04-01', endDate: '2026-04-02', parentId: 'parent-1', workVolume: 10, completedVolume: 3, dependencies: [] },
+  { id: 'leaf-2', name: 'Leaf B', startDate: '2026-04-02', endDate: '2026-04-03', parentId: 'parent-1', workVolume: 8, completedVolume: 0, dependencies: [] },
   { id: 'solo-parent', name: 'Solo Parent', startDate: '2026-04-03', endDate: '2026-04-04', dependencies: [] },
 ];
 
@@ -429,6 +429,46 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(assignedResourcesColumn).toBeTruthy();
     expect(assignedResourcesColumn?.header).toBe('Ресурсы');
     expect(container.querySelector('[data-testid="assignment-summary"]')).toBeNull();
+
+    await unmountWorkspace(root);
+  });
+
+  it('renders the fact tab through gantt-lib plan-fact mode with progress entries as daily fact values', async () => {
+    useProjectUIStore.getState().setProjectState('project-1', { projectDisplayMode: 'fact' });
+    useProjectStore.setState((state) => ({
+      ...state,
+      progressEntries: [
+        {
+          id: 'entry-1',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-01',
+          amount: 3,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    }));
+
+    const { root } = await renderWorkspace();
+
+    expect(toolbarSpy).toHaveBeenLastCalledWith(expect.objectContaining({ displayMode: 'fact' }));
+    expect(ganttPropsSpy).toEqual(expect.objectContaining({
+      mode: 'plan-fact',
+      rowHeight: 46,
+      dayWidth: 42,
+      showTaskList: true,
+      showChart: true,
+      disableTaskDrag: true,
+    }));
+    const renderedTasks = ganttPropsSpy?.tasks as Array<Task & { planByDate?: Record<string, number>; factByDate?: Record<string, number> }>;
+    expect(renderedTasks.find((task) => task.id === 'leaf-1')?.planByDate).toEqual({
+      '2026-04-01': 5,
+      '2026-04-02': 5,
+    });
+    expect(renderedTasks.find((task) => task.id === 'leaf-1')?.factByDate).toEqual({
+      '2026-04-01': 3,
+    });
 
     await unmountWorkspace(root);
   });

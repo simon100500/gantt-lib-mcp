@@ -61,6 +61,8 @@ export interface ToolbarTaskListColumnRow {
   label: string;
 }
 
+export type ToolbarDisplayMode = 'gantt' | 'fact';
+
 interface ToolbarProps {
   showChatToggle?: boolean;
   isChatOpen?: boolean;
@@ -79,6 +81,8 @@ interface ToolbarProps {
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   showShareButton?: boolean;
+  displayMode?: ToolbarDisplayMode;
+  onDisplayModeChange?: (mode: ToolbarDisplayMode) => void;
   viewMode?: 'day' | 'week' | 'month';
   onViewModeChange?: (viewMode: 'day' | 'week' | 'month') => void;
   disableTaskDrag?: boolean;
@@ -362,6 +366,8 @@ export function Toolbar({
   shareStatus = 'idle',
   onCreateShareLink,
   showShareButton = false,
+  displayMode = 'gantt',
+  onDisplayModeChange,
   viewMode: externalViewMode,
   onViewModeChange,
   disableTaskDrag: externalDisableTaskDrag,
@@ -467,6 +473,7 @@ export function Toolbar({
     : null;
 
   const currentViewMode = externalViewMode ?? viewMode;
+  const currentDisplayMode = displayMode;
   const handleViewModeChange = onViewModeChange ?? setViewMode;
   const mutationLocked = readOnly || previewMode;
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
@@ -564,6 +571,38 @@ export function Toolbar({
           <ChartNoAxesGantt className="h-3.5 w-3.5" />
           <span className="hidden md:inline">Гант</span>
         </button>
+      </div>
+
+      <div className="inline-flex rounded-md">
+        {([
+          { mode: 'gantt' as const, label: 'График', shortLabel: 'Г', icon: ChartNoAxesGantt },
+          { mode: 'fact' as const, label: 'Факт', shortLabel: 'Ф', icon: Check },
+        ]).map((item, index, rows) => {
+          const Icon = item.icon;
+          const active = currentDisplayMode === item.mode;
+          return (
+            <button
+              key={item.mode}
+              type="button"
+              onClick={() => onDisplayModeChange?.(item.mode)}
+              disabled={!onDisplayModeChange}
+              className={cn(
+                'relative ml-[-1px] flex h-8 items-center gap-1.5 border px-2.5 text-xs font-medium transition-colors first:ml-0 focus-visible:outline-none disabled:cursor-default disabled:opacity-60',
+                index === 0 && 'rounded-l-md',
+                index === rows.length - 1 && 'rounded-r-md',
+                active
+                  ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
+                  : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
+              )}
+              aria-pressed={active}
+              title={item.label}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">{item.label}</span>
+              <span className="md:hidden">{item.shortLabel}</span>
+            </button>
+          );
+        })}
       </div>
 
       <Button
@@ -1009,69 +1048,73 @@ export function Toolbar({
         </Button>
       </FilterPopup>
 
-      <div className="inline-flex rounded-md">
-        {(['day', 'week', 'month'] as const).map((nextMode, index) => (
-          <button
-            key={nextMode}
-            type="button"
-            onClick={() => handleViewModeChange(nextMode)}
-            className={cn(
-              'hidden h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border sm:flex',
-              index === 0 && 'rounded-l-md',
-              index === 2 && 'rounded-r-md',
-              currentViewMode === nextMode
-                ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
-                : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
-            )}
-          >
-            {nextMode === 'day' && (
-              <>
-                <span className="hidden sm:inline">День</span>
-                <span className="sm:hidden">Д</span>
-              </>
-            )}
-            {nextMode === 'week' && (
-              <>
-                <span className="hidden sm:inline">Неделя</span>
-                <span className="sm:hidden">Н</span>
-              </>
-            )}
-            {nextMode === 'month' && (
-              <>
-                <span className="hidden sm:inline">Месяц</span>
-                <span className="sm:hidden">М</span>
-              </>
-            )}
-          </button>
-        ))}
-      </div>
+      {currentDisplayMode === 'gantt' && (
+        <>
+          <div className="inline-flex rounded-md">
+            {(['day', 'week', 'month'] as const).map((nextMode, index) => (
+              <button
+                key={nextMode}
+                type="button"
+                onClick={() => handleViewModeChange(nextMode)}
+                className={cn(
+                  'hidden h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border sm:flex',
+                  index === 0 && 'rounded-l-md',
+                  index === 2 && 'rounded-r-md',
+                  currentViewMode === nextMode
+                    ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
+                    : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
+                )}
+              >
+                {nextMode === 'day' && (
+                  <>
+                    <span className="hidden sm:inline">День</span>
+                    <span className="sm:hidden">Д</span>
+                  </>
+                )}
+                {nextMode === 'week' && (
+                  <>
+                    <span className="hidden sm:inline">Неделя</span>
+                    <span className="sm:hidden">Н</span>
+                  </>
+                )}
+                {nextMode === 'month' && (
+                  <>
+                    <span className="hidden sm:inline">Месяц</span>
+                    <span className="sm:hidden">М</span>
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
 
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none sm:hidden"
-            title="Масштаб"
-          >
-            <span>{currentViewMode === 'day' ? 'День' : currentViewMode === 'week' ? 'Неделя' : 'Месяц'}</span>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-40 sm:hidden">
-          {(['day', 'week', 'month'] as const).map((nextMode) => (
-            <DropdownMenuItem
-              key={nextMode}
-              onClick={() => handleViewModeChange(nextMode)}
-              className={cn(
-                'flex cursor-pointer items-center gap-2',
-                currentViewMode === nextMode && 'bg-primary/5 text-primary',
-              )}
-            >
-              <span className="text-sm">{nextMode === 'day' ? 'День' : nextMode === 'week' ? 'Неделя' : 'Месяц'}</span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none sm:hidden"
+                title="Масштаб"
+              >
+                <span>{currentViewMode === 'day' ? 'День' : currentViewMode === 'week' ? 'Неделя' : 'Месяц'}</span>
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40 sm:hidden">
+              {(['day', 'week', 'month'] as const).map((nextMode) => (
+                <DropdownMenuItem
+                  key={nextMode}
+                  onClick={() => handleViewModeChange(nextMode)}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2',
+                    currentViewMode === nextMode && 'bg-primary/5 text-primary',
+                  )}
+                >
+                  <span className="text-sm">{nextMode === 'day' ? 'День' : nextMode === 'week' ? 'Неделя' : 'Месяц'}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )}
 
       {showOverflowMenuControl && (
         <>

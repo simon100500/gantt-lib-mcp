@@ -17,6 +17,7 @@ interface ProjectBaselineSelectionState {
 
 interface ProjectUIState {
   viewMode: ViewMode;
+  projectDisplayMode: 'gantt' | 'fact';
   activeWorkspace: 'project' | 'planner' | 'finance';
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
@@ -47,6 +48,7 @@ interface ProjectUIStore {
 
 const DEFAULT_STATE: ProjectUIState = {
   viewMode: 'day',
+  projectDisplayMode: 'gantt',
   activeWorkspace: 'project',
   collapsedParentIds: [],
   disableTaskDrag: false,
