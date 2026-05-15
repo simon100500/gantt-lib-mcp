@@ -127,6 +127,7 @@ interface ToolbarProps {
   showExpiredToggle?: boolean;
   showUndoControl?: boolean;
   showOverflowMenuControl?: boolean;
+  showDataMenuControl?: boolean;
   showViewScaleControl?: boolean;
   showTaskChartToggle?: boolean;
 }
@@ -410,6 +411,7 @@ export function Toolbar({
   showExpiredToggle = true,
   showUndoControl = true,
   showOverflowMenuControl = true,
+  showDataMenuControl = true,
   showViewScaleControl = true,
   showTaskChartToggle = true,
 }: ToolbarProps) {
@@ -478,7 +480,12 @@ export function Toolbar({
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || onExportBackup || (showShareButton && onCreateShareLink));
   const hasTemplateAction = Boolean(onStartTemplateSelection);
-  const hasDataMenu = hasTemplateAction || Boolean(onInsertTemplateToProject) || Boolean(onImportExcel) || Boolean(onImportBackup);
+  const hasDataMenu = showDataMenuControl && (
+    hasTemplateAction
+    || Boolean(onInsertTemplateToProject)
+    || Boolean(onImportExcel)
+    || Boolean(onImportBackup)
+  );
   const showClosedTaskStrikeToggle = true;
   const hasViewMenu = showStructureControls || Boolean(taskListColumnRows?.length) || showExpiredToggle || showClosedTaskStrikeToggle;
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
@@ -1216,7 +1223,7 @@ export function Toolbar({
                   <span className="text-sm">Резервная копия</span>
                 </DropdownMenuItem>
               )}
-              {onImportBackup && (
+              {showDataMenuControl && onImportBackup && (
                 <DropdownMenuItem
                   onClick={onImportBackup}
                   className="flex cursor-pointer items-center gap-2"
@@ -1225,7 +1232,9 @@ export function Toolbar({
                   <span className="text-sm">Из резервной копии</span>
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+              {showDataMenuControl && (
+                <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+              )}
               {taskListColumnRows && taskListColumnRows.length > 0 && (
                 <>
                   <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">

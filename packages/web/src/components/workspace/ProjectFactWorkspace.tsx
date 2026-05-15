@@ -24,7 +24,6 @@ import { useTaskWorkProgressMutations } from './useTaskWorkProgressMutations.ts'
 import {
   buildFactByDate,
   buildPlanByDate,
-  formatFactMetric,
   numberMapsEqual,
   omitPlanFactFields,
   type PlanFactTask,
@@ -143,17 +142,6 @@ export function ProjectFactWorkspace({
     return entriesByTaskId;
   }, [progressEntries]);
 
-  const factAmountByTaskId = useMemo(() => {
-    const amountsByTaskId = new Map<string, number>();
-    for (const entry of progressEntries) {
-      if (!Number.isFinite(entry.amount)) {
-        continue;
-      }
-      amountsByTaskId.set(entry.taskId, (amountsByTaskId.get(entry.taskId) ?? 0) + entry.amount);
-    }
-    return amountsByTaskId;
-  }, [progressEntries]);
-
   const {
     workProgressLoadingTaskIds,
     handleUpdateTaskWorkMetadata,
@@ -199,9 +187,11 @@ export function ProjectFactWorkspace({
 
   const factHiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => {
     const hiddenColumns = new Set<TaskListColumnId>(hiddenTaskListColumns);
+    hiddenColumns.delete('startDate');
+    hiddenColumns.delete('endDate');
+    hiddenColumns.delete('progress');
     for (const columnId of [
       'dependencies',
-      'progress',
       'duration',
       'work-volume',
       'completed-volume',
@@ -269,7 +259,7 @@ export function ProjectFactWorkspace({
       header: 'Объём',
       width: 96,
       minWidth: 55,
-      after: 'name',
+      after: 'endDate',
       renderCell: ({ task }) => (
         <TaskWorkMetadataCell
           compact={true}
@@ -300,21 +290,7 @@ export function ProjectFactWorkspace({
         />
       ),
     },
-    {
-      id: 'plan-fact-percent',
-      header: '%',
-      width: 58,
-      minWidth: 48,
-      after: 'plan-fact-fact',
-      renderCell: ({ task }) => {
-        if (parentTaskIds.has(task.id) || !task.workVolume || task.workVolume <= 0) {
-          return '';
-        }
-        const factAmount = factAmountByTaskId.get(task.id) ?? 0;
-        return `${formatFactMetric((factAmount / task.workVolume) * 100, 1)}%`;
-      },
-    },
-  ], [effectiveReadOnly, factAmountByTaskId, handleUpdateTaskWorkMetadata, parentTaskIds, progressEntriesByTaskId]);
+  ], [effectiveReadOnly, handleUpdateTaskWorkMetadata, parentTaskIds, progressEntriesByTaskId, workProgressLoadingTaskIds]);
 
   const handleTaskListColumnWidthsChange = useCallback((widths: TaskListColumnWidthMap) => {
     if (!projectId) {
@@ -506,6 +482,8 @@ export function ProjectFactWorkspace({
           showShareButton={!hasShareToken && isAuthenticated}
           readOnly={effectiveReadOnly}
           showChatToggle={false}
+          showBaselineControls={false}
+          showDataMenuControl={false}
           showViewScaleControl={false}
           showTaskChartToggle={false}
         />

@@ -505,8 +505,10 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(factModeColumns.map((column) => column.id)).toEqual([
       'plan-fact-volume',
       'plan-fact-fact',
-      'plan-fact-percent',
     ]);
+    expect(factModeColumns.find((column) => column.id === 'plan-fact-volume')).toEqual(expect.objectContaining({
+      after: 'endDate',
+    }));
     expect(ganttPropsSpy?.hiddenTaskListColumns).toEqual(expect.arrayContaining([
       'work-volume',
       'completed-volume',
@@ -515,9 +517,89 @@ describe('ProjectWorkspace resource assignments', () => {
     ]));
     expect(ganttPropsSpy?.hiddenTaskListColumns).not.toContain('startDate');
     expect(ganttPropsSpy?.hiddenTaskListColumns).not.toContain('endDate');
+    expect(ganttPropsSpy?.hiddenTaskListColumns).not.toContain('progress');
     expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-volume')?.renderCell({ task: tasks[1]! })}</>)).toContain('10');
     expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-fact')?.renderCell({ task: tasks[1]! })}</>)).toContain('3');
-    expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-percent')?.renderCell({ task: tasks[1]! })}</>)).toContain('30');
+
+    await unmountWorkspace(root);
+  });
+
+  it('clears the fact completed-volume loading skeleton after a daily fact edit settles', async () => {
+    useProjectStore.setState((state) => ({
+      ...state,
+      progressEntries: [
+        {
+          id: 'entry-1',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-01',
+          amount: 3,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    }));
+
+    let resolveFetch: ((response: Response) => void) | null = null;
+    const fetchPromise = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn(() => fetchPromise));
+
+    const { root } = await renderFactWorkspace();
+    const getFactColumn = () => {
+      const columns = (ganttPropsSpy?.additionalColumns as Array<{ id: string; renderCell: (ctx: { task: Task }) => React.ReactNode }> | undefined) ?? [];
+      const factColumn = columns.find((column) => column.id === 'plan-fact-fact');
+      expect(factColumn).toBeTruthy();
+      return factColumn!;
+    };
+
+    void act(() => {
+      const onTasksChange = ganttPropsSpy?.onTasksChange as (changedTasks: Task[]) => Promise<void>;
+      void onTasksChange([{
+        ...tasks[1]!,
+        planByDate: {
+          '2026-04-01': 5,
+          '2026-04-02': 5,
+        },
+        factByDate: {
+          '2026-04-01': 4,
+        },
+      } as Task]);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(renderToStaticMarkup(<>{getFactColumn().renderCell({ task: tasks[1]! })}</>)).toContain('animate-pulse');
+
+    await act(async () => {
+      resolveFetch?.(new Response(JSON.stringify({
+        task: {
+          completedVolume: 4,
+          progress: 40,
+          workVolume: 10,
+          workUnit: null,
+          status: 'in_progress',
+        },
+        progressEntries: [
+          {
+            id: 'entry-1',
+            projectId: 'project-1',
+            taskId: 'leaf-1',
+            entryDate: '2026-04-01',
+            amount: 4,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+          },
+        ],
+      }), { status: 200 }));
+      await fetchPromise;
+      await Promise.resolve();
+    });
+
+    expect(renderToStaticMarkup(<>{getFactColumn().renderCell({ task: { ...tasks[1]!, completedVolume: 4 } })}</>)).not.toContain('animate-pulse');
 
     await unmountWorkspace(root);
   });
