@@ -301,6 +301,17 @@ function sumRecordValues(values: Record<string, number> | undefined): number {
   return Object.values(values ?? {}).reduce((sum, value) => sum + value, 0);
 }
 
+function formatPlanFactMetric(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '-';
+  }
+
+  return new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 interface ProjectShiftModalProps {
   range: ProjectDateRange;
   pending: boolean;
@@ -745,6 +756,27 @@ export function ProjectWorkspace({
       0,
     )
   ), [hiddenTaskListColumns, taskListColumnWidths]);
+  const planFactTaskListColumnWidths = useMemo<TaskListColumnWidthMap>(() => ({
+    name: Math.max(taskListColumnWidths.name ?? TASK_LIST_COLUMN_WIDTHS.name ?? 200, 220),
+    startDate: taskListColumnWidths.startDate ?? TASK_LIST_COLUMN_WIDTHS.startDate ?? 90,
+    endDate: taskListColumnWidths.endDate ?? TASK_LIST_COLUMN_WIDTHS.endDate ?? 90,
+    progress: 58,
+    'plan-total': 86,
+    'fact-volume': 86,
+    'work-unit': 76,
+  }), [taskListColumnWidths]);
+  const planFactHiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => [
+    'number',
+    'duration',
+    'dependencies',
+    'work-volume',
+    'completed-volume',
+    'status',
+    'assigned-resources',
+  ] as TaskListColumnId[], []);
+  const planFactTaskListWidth = useMemo(() => (
+    Object.values(planFactTaskListColumnWidths).reduce((width, columnWidth) => (width ?? 0) + (columnWidth ?? 0), 0) ?? 0
+  ), [planFactTaskListColumnWidths]);
   const taskDateChangeMode = useMemo<TaskDateChangeMode>(() => {
     if (!projectId) {
       return 'preserve-duration';
@@ -1951,6 +1983,39 @@ export function ProjectWorkspace({
     taskListColumnWidths,
     workProgressLoadingTaskIds,
   ]);
+  const planFactAdditionalColumns = useMemo<TaskListColumn<Task>[]>(() => [
+    {
+      id: 'plan-total',
+      header: 'План',
+      width: planFactTaskListColumnWidths['plan-total'] ?? 86,
+      minWidth: 64,
+      align: 'right',
+      after: 'endDate',
+      renderCell: ({ task }) => parentTaskIds.has(task.id)
+        ? ''
+        : formatPlanFactMetric(sumRecordValues(task.planByDate) || task.workVolume),
+    },
+    {
+      id: 'fact-volume',
+      header: 'Объём',
+      width: planFactTaskListColumnWidths['fact-volume'] ?? 86,
+      minWidth: 64,
+      align: 'right',
+      after: 'plan-total',
+      renderCell: ({ task }) => parentTaskIds.has(task.id)
+        ? ''
+        : formatPlanFactMetric(sumRecordValues(task.factByDate) || task.completedVolume),
+    },
+    {
+      id: 'work-unit',
+      header: 'Ед. изм.',
+      width: planFactTaskListColumnWidths['work-unit'] ?? 76,
+      minWidth: 58,
+      align: 'center',
+      after: 'fact-volume',
+      renderCell: ({ task }) => parentTaskIds.has(task.id) ? '' : (task.workUnit?.trim() || '-'),
+    },
+  ], [parentTaskIds, planFactTaskListColumnWidths]);
 
   const planFactTasks = useMemo<Task[]>(() => {
     if (presentationMode !== 'plan-fact') {
@@ -2034,17 +2099,6 @@ export function ProjectWorkspace({
     setAssignmentError,
     tasks,
   ]);
-  const planFactHiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => (
-    Array.from(new Set([
-      ...hiddenTaskListColumns,
-      'dependencies',
-      'progress',
-      'duration',
-      'startDate',
-      'endDate',
-    ])) as TaskListColumnId[]
-  ), [hiddenTaskListColumns]);
-
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,
     [historyItems],
@@ -2837,9 +2891,9 @@ export function ProjectWorkspace({
                   showBaseline={Boolean(selectedBaselineState && selectedBaselineVisible)}
                   taskFilter={taskFilter}
                   taskListMenuCommands={taskListMenuCommands}
-                  additionalColumns={additionalColumns}
+                  additionalColumns={presentationMode === 'plan-fact' ? planFactAdditionalColumns : additionalColumns}
                   hiddenTaskListColumns={presentationMode === 'plan-fact' ? planFactHiddenTaskListColumns : hiddenTaskListColumns}
-                  taskListColumnWidths={taskListColumnWidths}
+                  taskListColumnWidths={presentationMode === 'plan-fact' ? planFactTaskListColumnWidths : taskListColumnWidths}
                   onTaskListColumnWidthsChange={handleTaskListColumnWidthsChange}
                   taskDateChangeMode={taskDateChangeMode}
                   onTaskDateChangeModeChange={handleTaskDateChangeModeChange}
@@ -2853,7 +2907,7 @@ export function ProjectWorkspace({
                   containerHeight={workspaceViewportHeight}
                   showTaskList={showTaskList}
                   showChart={presentationMode === 'plan-fact' ? true : showChart}
-                  taskListWidth={presentationMode === 'plan-fact' ? Math.max(taskListWidth, 560) : taskListWidth}
+                  taskListWidth={presentationMode === 'plan-fact' ? planFactTaskListWidth : taskListWidth}
                   onValidateDependencies={onValidation}
                   enableAutoSchedule={autoSchedule}
                   onCascade={effectiveReadOnly || externalSelectionActive ? undefined : onCascade}
