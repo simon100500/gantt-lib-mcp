@@ -14,7 +14,7 @@ import { CreateResourceModal } from './CreateResourceModal.tsx';
 import { ResourceAssignmentModal } from './ResourceAssignmentModal.tsx';
 import { createAssignedResourcesColumn } from './AssignedResourcesColumn.tsx';
 import { createTaskStatusColumn } from './TaskStatusColumn.tsx';
-import { createTaskWorkColumns } from './TaskWorkColumns.tsx';
+import { createTaskWorkColumns, TaskWorkMetadataCell } from './TaskWorkColumns.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
 import { buildCustomDays, DEFAULT_CALENDAR_WEEKLY_PATTERN, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
@@ -559,115 +559,6 @@ function omitPlanFactFields(task: PlanFactTask): Task {
   return rest;
 }
 
-function PlanFactVolumeCell({
-  task,
-  disabled,
-  readOnly,
-  onSubmit,
-}: {
-  task: Task;
-  disabled: boolean;
-  readOnly: boolean;
-  onSubmit: (task: Task, patch: { workVolume?: number | null }) => Promise<unknown>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
-  const unit = task.workUnit?.trim();
-  const value = formatFactMetric(task.workVolume);
-  const label = unit && value !== '-' ? `${value} ${unit}` : value;
-
-  useEffect(() => {
-    if (!editing) {
-      setDraft(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
-      setError(false);
-    }
-  }, [editing, task.workVolume]);
-
-  const commit = async () => {
-    if (pending) {
-      return;
-    }
-
-    const trimmedDraft = draft.trim().replace(',', '.');
-    const nextVolume = trimmedDraft.length === 0 ? null : Number(trimmedDraft);
-    if (nextVolume !== null && (!Number.isFinite(nextVolume) || nextVolume < 0)) {
-      setError(true);
-      return;
-    }
-
-    if ((task.workVolume ?? null) === nextVolume) {
-      setEditing(false);
-      return;
-    }
-
-    setPending(true);
-    setError(false);
-    try {
-      await onSubmit(task, { workVolume: nextVolume });
-      setEditing(false);
-    } catch (submitError) {
-      console.error('Failed to update plan-fact task volume:', submitError);
-      setError(true);
-    } finally {
-      setPending(false);
-    }
-  };
-
-  if (disabled) {
-    return '';
-  }
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        className={`h-7 w-full rounded-md border bg-white px-2 text-xs font-medium outline-none ${error ? 'border-red-300 text-red-700 focus:ring-2 focus:ring-red-100' : 'border-slate-300 text-slate-700 focus:border-primary focus:ring-2 focus:ring-primary/15'}`}
-        disabled={pending}
-        inputMode="decimal"
-        onBlur={() => {
-          void commit();
-        }}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          setError(false);
-        }}
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            void commit();
-          }
-          if (event.key === 'Escape') {
-            event.preventDefault();
-            setEditing(false);
-            setDraft(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
-            setError(false);
-          }
-        }}
-        type="text"
-        value={draft}
-      />
-    );
-  }
-
-  return (
-    <button
-      className="inline-flex h-7 w-full items-center justify-start rounded-md px-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:text-slate-400 disabled:hover:bg-transparent"
-      disabled={readOnly}
-      onClick={(event) => {
-        event.stopPropagation();
-        setEditing(true);
-      }}
-      type="button"
-    >
-      <span className="truncate">{label}</span>
-    </button>
-  );
-}
-
 function deriveTaskStatusFromProgress(currentStatus: Task['status'] | undefined, progress: number): NonNullable<Task['status']> {
   if (currentStatus === 'closed') {
     return 'closed';
@@ -915,7 +806,7 @@ export function ProjectWorkspace({
     Object.entries(TASK_LIST_COLUMN_WIDTHS).reduce(
       (width, [columnId]) => planFactHiddenTaskListColumns.includes(columnId as TaskListColumnId) ? width : width + (taskListColumnWidths[columnId] ?? 0),
       0,
-    ) + 224
+    ) + 232
   ), [planFactHiddenTaskListColumns, taskListColumnWidths]);
   const taskDateChangeMode = useMemo<TaskDateChangeMode>(() => {
     if (!projectId) {
@@ -2174,11 +2065,12 @@ export function ProjectWorkspace({
       {
         id: 'plan-fact-volume',
         header: 'Объём',
-        width: 88,
-        minWidth: 72,
+        width: 96,
+        minWidth: 55,
         after: 'name',
         renderCell: ({ task }) => (
-          <PlanFactVolumeCell
+          <TaskWorkMetadataCell
+            compact={true}
             disabled={parentTaskIds.has(task.id)}
             onSubmit={handleUpdateTaskWorkMetadata}
             readOnly={effectiveReadOnly || shareSelectionActive}

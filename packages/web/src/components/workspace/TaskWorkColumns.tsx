@@ -79,7 +79,7 @@ function formatVolumeWithUnit(task: Task): string {
   return unitLabel ? `${volumeLabel} ${unitLabel}` : volumeLabel;
 }
 
-function TaskWorkMetadataCell({
+export function TaskWorkMetadataCell({
   task,
   readOnly = false,
   compact = false,
