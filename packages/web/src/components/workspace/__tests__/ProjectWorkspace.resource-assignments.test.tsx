@@ -469,6 +469,21 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(renderedTasks.find((task) => task.id === 'leaf-1')?.factByDate).toEqual({
       '2026-04-01': 3,
     });
+    const factModeColumns = ganttPropsSpy?.additionalColumns as Array<{ id: string; renderCell: (ctx: { task: Task }) => React.ReactNode }>;
+    expect(factModeColumns.map((column) => column.id)).toEqual([
+      'plan-fact-volume',
+      'plan-fact-fact',
+      'plan-fact-percent',
+    ]);
+    expect(ganttPropsSpy?.hiddenTaskListColumns).toEqual(expect.arrayContaining([
+      'work-volume',
+      'completed-volume',
+      'status',
+      'assigned-resources',
+    ]));
+    expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-volume')?.renderCell({ task: tasks[1]! })}</>)).toContain('10');
+    expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-fact')?.renderCell({ task: tasks[1]! })}</>)).toContain('3');
+    expect(renderToStaticMarkup(<>{factModeColumns.find((column) => column.id === 'plan-fact-percent')?.renderCell({ task: tasks[1]! })}</>)).toContain('30');
 
     await unmountWorkspace(root);
   });

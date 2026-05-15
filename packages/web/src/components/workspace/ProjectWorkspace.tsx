@@ -527,6 +527,23 @@ function buildFactByDate(taskId: string, progressEntries: TaskProgressEntry[]): 
   return Object.keys(values).length > 0 ? values : undefined;
 }
 
+function sumTaskFactAmount(taskId: string, progressEntries: TaskProgressEntry[]): number {
+  return progressEntries.reduce((sum, entry) => (
+    entry.taskId === taskId && Number.isFinite(entry.amount) ? sum + entry.amount : sum
+  ), 0);
+}
+
+function formatFactMetric(value: number | null | undefined, maximumFractionDigits: number = 2): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '-';
+  }
+
+  return new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits,
+    minimumFractionDigits: 0,
+  }).format(value);
+}
+
 function numberMapsEqual(left?: Record<string, number>, right?: Record<string, number>): boolean {
   const keys = new Set([...Object.keys(left ?? {}), ...Object.keys(right ?? {})]);
   for (const key of keys) {
@@ -540,6 +557,115 @@ function numberMapsEqual(left?: Record<string, number>, right?: Record<string, n
 function omitPlanFactFields(task: PlanFactTask): Task {
   const { planByDate: _planByDate, factByDate: _factByDate, ...rest } = task;
   return rest;
+}
+
+function PlanFactVolumeCell({
+  task,
+  disabled,
+  readOnly,
+  onSubmit,
+}: {
+  task: Task;
+  disabled: boolean;
+  readOnly: boolean;
+  onSubmit: (task: Task, patch: { workVolume?: number | null }) => Promise<unknown>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState(false);
+  const unit = task.workUnit?.trim();
+  const value = formatFactMetric(task.workVolume);
+  const label = unit && value !== '-' ? `${value} ${unit}` : value;
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
+      setError(false);
+    }
+  }, [editing, task.workVolume]);
+
+  const commit = async () => {
+    if (pending) {
+      return;
+    }
+
+    const trimmedDraft = draft.trim().replace(',', '.');
+    const nextVolume = trimmedDraft.length === 0 ? null : Number(trimmedDraft);
+    if (nextVolume !== null && (!Number.isFinite(nextVolume) || nextVolume < 0)) {
+      setError(true);
+      return;
+    }
+
+    if ((task.workVolume ?? null) === nextVolume) {
+      setEditing(false);
+      return;
+    }
+
+    setPending(true);
+    setError(false);
+    try {
+      await onSubmit(task, { workVolume: nextVolume });
+      setEditing(false);
+    } catch (submitError) {
+      console.error('Failed to update plan-fact task volume:', submitError);
+      setError(true);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  if (disabled) {
+    return '';
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        className={`h-7 w-full rounded-md border bg-white px-2 text-xs font-medium outline-none ${error ? 'border-red-300 text-red-700 focus:ring-2 focus:ring-red-100' : 'border-slate-300 text-slate-700 focus:border-primary focus:ring-2 focus:ring-primary/15'}`}
+        disabled={pending}
+        inputMode="decimal"
+        onBlur={() => {
+          void commit();
+        }}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setError(false);
+        }}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            void commit();
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            setEditing(false);
+            setDraft(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
+            setError(false);
+          }
+        }}
+        type="text"
+        value={draft}
+      />
+    );
+  }
+
+  return (
+    <button
+      className="inline-flex h-7 w-full items-center justify-start rounded-md px-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:text-slate-400 disabled:hover:bg-transparent"
+      disabled={readOnly}
+      onClick={(event) => {
+        event.stopPropagation();
+        setEditing(true);
+      }}
+      type="button"
+    >
+      <span className="truncate">{label}</span>
+    </button>
+  );
 }
 
 function deriveTaskStatusFromProgress(currentStatus: Task['status'] | undefined, progress: number): NonNullable<Task['status']> {
@@ -770,7 +896,17 @@ export function ProjectWorkspace({
   ), [hiddenTaskListColumns, taskListColumnWidths]);
   const planFactHiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => {
     const hiddenColumns = new Set<TaskListColumnId>(hiddenTaskListColumns);
-    for (const columnId of ['dependencies', 'progress', 'duration', 'startDate', 'endDate'] as TaskListColumnId[]) {
+    for (const columnId of [
+      'dependencies',
+      'progress',
+      'duration',
+      'startDate',
+      'endDate',
+      'work-volume',
+      'completed-volume',
+      'status',
+      'assigned-resources',
+    ] as TaskListColumnId[]) {
       hiddenColumns.add(columnId);
     }
     return Array.from(hiddenColumns);
@@ -779,7 +915,7 @@ export function ProjectWorkspace({
     Object.entries(TASK_LIST_COLUMN_WIDTHS).reduce(
       (width, [columnId]) => planFactHiddenTaskListColumns.includes(columnId as TaskListColumnId) ? width : width + (taskListColumnWidths[columnId] ?? 0),
       0,
-    )
+    ) + 224
   ), [planFactHiddenTaskListColumns, taskListColumnWidths]);
   const taskDateChangeMode = useMemo<TaskDateChangeMode>(() => {
     if (!projectId) {
@@ -2002,6 +2138,57 @@ export function ProjectWorkspace({
     taskListColumnWidths,
     workProgressLoadingTaskIds,
   ]);
+  const planFactSummaryColumns = useMemo<TaskListColumn<Task>[]>(() => [
+    {
+      id: 'plan-fact-fact',
+      header: 'Факт',
+      width: 78,
+      minWidth: 64,
+      after: 'plan-fact-volume',
+      renderCell: ({ task }) => {
+        if (parentTaskIds.has(task.id)) {
+          return '';
+        }
+        const unit = task.workUnit?.trim();
+        const value = formatFactMetric(sumTaskFactAmount(task.id, progressEntries));
+        return unit && value !== '-' ? `${value} ${unit}` : value;
+      },
+    },
+    {
+      id: 'plan-fact-percent',
+      header: '%',
+      width: 58,
+      minWidth: 48,
+      after: 'plan-fact-fact',
+      renderCell: ({ task }) => {
+        if (parentTaskIds.has(task.id) || !task.workVolume || task.workVolume <= 0) {
+          return '';
+        }
+        const factAmount = sumTaskFactAmount(task.id, progressEntries);
+        return `${formatFactMetric((factAmount / task.workVolume) * 100, 1)}%`;
+      },
+    },
+  ], [parentTaskIds, progressEntries]);
+  const factModeAdditionalColumns = useMemo<TaskListColumn<Task>[]>(() => (
+    [
+      {
+        id: 'plan-fact-volume',
+        header: 'Объём',
+        width: 88,
+        minWidth: 72,
+        after: 'name',
+        renderCell: ({ task }) => (
+          <PlanFactVolumeCell
+            disabled={parentTaskIds.has(task.id)}
+            onSubmit={handleUpdateTaskWorkMetadata}
+            readOnly={effectiveReadOnly || shareSelectionActive}
+            task={task}
+          />
+        ),
+      },
+      ...planFactSummaryColumns,
+    ]
+  ), [effectiveReadOnly, handleUpdateTaskWorkMetadata, parentTaskIds, planFactSummaryColumns, shareSelectionActive]);
 
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,
@@ -2901,7 +3088,7 @@ export function ProjectWorkspace({
                   showBaseline={!factDisplayModeActive && Boolean(selectedBaselineState && selectedBaselineVisible)}
                   taskFilter={taskFilter}
                   taskListMenuCommands={taskListMenuCommands}
-                  additionalColumns={additionalColumns}
+                  additionalColumns={factDisplayModeActive ? factModeAdditionalColumns : additionalColumns}
                   hiddenTaskListColumns={factDisplayModeActive ? planFactHiddenTaskListColumns : hiddenTaskListColumns}
                   taskListColumnWidths={taskListColumnWidths}
                   onTaskListColumnWidthsChange={handleTaskListColumnWidthsChange}
