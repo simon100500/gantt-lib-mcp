@@ -172,6 +172,8 @@ async function renderFactWorkspace(): Promise<{ container: HTMLDivElement; root:
         onValidation={(_result: ValidationResult) => {}}
         readOnly={false}
         shareStatus="idle"
+        calendarWeeklyPattern={{ mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false }}
+        calendarDays={[]}
       />,
     );
     await Promise.resolve();
@@ -618,6 +620,94 @@ describe('ProjectWorkspace resource assignments', () => {
     });
 
     expect(renderToStaticMarkup(<>{getFactColumn().renderCell({ task: { ...tasks[1]!, completedVolume: 4 } })}</>)).not.toContain('animate-pulse');
+
+    await unmountWorkspace(root);
+  });
+
+  it('sends raw plan matrix edits to the server without client-side redistribution', async () => {
+    useProjectStore.setState((state) => ({
+      ...state,
+      planEntries: [
+        {
+          id: 'plan-1',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-01',
+          amount: 5,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: 'plan-2',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-02',
+          amount: 5,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+        task: {
+          id: 'leaf-1',
+          startDate: '2026-04-01',
+          endDate: '2026-04-03',
+          workVolume: 10,
+          workUnit: null,
+          completedVolume: 3,
+          progress: 30,
+          status: 'in_progress',
+        },
+        planEntries: [
+          {
+            id: 'plan-1',
+            projectId: 'project-1',
+            taskId: 'leaf-1',
+            entryDate: '2026-04-01',
+            amount: 5,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+          },
+          {
+            id: 'plan-3',
+            projectId: 'project-1',
+            taskId: 'leaf-1',
+            entryDate: '2026-04-03',
+            amount: 5,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+          },
+        ],
+      }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { root } = await renderFactWorkspace();
+
+    await act(async () => {
+      const onTasksChange = ganttPropsSpy?.onTasksChange as (changedTasks: Task[]) => Promise<void>;
+      await onTasksChange([{
+        ...tasks[1]!,
+        planByDate: {
+          '2026-04-01': 5,
+        },
+        factByDate: {},
+      } as Task]);
+    });
+
+    const planEntryCall = fetchMock.mock.calls.find((call) => String(call[0]).includes('/plan-entries'));
+    expect(planEntryCall).toBeTruthy();
+    const requestBody = JSON.parse(planEntryCall?.[1]?.body as string) as {
+      basePlanByDate: Record<string, number>;
+      nextPlanByDate: Record<string, number>;
+    };
+    expect(requestBody.basePlanByDate).toEqual({
+      '2026-04-01': 5,
+      '2026-04-02': 5,
+    });
+    expect(requestBody.nextPlanByDate).toEqual({
+      '2026-04-01': 5,
+    });
 
     await unmountWorkspace(root);
   });

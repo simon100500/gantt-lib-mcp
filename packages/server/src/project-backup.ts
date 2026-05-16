@@ -16,6 +16,7 @@ import type {
   TimelineMarker,
 } from '@gantt/mcp/types';
 import { DEFAULT_CALENDAR_WEEKLY_PATTERN, normalizeCalendarWeeklyPattern } from '@gantt/runtime-core/services/projectScheduleOptions';
+import { insertTaskPlanEntries, listTaskPlanEntries } from './task-plan-entry-store.js';
 
 const BACKUP_FILE_KIND = 'gantt-project-backup';
 const BACKUP_FILE_VERSION = 1;
@@ -60,6 +61,14 @@ type BackupAssignment = {
 };
 
 type BackupProgressEntry = {
+  taskBackupId: string;
+  entryDate: string;
+  amount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type BackupPlanEntry = {
   taskBackupId: string;
   entryDate: string;
   amount: number;
@@ -138,6 +147,7 @@ export type ProjectBackupFile = {
     resources: BackupResource[];
     assignments: BackupAssignment[];
     progressEntries: BackupProgressEntry[];
+    planEntries: BackupPlanEntry[];
     financeSettings: BackupFinanceSetting[];
     fundingEvents: BackupFundingEvent[];
     baselines: BackupBaseline[];
@@ -149,6 +159,7 @@ export type ImportProjectBackupSummary = {
   resourceCount: number;
   assignmentCount: number;
   progressEntryCount: number;
+  planEntryCount: number;
   financeSettingCount: number;
   fundingEventCount: number;
   baselineCount: number;
@@ -423,6 +434,28 @@ export function parseProjectBackupFile(input: unknown): ProjectBackupFile {
     }
   }
 
+  const planEntries = requireArray(data.planEntries ?? [], 'planEntries').map((entry, index): BackupPlanEntry => {
+    if (!isRecord(entry)) {
+      throw new Error(`Invalid plan entry at index ${index}`);
+    }
+    const taskBackupId = asTrimmedString(entry.taskBackupId);
+    if (!taskBackupId) {
+      throw new Error(`Invalid plan entry at index ${index}`);
+    }
+    return {
+      taskBackupId,
+      entryDate: assertIsoDate(entry.entryDate, `plan entry date at index ${index}`),
+      amount: assertNumber(entry.amount, `plan amount at index ${index}`),
+      createdAt: assertIsoDateTime(entry.createdAt, `plan createdAt at index ${index}`),
+      updatedAt: assertIsoDateTime(entry.updatedAt, `plan updatedAt at index ${index}`),
+    };
+  });
+  for (const entry of planEntries) {
+    if (!taskIdSet.has(entry.taskBackupId)) {
+      throw new Error('Plan entry references missing task');
+    }
+  }
+
   const financeSettings = requireArray(data.financeSettings, 'financeSettings').map((entry, index): BackupFinanceSetting => {
     if (!isRecord(entry)) {
       throw new Error(`Invalid finance setting at index ${index}`);
@@ -594,6 +627,7 @@ export function parseProjectBackupFile(input: unknown): ProjectBackupFile {
       resources,
       assignments,
       progressEntries,
+      planEntries,
       financeSettings,
       fundingEvents,
       baselines,
@@ -612,7 +646,7 @@ export async function buildProjectBackup(projectId: string): Promise<ProjectBack
     throw new Error('Project not found');
   }
 
-  const [tasks, dependencies, assignments, progressEntries, financeSettings, fundingEvents, baselines, projectCalendar] = await Promise.all([
+  const [tasks, dependencies, assignments, progressEntries, planEntries, financeSettings, fundingEvents, baselines, projectCalendar] = await Promise.all([
     prisma.task.findMany({
       where: { projectId },
       orderBy: { sortOrder: 'asc' },
@@ -629,6 +663,7 @@ export async function buildProjectBackup(projectId: string): Promise<ProjectBack
       where: { projectId },
       orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
     }),
+    listTaskPlanEntries(prisma as any, projectId),
     prisma.taskFinanceSetting.findMany({
       where: { projectId },
       orderBy: { createdAt: 'asc' },
@@ -718,6 +753,13 @@ export async function buildProjectBackup(projectId: string): Promise<ProjectBack
         createdAt: assignment.createdAt.toISOString(),
       })),
       progressEntries: progressEntries.map((entry) => ({
+        taskBackupId: entry.taskId,
+        entryDate: entry.entryDate.toISOString().slice(0, 10),
+        amount: entry.amount,
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      })),
+      planEntries: planEntries.map((entry) => ({
         taskBackupId: entry.taskId,
         entryDate: entry.entryDate.toISOString().slice(0, 10),
         amount: entry.amount,
@@ -965,6 +1007,18 @@ export async function importProjectBackup(projectId: string, backup: ProjectBack
       });
     }
 
+    if (backup.data.planEntries.length > 0) {
+      await insertTaskPlanEntries(tx as any, backup.data.planEntries.map((entry) => ({
+        id: randomUUID(),
+        projectId,
+        taskId: taskIdMap.get(entry.taskBackupId)!,
+        entryDate: new Date(`${entry.entryDate}T00:00:00.000Z`),
+        amount: entry.amount,
+        createdAt: new Date(entry.createdAt),
+        updatedAt: new Date(entry.updatedAt),
+      })));
+    }
+
     if (backup.data.financeSettings.length > 0) {
       await tx.taskFinanceSetting.createMany({
         data: backup.data.financeSettings.map((setting) => ({
@@ -1049,6 +1103,7 @@ export async function importProjectBackup(projectId: string, backup: ProjectBack
       resourceCount: backup.data.resources.length,
       assignmentCount: backup.data.assignments.length,
       progressEntryCount: backup.data.progressEntries.length,
+      planEntryCount: backup.data.planEntries.length,
       financeSettingCount: backup.data.financeSettings.length,
       fundingEventCount: backup.data.fundingEvents.length,
       baselineCount: backup.data.baselines.length,

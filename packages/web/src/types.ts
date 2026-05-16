@@ -183,6 +183,16 @@ export interface TaskProgressEntry {
   updatedAt: string;
 }
 
+export interface TaskPlanEntry {
+  id: string;
+  projectId: string;
+  taskId: string;
+  entryDate: string;
+  amount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CalendarDay {
   date: string;
   kind: 'working' | 'non_working' | 'shortened';

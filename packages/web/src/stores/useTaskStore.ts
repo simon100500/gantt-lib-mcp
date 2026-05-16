@@ -158,6 +158,34 @@ function normalizeTaskProgressEntries(
   });
 }
 
+function normalizeTaskPlanEntries(
+  planEntries: ProjectLoadResponse['snapshot']['planEntries'] | undefined,
+): ProjectLoadResponse['snapshot']['planEntries'] {
+  if (!Array.isArray(planEntries)) {
+    return [];
+  }
+
+  return planEntries.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return [];
+    }
+
+    const id = typeof entry.id === 'string' ? entry.id : '';
+    const projectId = typeof entry.projectId === 'string' ? entry.projectId : '';
+    const taskId = typeof entry.taskId === 'string' ? entry.taskId : '';
+    const entryDate = typeof entry.entryDate === 'string' ? entry.entryDate : '';
+    const amount = typeof entry.amount === 'number' && Number.isFinite(entry.amount) ? entry.amount : null;
+    const createdAt = typeof entry.createdAt === 'string' ? entry.createdAt : '';
+    const updatedAt = typeof entry.updatedAt === 'string' ? entry.updatedAt : '';
+
+    if (!id || !projectId || !taskId || !entryDate || amount === null || !createdAt || !updatedAt) {
+      return [];
+    }
+
+    return [{ id, projectId, taskId, entryDate, amount, createdAt, updatedAt }];
+  });
+}
+
 interface LocalSnapshot {
   tasks: Task[];
   isDemoMode: boolean;
@@ -318,6 +346,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
       const normalizedResources = normalizeProjectResources(project.snapshot.resources);
       const normalizedAssignments = normalizeTaskAssignments(project.snapshot.assignments, normalizedResources, project.project.id);
       const normalizedProgressEntries = normalizeTaskProgressEntries(project.snapshot.progressEntries);
+      const normalizedPlanEntries = normalizeTaskPlanEntries(project.snapshot.planEntries);
       useProjectStore.getState().hydrateConfirmed(project.version, {
         tasks: normalizedTasks,
         dependencies: project.snapshot.dependencies,
@@ -325,6 +354,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
         resources: normalizedResources,
         assignments: normalizedAssignments,
         progressEntries: normalizedProgressEntries,
+        planEntries: normalizedPlanEntries,
       });
       const authState = useAuthStore.getState();
       if (authState.project) {
