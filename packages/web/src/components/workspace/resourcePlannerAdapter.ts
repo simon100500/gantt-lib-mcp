@@ -1,4 +1,7 @@
 import type { ResourceTimelineItem, ResourceTimelineResource } from 'gantt-lib';
+import type { ReactNode } from 'react';
+import { createElement } from 'react';
+import { House } from 'lucide-react';
 
 import type { ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceScope, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
@@ -21,6 +24,11 @@ export interface ResourcePlannerItemMetadata {
 
 export interface ResourcePlannerTimelineItem extends ResourceTimelineItem {
   taskId: string;
+  tooltip?: {
+    firstLine?: ReactNode;
+    secondLine?: ReactNode;
+    secondLineIcon?: ReactNode;
+  };
   metadata: ResourcePlannerItemMetadata;
 }
 
@@ -97,6 +105,11 @@ function mapIntervalToTimelineItem(interval: ResourcePlannerInterval): ResourceP
     taskId: interval.taskId,
     title: interval.taskName,
     subtitle: interval.projectName,
+    tooltip: {
+      firstLine: interval.taskName,
+      secondLine: interval.projectName,
+      secondLineIcon: createElement(House, { size: 13, strokeWidth: 2 }),
+    },
     startDate: interval.startDate,
     endDate: interval.endDate,
     metadata: {
@@ -230,6 +243,11 @@ export function buildCurrentProjectResourceTimeline(
       taskId: task.id,
       title: task.name,
       subtitle: metadata.projectName,
+      tooltip: {
+        firstLine: task.name,
+        secondLine: metadata.projectName,
+        secondLineIcon: createElement(House, { size: 13, strokeWidth: 2 }),
+      },
       startDate: normalizeDateOnly(task.startDate),
       endDate: normalizeDateOnly(task.endDate),
       locked: task.locked,

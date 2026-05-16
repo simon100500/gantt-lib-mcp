@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Calendar } from 'gantt-lib';
-import { CalendarDays, LoaderCircle, RotateCcw } from 'lucide-react';
+import { CalendarDays, Check, ChevronLeft, ChevronRight, History, LoaderCircle, Trash2, X } from 'lucide-react';
 
 import type { CalendarDay, CalendarWeeklyPattern } from '../types.ts';
-import { DEFAULT_CALENDAR_WEEKLY_PATTERN, normalizeCalendarWeeklyPattern } from '../lib/projectScheduleOptions.ts';
+import { normalizeCalendarWeeklyPattern } from '../lib/projectScheduleOptions.ts';
 import {
   formatCalendarDayKind,
   getPatternForPreset,
@@ -12,26 +11,6 @@ import {
   isWorkingByPattern,
   normalizeProjectCalendarDays,
 } from '../lib/projectCalendar.ts';
-
-type BulkMode = 'working_range' | 'non_working_range' | 'working_saturdays' | 'non_working_saturdays' | 'clear_range';
-
-const WEEKDAY_ROWS: Array<{ key: keyof CalendarWeeklyPattern; short: string; label: string }> = [
-  { key: 'mon', short: 'Пн', label: 'Понедельник' },
-  { key: 'tue', short: 'Вт', label: 'Вторник' },
-  { key: 'wed', short: 'Ср', label: 'Среда' },
-  { key: 'thu', short: 'Чт', label: 'Четверг' },
-  { key: 'fri', short: 'Пт', label: 'Пятница' },
-  { key: 'sat', short: 'Сб', label: 'Суббота' },
-  { key: 'sun', short: 'Вс', label: 'Воскресенье' },
-];
-
-const BULK_MODE_OPTIONS: Array<{ value: BulkMode; label: string }> = [
-  { value: 'non_working_range', label: 'Сделать диапазон выходным' },
-  { value: 'working_range', label: 'Сделать диапазон рабочим' },
-  { value: 'working_saturdays', label: 'Сделать все субботы в диапазоне рабочими' },
-  { value: 'non_working_saturdays', label: 'Сделать все субботы в диапазоне выходными' },
-  { value: 'clear_range', label: 'Очистить исключения в диапазоне' },
-];
 
 function parseIsoDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
@@ -44,10 +23,26 @@ function formatIsoDate(date: Date): string {
 function formatDisplayDate(value: string): string {
   return parseIsoDate(value).toLocaleDateString('ru-RU', {
     day: '2-digit',
-    month: '2-digit',
+    month: 'long',
     year: 'numeric',
     timeZone: 'UTC',
   });
+}
+
+function formatShortDisplayDate(value: string): string {
+  return parseIsoDate(value).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
+
+function getMonthStart(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+function shiftMonth(date: Date, delta: number): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + delta, 1));
 }
 
 function getInitialSelectedDate(calendarDays: CalendarDay[]): string {
@@ -76,32 +71,59 @@ export function ProjectCalendarModal({
   const [draftPattern, setDraftPattern] = useState<CalendarWeeklyPattern>(normalizeCalendarWeeklyPattern(calendarWeeklyPattern));
   const [draftCalendarDays, setDraftCalendarDays] = useState<CalendarDay[]>(normalizeProjectCalendarDays(calendarDays));
   const [selectedDate, setSelectedDate] = useState(getInitialSelectedDate(calendarDays));
-  const [bulkStart, setBulkStart] = useState(getInitialSelectedDate(calendarDays));
-  const [bulkEnd, setBulkEnd] = useState(getInitialSelectedDate(calendarDays));
-  const [bulkMode, setBulkMode] = useState<BulkMode>('non_working_range');
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [currentMonth, setCurrentMonth] = useState(getMonthStart(parseIsoDate(getInitialSelectedDate(calendarDays))));
 
   useEffect(() => {
     const normalizedDays = normalizeProjectCalendarDays(calendarDays);
+    const initialDate = getInitialSelectedDate(normalizedDays);
     setDraftPattern(normalizeCalendarWeeklyPattern(calendarWeeklyPattern));
     setDraftCalendarDays(normalizedDays);
-    const initialDate = getInitialSelectedDate(normalizedDays);
     setSelectedDate(initialDate);
-    setBulkStart(initialDate);
-    setBulkEnd(initialDate);
-    setLocalError(null);
+    setCurrentMonth(getMonthStart(parseIsoDate(initialDate)));
   }, [calendarDays, calendarWeeklyPattern]);
 
   const exceptionMap = useMemo(() => buildExceptionMap(draftCalendarDays), [draftCalendarDays]);
   const selectedDateObject = useMemo(() => parseIsoDate(selectedDate), [selectedDate]);
   const selectedException = exceptionMap.get(selectedDate) ?? null;
-  const selectedIsWorking = selectedException === 'working'
+  const selectedBaseIsWorking = isWorkingByPattern(draftPattern, selectedDateObject);
+  const selectedEffectiveIsWorking = selectedException === 'working'
     ? true
     : selectedException === 'non_working'
       ? false
-      : isWorkingByPattern(draftPattern, selectedDateObject);
+      : selectedException === 'shortened'
+        ? true
+        : selectedBaseIsWorking;
+  const preset = getWeeklyPatternPreset(draftPattern);
+  const journalDays = useMemo(
+    () => [...draftCalendarDays].sort((left, right) => right.date.localeCompare(left.date)),
+    [draftCalendarDays],
+  );
+  const monthLabel = useMemo(() => currentMonth.toLocaleDateString('ru-RU', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }), [currentMonth]);
+  const calendarCells = useMemo(() => {
+    const year = currentMonth.getUTCFullYear();
+    const month = currentMonth.getUTCMonth();
+    const firstDay = new Date(Date.UTC(year, month, 1)).getUTCDay();
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const offset = firstDay === 0 ? 6 : firstDay - 1;
+    const cells: Array<{ type: 'empty' } | { type: 'day'; dayNumber: number; date: string }> = [];
 
-  const applyDayOverride = (date: string, kind: CalendarDay['kind'] | null) => {
+    for (let index = 0; index < offset; index += 1) {
+      cells.push({ type: 'empty' });
+    }
+
+    for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
+      const date = formatIsoDate(new Date(Date.UTC(year, month, dayNumber)));
+      cells.push({ type: 'day', dayNumber, date });
+    }
+
+    return cells;
+  }, [currentMonth]);
+
+  const setDayOverride = (date: string, kind: CalendarDay['kind'] | null) => {
     setDraftCalendarDays((current) => {
       const next = buildExceptionMap(current);
       if (kind === null) {
@@ -115,36 +137,23 @@ export function ProjectCalendarModal({
     });
   };
 
-  const handleBulkApply = () => {
-    setLocalError(null);
-    if (!bulkStart || !bulkEnd) {
-      setLocalError('Укажите диапазон для массового действия.');
+  const toggleDayOverride = (date: string) => {
+    const dateObject = parseIsoDate(date);
+    const baseIsWorking = isWorkingByPattern(draftPattern, dateObject);
+    const existing = exceptionMap.get(date);
+    setSelectedDate(date);
+
+    if (existing) {
+      setDayOverride(date, null);
       return;
     }
 
-    const start = parseIsoDate(bulkStart <= bulkEnd ? bulkStart : bulkEnd);
-    const end = parseIsoDate(bulkStart <= bulkEnd ? bulkEnd : bulkStart);
-    const next = buildExceptionMap(draftCalendarDays);
+    setDayOverride(date, baseIsWorking ? 'non_working' : 'working');
+  };
 
-    for (let cursor = new Date(start.getTime()); cursor.getTime() <= end.getTime(); cursor.setUTCDate(cursor.getUTCDate() + 1)) {
-      const currentDate = formatIsoDate(cursor);
-      if (bulkMode === 'clear_range') {
-        next.delete(currentDate);
-        continue;
-      }
-      if (bulkMode === 'working_saturdays' || bulkMode === 'non_working_saturdays') {
-        if (cursor.getUTCDay() !== 6) {
-          continue;
-        }
-        next.set(currentDate, bulkMode === 'working_saturdays' ? 'working' : 'non_working');
-        continue;
-      }
-      next.set(currentDate, bulkMode === 'working_range' ? 'working' : 'non_working');
-    }
-
-    setDraftCalendarDays(Array.from(next.entries())
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([date, kind]) => ({ date, kind })));
+  const focusDate = (date: string) => {
+    setSelectedDate(date);
+    setCurrentMonth(getMonthStart(parseIsoDate(date)));
   };
 
   return (
@@ -159,17 +168,18 @@ export function ProjectCalendarModal({
       }}
     >
       <div
-        className="flex max-h-[calc(100dvh-3rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.2)]"
+        className="flex max-h-[calc(100dvh-3rem)] w-full max-w-[860px] flex-col overflow-hidden border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.2)]"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-          <div>
+          <div className="min-w-0">
             <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
               <CalendarDays className="h-5 w-5 text-primary" />
-              Календарь проекта
+              Настройка календаря
             </h2>
-            <p className="text-sm text-slate-500">
-              {getWeeklyPatternLabel(draftPattern)}{draftCalendarDays.length > 0 ? `, исключений: ${draftCalendarDays.length}` : ''}
+            <p className="mt-1 text-sm text-slate-500">
+              {getWeeklyPatternLabel(draftPattern)}
+              {draftCalendarDays.length > 0 ? `, исключений: ${draftCalendarDays.length}` : ', без исключений'}
             </p>
           </div>
           <button
@@ -179,191 +189,220 @@ export function ProjectCalendarModal({
             className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Закрыть календарь проекта"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="grid min-h-0 gap-5 overflow-y-auto px-5 py-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-          <div className="space-y-5">
-            <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-              <div className="flex flex-wrap items-center gap-2">
+        <div className="grid min-h-0 flex-1 gap-0 overflow-hidden md:grid-cols-[420px_minmax(220px,1fr)]">
+          <div className="min-h-0 border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+            <section className="bg-slate-50/40 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Базовый режим</div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-1.5">
                 <button
                   type="button"
                   onClick={() => setDraftPattern(getPatternForPreset('five-day'))}
-                  className={`inline-flex h-9 items-center rounded-full border px-3 text-sm font-medium ${getWeeklyPatternPreset(draftPattern) === 'five-day' ? 'border-primary bg-primary text-white' : 'border-slate-200 bg-white text-slate-700'}`}
+                  className={`inline-flex h-8 items-center px-3 text-sm font-medium transition-colors ${preset === 'five-day' ? 'bg-primary text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
                 >
                   5/2
                 </button>
                 <button
                   type="button"
                   onClick={() => setDraftPattern(getPatternForPreset('six-day'))}
-                  className={`inline-flex h-9 items-center rounded-full border px-3 text-sm font-medium ${getWeeklyPatternPreset(draftPattern) === 'six-day' ? 'border-primary bg-primary text-white' : 'border-slate-200 bg-white text-slate-700'}`}
+                  className={`inline-flex h-8 items-center px-3 text-sm font-medium transition-colors ${preset === 'six-day' ? 'bg-primary text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
                 >
                   6/1
                 </button>
                 <button
                   type="button"
                   onClick={() => setDraftPattern(getPatternForPreset('seven-day'))}
-                  className={`inline-flex h-9 items-center rounded-full border px-3 text-sm font-medium ${getWeeklyPatternPreset(draftPattern) === 'seven-day' ? 'border-primary bg-primary text-white' : 'border-slate-200 bg-white text-slate-700'}`}
+                  className={`inline-flex h-8 items-center px-3 text-sm font-medium transition-colors ${preset === 'seven-day' ? 'bg-primary text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
                 >
                   7/0
                 </button>
               </div>
-              <div className="mt-4 grid grid-cols-7 gap-2">
-                {WEEKDAY_ROWS.map((day) => (
-                  <label key={day.key} className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-3 text-center">
-                    <span className="text-xs font-semibold text-slate-500">{day.short}</span>
-                    <input
-                      type="checkbox"
-                      checked={draftPattern[day.key]}
-                      onChange={(event) => {
-                        const checked = event.target.checked;
-                        setDraftPattern((current) => ({ ...current, [day.key]: checked }));
-                      }}
-                      className="h-4 w-4 rounded border-slate-300 accent-primary"
-                    />
-                  </label>
+            </section>
+
+            <section className="mt-4 w-[360px] max-w-full bg-white p-2">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold capitalize text-slate-900">{monthLabel}</h3>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentMonth((current) => shiftMonth(current, -1))}
+                    className="inline-flex h-7 w-7 items-center justify-center text-slate-600 transition-colors hover:bg-slate-100"
+                    aria-label="Предыдущий месяц"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentMonth((current) => shiftMonth(current, 1))}
+                    className="inline-flex h-7 w-7 items-center justify-center text-slate-600 transition-colors hover:bg-slate-100"
+                    aria-label="Следующий месяц"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-7 gap-x-1 gap-y-1.5">
+                {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((weekday) => (
+                  <div
+                    key={weekday}
+                    className="pb-1 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500"
+                  >
+                    {weekday}
+                  </div>
                 ))}
+
+                {calendarCells.map((cell, index) => {
+                  if (cell.type === 'empty') {
+                    return <div key={`empty-${index}`} className="aspect-square" />;
+                  }
+
+                  const dayDate = parseIsoDate(cell.date);
+                  const baseIsWorking = isWorkingByPattern(draftPattern, dayDate);
+                  const exception = exceptionMap.get(cell.date) ?? null;
+                  const isWorking = exception === 'working'
+                    ? true
+                    : exception === 'non_working'
+                      ? false
+                      : exception === 'shortened'
+                        ? true
+                        : baseIsWorking;
+                  const isSelected = cell.date === selectedDate;
+
+                  return (
+                    <button
+                      key={cell.date}
+                      type="button"
+                      onClick={() => toggleDayOverride(cell.date)}
+                      className="relative flex aspect-square items-center justify-center"
+                      aria-pressed={isSelected}
+                    >
+                      <span
+                        className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground hover:bg-primary'
+                            : isWorking
+                              ? 'bg-transparent text-slate-800 hover:bg-slate-100'
+                              : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                        }`}
+                      >
+                        {cell.dayNumber}
+                      </span>
+                      {exception && (
+                        <span className="absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </section>
 
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white [&_.gantt-cal-container]:max-h-[420px]">
-              <Calendar
-                initialDate={selectedDateObject}
-                isWeekend={(date) => !isWorkingByPattern(draftPattern, date)}
-                onSelect={(date) => setSelectedDate(formatIsoDate(date))}
-                selected={selectedDateObject}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-5">
-            {(localError) && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                {localError}
-              </div>
-            )}
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
+            <section className="mt-4 w-[360px] max-w-full bg-white px-2 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900">{formatDisplayDate(selectedDate)}</h3>
-                  <p className="text-sm text-slate-500">
-                    Сейчас день {selectedIsWorking ? 'рабочий' : 'выходной'}
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">Выбранный день</div>
+                  <h3 className="mt-1 text-sm font-semibold text-slate-900">{formatDisplayDate(selectedDate)}</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Сейчас день {selectedEffectiveIsWorking ? 'рабочий' : 'выходной'}
                     {selectedException ? `, исключение: ${formatCalendarDayKind(selectedException)}` : ''}
                   </p>
                 </div>
-                {selectedException && (
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => applyDayOverride(selectedDate, null)}
-                    className="inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-sm text-slate-700"
+                    onClick={() => toggleDayOverride(selectedDate)}
+                    className="inline-flex h-8 items-center gap-2 bg-slate-100 px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
                   >
-                    Убрать исключение
+                    <Check className="h-4 w-4" />
+                    Инвертировать
                   </button>
-                )}
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => applyDayOverride(selectedDate, 'working')}
-                  className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
-                >
-                  Сделать рабочим
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyDayOverride(selectedDate, 'non_working')}
-                  className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
-                >
-                  Сделать выходным
-                </button>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-semibold text-slate-900">Массовое действие</h3>
-              <div className="mt-3 grid gap-3">
-                <select
-                  value={bulkMode}
-                  onChange={(event) => setBulkMode(event.target.value as BulkMode)}
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                >
-                  {BULK_MODE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input
-                    type="date"
-                    value={bulkStart}
-                    onChange={(event) => setBulkStart(event.target.value)}
-                    className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                  />
-                  <input
-                    type="date"
-                    value={bulkEnd}
-                    onChange={(event) => setBulkEnd(event.target.value)}
-                    className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleBulkApply}
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
-                >
-                  Применить к диапазону
-                </button>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-slate-900">Исключения</h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraftPattern(DEFAULT_CALENDAR_WEEKLY_PATTERN);
-                    setDraftCalendarDays([]);
-                  }}
-                  className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Сбросить
-                </button>
-              </div>
-              <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
-                {draftCalendarDays.length === 0 ? (
-                  <p className="text-sm text-slate-500">Исключений пока нет.</p>
-                ) : draftCalendarDays.map((day) => (
-                  <div key={day.date} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2">
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">{formatDisplayDate(day.date)}</div>
-                      <div className="text-xs text-slate-500">{formatCalendarDayKind(day.kind)}</div>
-                    </div>
+                  {selectedException && (
                     <button
                       type="button"
-                      onClick={() => applyDayOverride(day.date, null)}
-                      className="inline-flex h-8 items-center rounded-md border border-slate-200 px-2.5 text-xs text-slate-600"
+                      onClick={() => setDayOverride(selectedDate, null)}
+                      className="inline-flex h-8 items-center bg-slate-100 px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
                     >
-                      Удалить
+                      Убрать исключение
                     </button>
-                  </div>
-                ))}
+                  )}
+                </div>
               </div>
             </section>
           </div>
+
+          <div className="min-h-0 bg-slate-50/30">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <History className="h-4 w-4 text-slate-500" />
+                  Правки ({draftCalendarDays.length})
+                </div>
+                <p className="mt-1 text-sm text-slate-500">Клик по дню слева добавляет или убирает исключение относительно базовой недели.</p>
+              </div>
+              {draftCalendarDays.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDraftCalendarDays([])}
+                  className="inline-flex h-8 items-center bg-white px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+                >
+                  Очистить
+                </button>
+              )}
+            </div>
+
+            <div className="h-full overflow-y-auto p-3">
+              {journalDays.length === 0 ? (
+                <div className="flex min-h-[240px] flex-col items-center justify-center bg-white px-6 text-center">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <p className="mt-4 text-sm font-medium text-slate-700">Журнал изменений пуст.</p>
+                  <p className="mt-1 text-sm text-slate-500">Выберите дни на календаре слева, чтобы добавить исключения.</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {journalDays.map((day) => (
+                    <div
+                      key={day.date}
+                      className="flex items-center justify-between gap-3 bg-white px-3 py-2 transition-colors hover:bg-slate-50"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-900">{formatShortDisplayDate(day.date)}</div>
+                        <div className="mt-1 text-xs uppercase tracking-[0.06em] text-slate-500">{formatCalendarDayKind(day.kind)}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          focusDate(day.date);
+                          setDayOverride(day.date, null);
+                        }}
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                        aria-label={`Удалить исключение ${day.date}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button
             type="button"
             onClick={onClose}
             disabled={pending}
-            className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center justify-center bg-white px-4 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Отмена
           </button>
@@ -376,10 +415,10 @@ export function ProjectCalendarModal({
               });
             }}
             disabled={pending}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center justify-center gap-2 bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending && <LoaderCircle className="h-4 w-4 animate-spin" />}
-            Сохранить календарь
+            Применить
           </button>
         </div>
       </div>
