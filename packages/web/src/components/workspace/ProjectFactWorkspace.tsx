@@ -14,6 +14,7 @@ import { TASK_LIST_COLUMN_WIDTHS } from '../../lib/taskListColumns.ts';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
 import type { CalendarDay, CalendarWeeklyPattern, Task, ValidationResult } from '../../types.ts';
+import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
 import { TaskCompletedVolumeCell, TaskWorkMetadataCell } from './TaskWorkColumns.tsx';
 import { useTaskWorkProgressMutations } from './useTaskWorkProgressMutations.ts';
 import {
@@ -133,6 +134,7 @@ export function ProjectFactWorkspace({
   const planEntries = useProjectStore((state) => state.planEntries);
   const replaceProgressEntriesForTask = useProjectStore((state) => state.replaceProgressEntriesForTask);
   const replacePlanEntriesForTask = useProjectStore((state) => state.replacePlanEntriesForTask);
+  const mergeConfirmedSnapshot = useProjectStore((state) => state.mergeConfirmedSnapshot);
   const ganttSectionRef = useRef<HTMLDivElement | null>(null);
 
   const projectId = workspace.kind === 'project' ? workspace.projectId : null;
@@ -141,6 +143,11 @@ export function ProjectFactWorkspace({
 
   useFilterPersistence();
   const taskFilter = useTaskFilter();
+  const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
+  const weekendPredicate = useMemo(
+    () => getProjectWeekendPredicate(calendarWeeklyPattern, calendarDays),
+    [calendarDays, calendarWeeklyPattern],
+  );
 
   const parentTaskIds = useMemo(() => {
     const ids = new Set<string>();
@@ -361,6 +368,23 @@ export function ProjectFactWorkspace({
     });
   }, [projectId, setProjectState]);
 
+  const mergeConfirmedTasks = useCallback((changedTasks: Task[]) => {
+    if (changedTasks.length === 0) {
+      return;
+    }
+
+    const confirmedSnapshot = useProjectStore.getState().confirmed.snapshot;
+    const changedTaskById = new Map(changedTasks.map((task) => [task.id, task]));
+    mergeConfirmedSnapshot({
+      ...confirmedSnapshot,
+      tasks: confirmedSnapshot.tasks.map((task) => (
+        changedTaskById.has(task.id)
+          ? { ...task, ...changedTaskById.get(task.id)! }
+          : task
+      )),
+    });
+  }, [mergeConfirmedSnapshot]);
+
   const handleToggleCollapse = useCallback((parentId: string) => {
     if (!projectId) {
       return;
@@ -431,10 +455,19 @@ export function ProjectFactWorkspace({
             }
           : task
       )));
+      mergeConfirmedTasks([{
+        ...originalTask,
+        workVolume: body.task!.workVolume,
+        workUnit: body.task!.workUnit,
+        completedVolume: body.task!.completedVolume,
+        progress: body.task!.progress ?? 0,
+        status: body.task!.status ?? originalTask.status,
+      }]);
       replaceProgressEntriesForTask(originalTask.id, body.progressEntries ?? []);
     });
   }, [
     accessToken,
+    mergeConfirmedTasks,
     parentTaskIds,
     projectId,
     replaceProgressEntriesForTask,
@@ -535,26 +568,32 @@ export function ProjectFactWorkspace({
       };
 
       const changedTaskById = new Map((body.changedTasks ?? []).map((changedTask) => [changedTask.id, changedTask]));
+      const updatedTargetTask = {
+        ...originalTask,
+        startDate: body.task.startDate,
+        endDate: body.task.endDate,
+        workVolume: body.task.workVolume,
+        workUnit: body.task.workUnit,
+        completedVolume: body.task.completedVolume,
+        progress: body.task.progress ?? 0,
+        status: body.task.status ?? originalTask.status,
+      };
       setTasks((currentTasks) => currentTasks.map((task) => (
         task.id === body.task.id
-          ? {
-              ...task,
-              startDate: body.task.startDate,
-              endDate: body.task.endDate,
-              workVolume: body.task.workVolume,
-              workUnit: body.task.workUnit,
-              completedVolume: body.task.completedVolume,
-              progress: body.task.progress ?? 0,
-              status: body.task.status ?? task.status,
-            }
+          ? { ...task, ...updatedTargetTask }
           : changedTaskById.has(task.id)
             ? { ...task, ...changedTaskById.get(task.id)! }
           : task
       )));
+      mergeConfirmedTasks([
+        updatedTargetTask,
+        ...(body.changedTasks ?? []).filter((changedTask) => changedTask.id !== body.task.id),
+      ]);
       replacePlanEntriesForTask(originalTask.id, body.planEntries);
     });
   }, [
     accessToken,
+    mergeConfirmedTasks,
     parentTaskIds,
     planEntriesByTaskId,
     projectId,
@@ -755,6 +794,8 @@ export function ProjectFactWorkspace({
                   highlightedTaskIds={highlightedTaskIds}
                   filterMode="highlight"
                   businessDays={true}
+                  customDays={customDays}
+                  isWeekend={weekendPredicate}
                 />
               )}
             </div>

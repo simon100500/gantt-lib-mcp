@@ -66,13 +66,14 @@ vi.mock('../../../hooks/useProjectBaselines.ts', () => ({
 import { ProjectWorkspace } from '../ProjectWorkspace.tsx';
 import { ProjectFactWorkspace } from '../ProjectFactWorkspace.tsx';
 import { useProjectStore } from '../../../stores/useProjectStore.ts';
+import { deriveVisibleSnapshot } from '../../../stores/useProjectStore.ts';
 import { useProjectUIStore } from '../../../stores/useProjectUIStore.ts';
 import { useUIStore } from '../../../stores/useUIStore.ts';
 import { useHistoryViewerStore } from '../../../stores/useHistoryViewerStore.ts';
 import { useTaskStore } from '../../../stores/useTaskStore.ts';
 import { useAuthStore } from '../../../stores/useAuthStore.ts';
 import type { ProjectLoadResponse } from '../../../lib/apiTypes.ts';
-import type { Task, ValidationResult } from '../../../types.ts';
+import type { CalendarDay, CalendarWeeklyPattern, Task, ValidationResult } from '../../../types.ts';
 
 function installDomPolyfills(): void {
   Object.defineProperty(window, 'matchMedia', {
@@ -149,7 +150,10 @@ async function renderWorkspace(): Promise<{ container: HTMLDivElement; root: Roo
   return { container, root };
 }
 
-async function renderFactWorkspace(): Promise<{ container: HTMLDivElement; root: Root }> {
+async function renderFactWorkspace(options?: {
+  calendarWeeklyPattern?: CalendarWeeklyPattern;
+  calendarDays?: CalendarDay[];
+}): Promise<{ container: HTMLDivElement; root: Root }> {
   const container = document.createElement('div');
   document.body.appendChild(container);
 
@@ -172,10 +176,54 @@ async function renderFactWorkspace(): Promise<{ container: HTMLDivElement; root:
         onValidation={(_result: ValidationResult) => {}}
         readOnly={false}
         shareStatus="idle"
-        calendarWeeklyPattern={{ mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false }}
-        calendarDays={[]}
+        calendarWeeklyPattern={options?.calendarWeeklyPattern ?? { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false }}
+        calendarDays={options?.calendarDays ?? []}
       />,
     );
+    await Promise.resolve();
+  });
+
+  return { container, root };
+}
+
+async function renderFactWorkspaceWithConfirmedStore(): Promise<{ container: HTMLDivElement; root: Root }> {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+
+  const root = createRoot(container);
+
+  function FactWorkspaceHarness() {
+    const confirmedSnapshot = useProjectStore((state) => state.confirmed.snapshot);
+    const pendingCommands = useProjectStore((state) => state.pending);
+    const dragPreview = useProjectStore((state) => state.dragPreview);
+    const scheduleOptions = useProjectStore((state) => state.scheduleOptions);
+    const visibleTasks = deriveVisibleSnapshot(confirmedSnapshot, pendingCommands, dragPreview, scheduleOptions).tasks;
+
+    return (
+      <ProjectFactWorkspace
+        ganttRef={ganttRef}
+        tasks={visibleTasks}
+        setTasks={useTaskStore.getState().setTasks}
+        loading={false}
+        accessToken="token"
+        sharedProject={null}
+        shareToken={null}
+        hasShareToken={false}
+        isAuthenticated={true}
+        onScrollToToday={() => {}}
+        onCollapseAll={() => {}}
+        onExpandAll={() => {}}
+        onValidation={(_result: ValidationResult) => {}}
+        readOnly={false}
+        shareStatus="idle"
+        calendarWeeklyPattern={{ mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false }}
+        calendarDays={[]}
+      />
+    );
+  }
+
+  await act(async () => {
+    root.render(<FactWorkspaceHarness />);
     await Promise.resolve();
   });
 
@@ -544,6 +592,31 @@ describe('ProjectWorkspace resource assignments', () => {
     await unmountWorkspace(root);
   });
 
+  it('passes project calendar overrides into the fact workspace visual weekend predicate', async () => {
+    const { root } = await renderFactWorkspace({
+      calendarDays: [
+        {
+          date: '2026-06-12',
+          kind: 'non_working',
+        },
+      ],
+    });
+
+    const customDays = ganttPropsSpy?.customDays as Array<{ date: Date; type: string }> | undefined;
+    const isWeekend = ganttPropsSpy?.isWeekend as ((date: Date) => boolean) | undefined;
+
+    expect(customDays).toEqual([
+      {
+        date: new Date('2026-06-12T00:00:00.000Z'),
+        type: 'weekend',
+      },
+    ]);
+    expect(isWeekend?.(new Date('2026-06-12T00:00:00.000Z'))).toBe(true);
+    expect(isWeekend?.(new Date('2026-06-11T00:00:00.000Z'))).toBe(false);
+
+    await unmountWorkspace(root);
+  });
+
   it('clears the fact completed-volume loading skeleton after a daily fact edit settles', async () => {
     useProjectStore.setState((state) => ({
       ...state,
@@ -785,6 +858,79 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(requestBody.nextPlanByDate).toEqual({
       '2026-04-01': 5,
     });
+
+    await unmountWorkspace(root);
+  });
+
+  it('updates the authoritative task end date after the server shortens plan duration', async () => {
+    useProjectStore.setState((state) => ({
+      ...state,
+      confirmed: { version: 1, snapshot: { tasks, dependencies: [] } },
+      planEntries: [
+        {
+          id: 'plan-1',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-01',
+          amount: 5,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: 'plan-2',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-02',
+          amount: 5,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+      task: {
+        id: 'leaf-1',
+        startDate: '2026-04-01',
+        endDate: '2026-04-01',
+        workVolume: 10,
+        workUnit: null,
+        completedVolume: 3,
+        progress: 30,
+        status: 'in_progress',
+      },
+      planEntries: [
+        {
+          id: 'plan-1',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-01',
+          amount: 10,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+      changedTasks: [],
+    }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { root } = await renderFactWorkspaceWithConfirmedStore();
+
+    await act(async () => {
+      const onTasksChange = ganttPropsSpy?.onTasksChange as (changedTasks: Task[]) => Promise<void>;
+      await onTasksChange([{
+        ...tasks[1]!,
+        planByDate: {
+          '2026-04-01': 5,
+        },
+        factByDate: {},
+      } as Task]);
+    });
+
+    const confirmedLeaf = useProjectStore.getState().confirmed.snapshot.tasks.find((task) => task.id === 'leaf-1');
+    expect(confirmedLeaf?.endDate).toBe('2026-04-01');
+
+    const latestRenderedTasks = ganttPropsHistory.at(-1)?.tasks as Task[] | undefined;
+    expect(latestRenderedTasks?.find((task) => task.id === 'leaf-1')?.endDate).toBe('2026-04-01');
 
     await unmountWorkspace(root);
   });
