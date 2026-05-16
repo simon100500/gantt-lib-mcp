@@ -1054,6 +1054,48 @@ export function ProjectWorkspace({
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
   }, [setChatComposerDraft, setWorkspace]);
 
+  const revealTaskAncestors = useCallback((taskId: string) => {
+    if (!projectId) {
+      return;
+    }
+
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const ancestorIds: string[] = [];
+    let parentId = taskById.get(taskId)?.parentId;
+
+    while (parentId) {
+      ancestorIds.push(parentId);
+      parentId = taskById.get(parentId)?.parentId;
+    }
+
+    if (ancestorIds.length === 0) {
+      return;
+    }
+
+    const nextCollapsedParentIds = Array.from(collapsedParentIds)
+      .filter((collapsedParentId) => !ancestorIds.includes(collapsedParentId));
+
+    if (nextCollapsedParentIds.length !== collapsedParentIds.size) {
+      setProjectState(projectId, { collapsedParentIds: nextCollapsedParentIds });
+    }
+  }, [collapsedParentIds, projectId, setProjectState, tasks]);
+
+  const scrollToTaskReference = useCallback((taskId: string) => {
+    const runScroll = () => {
+      if (typeof ganttRef.current?.scrollToRow === 'function') {
+        ganttRef.current.scrollToRow(taskId, { behavior: 'auto' });
+      }
+      if (typeof ganttRef.current?.scrollToTask === 'function') {
+        ganttRef.current.scrollToTask(taskId);
+      }
+    };
+
+    runScroll();
+    window.requestAnimationFrame(runScroll);
+    window.setTimeout(runScroll, 50);
+    window.setTimeout(runScroll, 150);
+  }, [ganttRef]);
+
   const handleTaskReferenceClick = useCallback((taskId: string) => {
     setTempHighlightedTaskId(taskId);
     window.setTimeout(() => {
@@ -1062,15 +1104,9 @@ export function ProjectWorkspace({
       }
     }, 2000);
 
-    if (typeof ganttRef.current?.scrollToRow === 'function') {
-      ganttRef.current.scrollToRow(taskId, { behavior: 'auto' });
-    }
-    if (typeof ganttRef.current?.scrollToTask === 'function') {
-      window.requestAnimationFrame(() => {
-        ganttRef.current?.scrollToTask(taskId);
-      });
-    }
-  }, [ganttRef, setTempHighlightedTaskId]);
+    revealTaskAncestors(taskId);
+    scrollToTaskReference(taskId);
+  }, [revealTaskAncestors, scrollToTaskReference, setTempHighlightedTaskId]);
 
   useEffect(() => () => {
     historyBranchConfirmResolverRef.current?.(false);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal, Users } from 'lucide-react';
+import { Folder, Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal, Users } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTableColumnWidthMap, ResourceTimelineMove, ResourceTimelineResourceMenuCommand } from 'gantt-lib';
 
@@ -675,7 +675,7 @@ export function ResourcePlannerWorkspace({
         body: JSON.stringify({
           name,
           type: mapTimelineResourceTypeToApiType(resource.type),
-          scope: mapTimelineResourceScopeToApiScope(resource.scope),
+          scope: plannerScope === 'all-projects' ? 'shared' : mapTimelineResourceScopeToApiScope(resource.scope),
           projectId,
         }),
       });
@@ -699,7 +699,7 @@ export function ResourcePlannerWorkspace({
     } finally {
       setPendingCatalogResourceId(null);
     }
-  }, [accessToken, clearResourcePlannerCache, pendingCatalogResourceId, projectId, upsertResource]);
+  }, [accessToken, clearResourcePlannerCache, pendingCatalogResourceId, plannerScope, projectId, upsertResource]);
 
   const patchCatalogResource = useCallback(async (resource: ProjectResource, payload: { name?: string; type?: ResourceType; scope?: 'shared' | 'project'; isActive?: boolean }) => {
     if (!accessToken || pendingCatalogResourceId) {
@@ -1704,11 +1704,20 @@ export function ResourcePlannerWorkspace({
           )}
           {plannerScope === 'all-projects' && (
             <div
-              className="ml-2 min-w-0 truncate text-[13px] font-semibold text-slate-700"
+              className="ml-2 flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-slate-700"
               data-testid="planner-group-title"
               title={projectGroupName ? `Ресурсы группы проектов ${projectGroupName}` : 'Ресурсы группы проектов'}
             >
-              Ресурсы группы проектов {projectGroupName}
+              <span className="shrink-0">Ресурсы группы проектов</span>
+              {projectGroupName ? (
+                <span
+                  className="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100/70 px-2 py-0.5 text-[12px] font-semibold text-slate-600"
+                  data-testid="planner-group-name-chip"
+                >
+                  <Folder className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  <span className="min-w-0 truncate">{projectGroupName}</span>
+                </span>
+              ) : null}
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
@@ -1977,8 +1986,8 @@ export function ResourcePlannerWorkspace({
                     resourceTableColumnWidths={resourceTableColumnWidths}
                     onResourceTableColumnWidthsChange={handleResourceTableColumnWidthsChange}
                     onResourceChange={effectiveReadonly ? undefined : handleResourceChange}
-                    onAddResource={resourceLifecycleReadonly ? undefined : handleAddResource}
-                    enableAddResource={!resourceLifecycleReadonly}
+                    onAddResource={effectiveReadonly ? undefined : handleAddResource}
+                    enableAddResource={!effectiveReadonly}
                     resourceMenuCommands={resourceMenuCommands}
                     getItemClassName={getTimelineItemClassName}
                     activeResourceItemId={selectedItem?.id ?? null}
@@ -2083,6 +2092,7 @@ export function ResourcePlannerWorkspace({
               resources={plannerCatalogResources}
               assignedResources={selectedAssignedResources}
               readonly={effectiveReadonly}
+              projectGroupName={projectGroupName}
               onClose={() => setSelectedItem(null)}
               onOpenTask={onOpenTask}
               onAddResource={plannerScope === 'all-projects' ? undefined : handleAddAssignment}

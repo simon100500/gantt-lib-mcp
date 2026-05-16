@@ -31,6 +31,8 @@ type MockGanttProps = {
   mode?: string;
   resources?: MockTimelineResource[];
   readonly?: boolean;
+  enableAddResource?: boolean;
+  onAddResource?: (resource: MockTimelineResource) => void;
   onResourceChange?: (resource: MockTimelineResource) => void;
   onResourceItemMove?: (move: {
     item: MockTimelineItem;
@@ -409,9 +411,12 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
     expect(container.querySelector('[data-testid="resource-planner-statusbar"]')?.textContent).toContain('Группа проектов');
     expect(container.querySelector('[data-testid="planner-scope-current-project"]')?.textContent).toBe('Проектные');
     expect(container.querySelector('[data-testid="planner-scope-all-projects"]')?.textContent).toBe('Общие');
-    expect(container.querySelector('[data-testid="planner-group-title"]')?.textContent).toContain('Ресурсы группы проектов Стройка 2026');
+    expect(container.querySelector('[data-testid="planner-group-title"]')?.textContent).toContain('Ресурсы группы проектов');
+    expect(container.querySelector('[data-testid="planner-group-name-chip"]')?.textContent).toBe('Стройка 2026');
     expect(container.querySelector('[data-testid="planner-create-resource"]')).not.toBeNull();
     expect(latestGanttProps().readonly).toBe(false);
+    expect(latestGanttProps().enableAddResource).toBe(true);
+    expect(latestGanttProps().onAddResource).toEqual(expect.any(Function));
     expect(latestGanttProps().onResourceChange).toEqual(expect.any(Function));
     expect(latestGanttProps().resources?.map((resource) => resource.id)).toEqual(['resource-shared']);
     expect(latestGanttProps().resources?.[0]?.items[0]?.title).toBe('Beta install');
@@ -464,6 +469,57 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
     const createCall = fetchMock.mock.calls.find(([input, init]) => String(input) === '/api/resources' && init?.method === 'POST');
     expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
       name: 'Shared Lift',
+      scope: 'shared',
+      projectId: 'project-1',
+    });
+
+    await unmount(root);
+  });
+
+  it('creates shared resources from the group-scope inline resource row', async () => {
+    const existingResource = buildResource('resource-shared', 'Shared Crew', 'human', 'shared');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/resources/planner?scope=all-projects') {
+        return {
+          ok: true,
+          json: async () => buildPlannerPayload({
+            scope: 'all-projects',
+            resources: [{ resourceId: 'resource-shared', resourceName: 'Shared Crew', intervals: [] }],
+          }),
+        } as Response;
+      }
+      if (url === '/api/resources?projectId=project-1') {
+        return { ok: true, json: async () => ({ resources: [existingResource] }) } as Response;
+      }
+      if (url === '/api/resources' && init?.method === 'POST') {
+        return { ok: true, json: async () => buildResource('resource-inline', 'Inline Crane', 'equipment', 'shared') } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useProjectStore.setState({ resources: [existingResource] });
+
+    const { root } = await renderPlannerWorkspace({ scope: 'all-projects' });
+    await flushEffects();
+
+    await act(async () => {
+      latestGanttProps().onAddResource?.({
+        id: 'resource-inline',
+        name: 'Inline Crane',
+        type: 'Оборудование',
+        scope: 'Project',
+        status: 'Active',
+        items: [],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const createCall = fetchMock.mock.calls.find(([input, init]) => String(input) === '/api/resources' && init?.method === 'POST');
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      name: 'Inline Crane',
+      type: 'equipment',
       scope: 'shared',
       projectId: 'project-1',
     });

@@ -207,8 +207,11 @@ export function WorkspaceShell({
   const canEditResources = hasShareToken ? false : projectPermissions.resources === 'edit';
   const canViewFinance = hasShareToken || projectPermissions.finance !== 'none';
   const canEditFinance = hasShareToken ? false : projectPermissions.finance === 'edit';
-  const activeProjectDisplayMode = auth.project?.id
-    ? projectStates[auth.project.id]?.projectDisplayMode ?? 'gantt'
+  const displayModeProjectId = workspace.kind === 'project'
+    ? workspace.projectId
+    : auth.project?.id ?? null;
+  const activeProjectDisplayMode = displayModeProjectId
+    ? projectStates[displayModeProjectId]?.projectDisplayMode ?? 'gantt'
     : 'gantt';
   const isFactModeActive = workspace.kind === 'project' && activeProjectDisplayMode === 'fact';
   const isArchivedProject = !hasShareToken && workspace.kind === 'project' && auth.project?.status === 'archived';
@@ -1111,11 +1114,13 @@ export function WorkspaceShell({
           }}
           onCorrectConflict={(target) => {
             setPlannerCorrectionTarget(target);
+            setProjectState(target.projectId, { projectDisplayMode: 'gantt' });
             setWorkspace({ kind: 'project', projectId: target.projectId, chatOpen: readProjectChatOpenState() });
           }}
           onOpenTask={(target) => {
             setShowChart(true);
             setPlannerCorrectionTarget(target);
+            setProjectState(target.projectId, { projectDisplayMode: 'gantt' });
             setWorkspace({ kind: 'project', projectId: target.projectId, chatOpen: readProjectChatOpenState() });
           }}
         />

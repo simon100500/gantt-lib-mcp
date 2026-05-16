@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { Folder, House, X } from 'lucide-react';
 
 import type { ProjectResource } from '../../lib/apiTypes.ts';
 import { cn } from '../../lib/utils.ts';
@@ -17,6 +17,7 @@ interface ResourceAssignmentDetailsPanelProps {
   resources: ProjectResource[];
   assignedResources: AssignmentResourceView[];
   readonly: boolean;
+  projectGroupName?: string | null;
   onClose: () => void;
   onOpenTask?: (input: { projectId: string; taskId: string; assignmentId: string; resourceId: string }) => void;
   onAddResource?: (input: { taskId: string; resourceId: string }) => void;
@@ -47,6 +48,7 @@ export function ResourceAssignmentDetailsPanel({
   resources,
   assignedResources,
   readonly,
+  projectGroupName = null,
   onClose,
   onOpenTask,
   onAddResource,
@@ -104,13 +106,28 @@ export function ResourceAssignmentDetailsPanel({
     >
       <div className="flex items-start justify-between gap-3 border-b border-[#dfe1e6] px-4 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="break-words text-[15px] font-bold leading-snug text-[#172b4d]">{item.title}</h2>
-          <div
-            className="mt-1 break-words text-[12px] font-medium leading-snug text-[#5e6c84]"
-            data-testid="assignment-details-project-name"
-          >
-            {metadata.projectName}
+          <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] font-medium leading-snug text-[#5e6c84]">
+            {projectGroupName ? (
+              <>
+                <span
+                  className="inline-flex min-w-0 items-center gap-1.5"
+                  data-testid="assignment-details-project-group-name"
+                >
+                  <Folder className="h-3.5 w-3.5 shrink-0 text-[#6b778c]" />
+                  <span className="min-w-0 break-words">{projectGroupName}</span>
+                </span>
+                <span className="shrink-0 text-[#97a0af]" aria-hidden="true">&gt;</span>
+              </>
+            ) : null}
+            <span
+              className="inline-flex min-w-0 items-center gap-1.5"
+              data-testid="assignment-details-project-name"
+            >
+              <House className="h-3.5 w-3.5 shrink-0 text-[#6b778c]" />
+              <span className="min-w-0 break-words">{metadata.projectName}</span>
+            </span>
           </div>
+          <h2 className="break-words text-[15px] font-bold leading-snug text-[#172b4d]">{item.title}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center rounded-md bg-[#deebff] px-1.5 py-0.5 text-[11px] font-bold text-[#0747a6]">
               {Math.ceil((new Date(item.endDate).getTime() - new Date(item.startDate).getTime()) / 86400000) + 1} дн.

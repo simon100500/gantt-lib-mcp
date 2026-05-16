@@ -89,10 +89,28 @@ afterEach(() => {
 });
 
 describe('ResourceAssignmentDetailsPanel', () => {
-  it('shows the assignment project under the task title', async () => {
+  it('shows the assignment object breadcrumb under the task title', async () => {
     const { container, root } = await renderPanel();
 
     expect(container.querySelector('[data-testid="assignment-details-project-name"]')?.textContent).toBe('Project 1');
+    expect(container.querySelector('[data-testid="assignment-details-project-name"] svg')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assignment-details-project-group-name"]')).toBeNull();
+
+    await unmount(root);
+  });
+
+  it('shows the project group before the object in one breadcrumb row when provided', async () => {
+    const { container, root } = await renderPanel({ projectGroupName: 'Отделка' });
+    const groupNode = container.querySelector('[data-testid="assignment-details-project-group-name"]');
+    const projectNode = container.querySelector('[data-testid="assignment-details-project-name"]');
+    const titleNode = container.querySelector('h2');
+
+    expect(projectNode?.textContent).toBe('Project 1');
+    expect(groupNode?.textContent).toBe('Отделка');
+    expect(groupNode?.querySelector('svg')).not.toBeNull();
+    expect(groupNode?.compareDocumentPosition(projectNode as Node) ?? 0).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(groupNode?.compareDocumentPosition(titleNode as Node) ?? 0).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(groupNode?.parentElement?.textContent).toContain('Отделка>Project 1');
 
     await unmount(root);
   });

@@ -115,6 +115,7 @@ function createGanttRef() {
 interface RenderWorkspaceOptions {
   ganttRef?: { current: unknown };
   projectId?: string;
+  tasksOverride?: Task[];
   ganttDayMode?: 'business' | 'calendar';
   readOnly?: boolean;
   setTasks?: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
@@ -123,6 +124,7 @@ interface RenderWorkspaceOptions {
 async function renderWorkspace({
   ganttRef = createGanttRef(),
   projectId = 'project-1',
+  tasksOverride = tasks,
   ganttDayMode = 'calendar',
   readOnly = false,
   setTasks = () => {},
@@ -153,7 +155,7 @@ async function renderWorkspace({
           shareToken={null}
           sharedProject={null}
           showChat={true}
-          tasks={tasks}
+          tasks={tasksOverride}
       />,
     );
     await Promise.resolve();
@@ -286,7 +288,6 @@ describe('ProjectWorkspace planner correction focus', () => {
       await Promise.resolve();
     });
 
-    expect(scrollToTaskSpy).toHaveBeenCalledTimes(1);
     expect(scrollToTaskSpy).toHaveBeenCalledWith('task-2');
     expect(useUIStore.getState().plannerCorrectionTarget).toBeNull();
     expect(scrollToRowSpy).toHaveBeenCalledWith('task-2', { behavior: 'auto' });
@@ -295,7 +296,38 @@ describe('ProjectWorkspace planner correction focus', () => {
 
     await rerenderWorkspace(root);
 
-    expect(scrollToTaskSpy).toHaveBeenCalledTimes(1);
+    const scrollToTaskCallCount = scrollToTaskSpy.mock.calls.length;
+    await rerenderWorkspace(root);
+    expect(scrollToTaskSpy).toHaveBeenCalledTimes(scrollToTaskCallCount);
+
+    await unmountWorkspace(root);
+  });
+
+  it('opens only the target task ancestor chain before scrolling from planner correction', async () => {
+    const nestedTasks: Task[] = [
+      { id: 'phase-1', name: 'Phase 1', startDate: '2026-04-01', endDate: '2026-04-10', dependencies: [] },
+      { id: 'task-1', parentId: 'phase-1', name: 'Spec', startDate: '2026-04-01', endDate: '2026-04-02', dependencies: [] },
+      { id: 'phase-2', name: 'Phase 2', startDate: '2026-04-11', endDate: '2026-04-20', dependencies: [] },
+      { id: 'task-2', parentId: 'phase-2', name: 'Build', startDate: '2026-04-12', endDate: '2026-04-13', dependencies: [] },
+    ];
+    useProjectUIStore.getState().setProjectState('project-1', {
+      collapsedParentIds: ['phase-1', 'phase-2'],
+    });
+    useUIStore.getState().setPlannerCorrectionTarget({
+      projectId: 'project-1',
+      taskId: 'task-2',
+      assignmentId: 'assignment-1',
+      resourceId: 'resource-1',
+    });
+
+    const { root } = await renderWorkspace({ tasksOverride: nestedTasks });
+    await act(async () => {
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(useProjectUIStore.getState().getProjectState('project-1')?.collapsedParentIds).toEqual(['phase-1']);
+    expect(scrollToRowSpy).toHaveBeenCalledWith('task-2', { behavior: 'auto' });
 
     await unmountWorkspace(root);
   });
@@ -346,8 +378,8 @@ describe('ProjectWorkspace planner correction focus', () => {
     expect(scrollToTaskSpy).not.toHaveBeenCalled();
     expect(useUIStore.getState().plannerCorrectionTarget).toBeNull();
     expect(scrollToRowSpy).not.toHaveBeenCalled();
-    expect(useUIStore.getState().tempHighlightedTaskId).toBeNull();
-    expect(latestHighlightedTaskIds().has('task-1')).toBe(false);
+    expect(useUIStore.getState().tempHighlightedTaskId).toBe('task-1');
+    expect(latestHighlightedTaskIds().has('task-1')).toBe(true);
 
     await unmountWorkspace(root);
   });
@@ -361,6 +393,10 @@ describe('ProjectWorkspace planner correction focus', () => {
     firstScrollContainer!.scrollLeft = 240;
     firstScrollContainer!.scrollTop = 96;
     firstScrollContainer!.dispatchEvent(new Event('scroll'));
+    await act(async () => {
+      vi.advanceTimersByTime(160);
+      await Promise.resolve();
+    });
 
     expect(useProjectUIStore.getState().getProjectState('project-1')?.ganttScrollLeft).toBe(240);
     expect(useProjectUIStore.getState().getProjectState('project-1')?.ganttScrollTop).toBe(96);
