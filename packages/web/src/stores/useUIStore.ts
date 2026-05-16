@@ -75,7 +75,7 @@ export type WorkspaceMode =
   | { kind: 'guest' }
   | { kind: 'shared' }
   | { kind: 'project'; projectId: string; chatOpen: boolean }
-  | { kind: 'planner'; projectId: string }
+  | { kind: 'planner'; projectId: string; scope?: 'current-project' | 'all-projects' }
   | { kind: 'finance'; projectId: string }
   | { kind: 'template'; templateId: string }
   | {

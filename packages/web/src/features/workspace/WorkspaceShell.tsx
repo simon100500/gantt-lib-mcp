@@ -1092,10 +1092,14 @@ export function WorkspaceShell({
         <ResourcePlannerWorkspace
           accessToken={auth.accessToken}
           projectId={workspace.projectId}
+          scope={workspace.scope ?? 'current-project'}
           ganttDayMode={effectiveAuthGanttDayMode}
           calendarWeeklyPattern={auth.project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}
           calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
           readonly={isArchivedProject || !canEditResources}
+          onScopeChange={(scope) => {
+            setWorkspace({ kind: 'planner', projectId: workspace.projectId, scope });
+          }}
           onResourceLimitReached={() => openLimitModal(buildResourceCreationLimitDenial(billingStatus))}
           onBackToProject={() => {
             setPlannerCorrectionTarget(null);

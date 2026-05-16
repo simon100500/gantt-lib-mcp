@@ -27,6 +27,7 @@ type MockTimelineResource = {
 type MockGanttProps = {
   mode?: string;
   resources?: MockTimelineResource[];
+  readonly?: boolean;
   onResourceItemMove?: (move: {
     item: MockTimelineItem;
     itemId: string;
@@ -112,6 +113,7 @@ function installDomPolyfills(): void {
 installDomPolyfills();
 
 function buildPlannerPayload(overrides?: Partial<{
+  scope: 'current-project' | 'all-projects';
   resources: Array<{
     resourceId: string;
     resourceName: string;
@@ -136,7 +138,8 @@ function buildPlannerPayload(overrides?: Partial<{
 }>) {
   return {
     projectId: 'project-1',
-    scope: 'current-project',
+    scope: overrides?.scope ?? 'current-project',
+    projectGroupId: 'group-1',
     workspaceUserId: 'user-1',
     resources: (overrides?.resources ?? [{
       resourceId: 'resource-1',
@@ -166,13 +169,13 @@ function buildPlannerPayload(overrides?: Partial<{
   };
 }
 
-function buildResource(id: string, name: string, type: 'human' | 'equipment' | 'material' | 'other' = 'human') {
+function buildResource(id: string, name: string, type: 'human' | 'equipment' | 'material' | 'other' = 'human', scope: 'project' | 'shared' = 'project') {
   return {
     id,
     userId: 'user-1',
-    projectId: 'project-1',
-    projectGroupId: null,
-    scope: 'project' as const,
+    projectId: scope === 'shared' ? null : 'project-1',
+    projectGroupId: scope === 'shared' ? 'group-1' : null,
+    scope,
     name,
     type,
     isActive: true,
@@ -188,7 +191,10 @@ function latestGanttProps(): MockGanttProps {
   return props;
 }
 
-async function renderPlannerWorkspace(): Promise<{ container: HTMLDivElement; root: Root }> {
+async function renderPlannerWorkspace(options: {
+  scope?: 'current-project' | 'all-projects';
+  onScopeChange?: (scope: 'current-project' | 'all-projects') => void;
+} = {}): Promise<{ container: HTMLDivElement; root: Root }> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -198,6 +204,8 @@ async function renderPlannerWorkspace(): Promise<{ container: HTMLDivElement; ro
       <ResourcePlannerWorkspace
         accessToken="token"
         projectId="project-1"
+        scope={options.scope}
+        onScopeChange={options.onScopeChange}
         onBackToProject={vi.fn()}
         onCorrectConflict={vi.fn()}
       />,
@@ -331,6 +339,99 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }));
     expect(container.querySelector('[data-testid="resource-planner-statusbar"]')?.textContent).toContain('Текущий проект');
+
+    await unmount(root);
+  });
+
+  it('loads group scope as shared-resource overview without current project local resources', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/resources/planner?scope=all-projects') {
+        return {
+          ok: true,
+          json: async () => buildPlannerPayload({
+            scope: 'all-projects',
+            resources: [{
+              resourceId: 'resource-shared',
+              resourceName: 'Shared Crew',
+              intervals: [{
+                assignmentId: 'assignment-shared-beta',
+                resourceId: 'resource-shared',
+                resourceName: 'Shared Crew',
+                projectId: 'project-2',
+                projectName: 'Project 2',
+                taskId: 'task-2',
+                taskName: 'Beta install',
+                startDate: '2026-04-04',
+                endDate: '2026-04-06',
+                assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                hasConflict: false,
+                conflictCount: 0,
+                conflictAssignmentIds: [],
+              }],
+            }],
+          }),
+        } as Response;
+      }
+      if (url === '/api/resources?projectId=project-1') {
+        return {
+          ok: true,
+          json: async () => ({
+            resources: [
+              buildResource('resource-shared', 'Shared Crew', 'human', 'shared'),
+              buildResource('resource-local', 'Local Crew'),
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useProjectStore.setState({
+      resources: [
+        buildResource('resource-shared', 'Shared Crew', 'human', 'shared'),
+        buildResource('resource-local', 'Local Crew'),
+      ],
+    });
+
+    const { container, root } = await renderPlannerWorkspace({ scope: 'all-projects' });
+    await flushEffects();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=all-projects', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }));
+    expect(container.querySelector('[data-testid="resource-planner-statusbar"]')?.textContent).toContain('Группа проектов');
+    expect(container.querySelector('[data-testid="planner-create-resource"]')).toBeNull();
+    expect(latestGanttProps().readonly).toBe(true);
+    expect(latestGanttProps().resources?.map((resource) => resource.id)).toEqual(['resource-shared']);
+    expect(latestGanttProps().resources?.[0]?.items[0]?.title).toBe('Beta install');
+
+    await unmount(root);
+  });
+
+  it('emits scope changes from the toolbar switcher', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/resources/planner?scope=current-project') {
+        return { ok: true, json: async () => buildPlannerPayload() } as Response;
+      }
+      if (url === '/api/resources?projectId=project-1') {
+        return { ok: true, json: async () => ({ resources: [buildResource('resource-1', 'Crew A')] }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onScopeChange = vi.fn();
+
+    const { container, root } = await renderPlannerWorkspace({ onScopeChange });
+    await flushEffects();
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-scope-all-projects"]') as HTMLButtonElement | null)?.click();
+      await Promise.resolve();
+    });
+
+    expect(onScopeChange).toHaveBeenCalledWith('all-projects');
 
     await unmount(root);
   });

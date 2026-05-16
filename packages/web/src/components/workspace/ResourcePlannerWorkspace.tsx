@@ -39,10 +39,12 @@ import { CreateResourceModal } from './CreateResourceModal.tsx';
 interface ResourcePlannerWorkspaceProps {
   accessToken?: string | null;
   projectId: string;
+  scope?: PlannerScope;
   ganttDayMode?: 'business' | 'calendar';
   calendarWeeklyPattern?: CalendarWeeklyPattern;
   calendarDays?: CalendarDay[];
   readonly?: boolean;
+  onScopeChange?: (scope: PlannerScope) => void;
   onBackToProject: () => void;
   onCorrectConflict: (target: PlannerCorrectionTarget) => void;
   onOpenTask?: (target: PlannerCorrectionTarget) => void;
@@ -79,6 +81,11 @@ const VIEW_MODE_OPTIONS: Array<{ mode: ViewMode; label: string }> = [
   { mode: 'day', label: 'День' },
   { mode: 'week', label: 'Неделя' },
   { mode: 'month', label: 'Месяц' },
+];
+
+const PLANNER_SCOPE_OPTIONS: Array<{ scope: PlannerScope; label: string }> = [
+  { scope: 'current-project', label: 'Проект' },
+  { scope: 'all-projects', label: 'Группа' },
 ];
 
 const AUTO_REFRESH_MIN_INTERVAL_MS = 60_000;
@@ -315,14 +322,17 @@ function removePlannerResource(
 export function ResourcePlannerWorkspace({
   accessToken = null,
   projectId,
+  scope = 'current-project',
   ganttDayMode = 'calendar',
   calendarWeeklyPattern = DEFAULT_CALENDAR_WEEKLY_PATTERN,
   calendarDays = [],
   readonly = false,
+  onScopeChange,
   onOpenTask,
   onResourceLimitReached,
 }: ResourcePlannerWorkspaceProps) {
-  const plannerScope: PlannerScope = 'current-project';
+  const plannerScope: PlannerScope = scope;
+  const groupScopeReadonly = plannerScope === 'all-projects';
   const cachedPlannerData = useProjectStore((store) => store.resourcePlannerCache[`${projectId}:${plannerScope}`] ?? null);
   const setResourcePlannerCache = useProjectStore((store) => store.setResourcePlannerCache);
   const globalViewMode = useUIStore((store) => store.viewMode);
@@ -1224,26 +1234,40 @@ export function ResourcePlannerWorkspace({
     () => getProjectWeekendPredicate(calendarWeeklyPattern, calendarDays),
     [calendarDays, calendarWeeklyPattern],
   );
+  const plannerCatalogResources = useMemo(
+    () => plannerScope === 'all-projects'
+      ? resources.filter((resource) => resource.scope === 'shared')
+      : resources,
+    [plannerScope, resources],
+  );
   const timelineResources = useMemo(
     () => (
-      buildCurrentProjectResourceTimeline(
-        projectId,
-        visibleProjectSnapshot.tasks,
-        resources,
-        assignments,
-        displayedPlannerData,
-      )
+      plannerScope === 'all-projects'
+        ? mapResourcePlannerResultToTimelineResources(displayedPlannerData ?? {
+            projectId,
+            projectGroupId: '',
+            scope: plannerScope,
+            workspaceUserId: '',
+            resources: [],
+          }, plannerCatalogResources)
+        : buildCurrentProjectResourceTimeline(
+            projectId,
+            visibleProjectSnapshot.tasks,
+            resources,
+            assignments,
+            displayedPlannerData,
+          )
     ),
-    [assignments, displayedPlannerData, projectId, resources, visibleProjectSnapshot.tasks],
+    [assignments, displayedPlannerData, plannerCatalogResources, plannerScope, projectId, resources, visibleProjectSnapshot.tasks],
   );
   const filteredTimelineResources = useMemo(
     () => filterResourceTimelineResources(
       timelineResources,
-      resources,
+      plannerCatalogResources,
       filters,
       selectedItem ? { preserveResourceIds: [selectedItem.resourceId] } : undefined,
     ),
-    [filters, resources, selectedItem, timelineResources],
+    [filters, plannerCatalogResources, selectedItem, timelineResources],
   );
   useEffect(() => {
     selectionHydratedRef.current = false;
@@ -1301,15 +1325,15 @@ export function ResourcePlannerWorkspace({
     selectionHydratedRef.current = true;
   }, [getProjectState, projectId, selectedItem, timelineResources]);
   const selectedResource = useMemo(
-    () => selectedItem ? resources.find((resource) => resource.id === selectedItem.resourceId) ?? null : null,
-    [resources, selectedItem],
+    () => selectedItem ? plannerCatalogResources.find((resource) => resource.id === selectedItem.resourceId) ?? null : null,
+    [plannerCatalogResources, selectedItem],
   );
   const selectedAssignedResources = useMemo<AssignmentResourceView[]>(() => {
     if (!selectedItem) {
       return [];
     }
 
-    const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
+    const resourceById = new Map(plannerCatalogResources.map((resource) => [resource.id, resource]));
     const assigned = assignments
       .filter((assignment) => assignment.taskId === selectedItem.taskId)
       .map((assignment) => {
@@ -1323,7 +1347,7 @@ export function ResourcePlannerWorkspace({
     }
 
     return assigned;
-  }, [assignments, resources, selectedItem, selectedResource]);
+  }, [assignments, plannerCatalogResources, selectedItem, selectedResource]);
   useEffect(() => {
     if (!selectedItem) {
       return;
@@ -1350,7 +1374,7 @@ export function ResourcePlannerWorkspace({
         : current
     ));
   }, [selectedItem, visibleProjectSnapshot.tasks]);
-  const effectiveReadonly = !accessToken || readonly;
+  const effectiveReadonly = !accessToken || readonly || groupScopeReadonly;
   const plannerResourceCount = timelineResources.length;
   const plannerAssignmentCount = timelineResources.reduce((total, resource) => total + resource.items.length, 0);
   const pendingMoveCount = Object.keys(pendingMoveCounts).length;
@@ -1393,6 +1417,15 @@ export function ResourcePlannerWorkspace({
     setGlobalViewMode(nextViewMode);
     setProjectState(projectId, { viewMode: nextViewMode });
   }, [projectId, setGlobalViewMode, setProjectState]);
+  const handlePlannerScopeChange = useCallback((nextScope: PlannerScope) => {
+    if (nextScope === plannerScope) {
+      return;
+    }
+
+    setSelectedItem(null);
+    setPlannerSaveError(null);
+    onScopeChange?.(nextScope);
+  }, [onScopeChange, plannerScope]);
   const resourceMenuCommands = useMemo<Array<ResourceTimelineResourceMenuCommand<ResourcePlannerTimelineItem>>>(() => [
     {
       id: 'deactivate',
@@ -1492,6 +1525,28 @@ export function ResourcePlannerWorkspace({
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       <div className="px-3 md:px-4">
         <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] py-2">
+          <div className="inline-flex rounded-md" role="tablist" aria-label="Масштаб ресурсов">
+            {PLANNER_SCOPE_OPTIONS.map((option, index) => (
+              <button
+                key={option.scope}
+                type="button"
+                className={cn(
+                  'flex h-8 items-center border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                  index === 0 && 'rounded-l-md',
+                  index === PLANNER_SCOPE_OPTIONS.length - 1 && 'rounded-r-md',
+                  plannerScope === option.scope
+                    ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10'
+                    : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
+                )}
+                data-testid={`planner-scope-${option.scope}`}
+                role="tab"
+                aria-selected={plannerScope === option.scope}
+                onClick={() => handlePlannerScopeChange(option.scope)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           {!effectiveReadonly && (
             <Button
               type="button"
@@ -1698,8 +1753,12 @@ export function ResourcePlannerWorkspace({
                   <div className="mt-5 text-lg font-semibold text-slate-900">Ресурсов пока нет</div>
                   <div className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
                     {hasActiveFilters
-                      ? 'По текущим фильтрам ничего не найдено. Добавьте новый ресурс и он сразу появится в календаре.'
-                      : 'Добавьте первый ресурс в проект, чтобы начать планирование загрузки и назначений.'}
+                      ? plannerScope === 'all-projects'
+                        ? 'По текущим фильтрам ничего не найдено в shared-ресурсах группы.'
+                        : 'По текущим фильтрам ничего не найдено. Добавьте новый ресурс и он сразу появится в календаре.'
+                      : plannerScope === 'all-projects'
+                        ? 'В группе пока нет назначений на общие ресурсы. Назначьте shared-ресурсы в проектах группы, чтобы увидеть общую загрузку.'
+                        : 'Добавьте первый ресурс в проект, чтобы начать планирование загрузки и назначений.'}
                   </div>
                   {!effectiveReadonly && (
                     <Button
@@ -1796,7 +1855,7 @@ export function ResourcePlannerWorkspace({
                 </span>
 
                 <span className="font-mono text-[11px] text-slate-400">
-                  {plannerScope === 'current-project' ? 'Текущий проект' : 'Все проекты'}
+                  {plannerScope === 'current-project' ? 'Текущий проект' : 'Группа проектов'}
                 </span>
 
                 {isBackgroundRefreshing && (
