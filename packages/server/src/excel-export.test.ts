@@ -20,6 +20,21 @@ function assertArgbColor(
   assert.equal(color.argb, expectedArgb);
 }
 
+function assertFillBackgroundArgb(
+  fill: {
+    type?: string;
+    pattern?: string;
+    fgColor?: { theme?: number; tint?: number; argb?: string };
+    bgColor?: { theme?: number; tint?: number; argb?: string };
+  } | undefined,
+  expectedArgb: string,
+) {
+  assert.ok(fill);
+  const color = fill.pattern === 'solid' ? fill.fgColor : (fill.bgColor ?? fill.fgColor);
+  assert.ok(color);
+  assert.equal(color.argb, expectedArgb);
+}
+
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -331,13 +346,13 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell(`${yesterdayColumnName}4`).value, 1);
     assert.equal(sheet.getCell(`${todayColumnName}4`).value, 1);
     assert.equal(sheet.getCell(`${tomorrowColumnName}4`).value, 1);
-    assertArgbColor((sheet.getCell(`${yesterdayColumnName}5`).fill as any)?.fgColor, 'FFFCE7F3');
-    assertArgbColor((sheet.getCell(`${todayColumnName}5`).fill as any)?.fgColor, 'FFFCE7F3');
+    assertFillBackgroundArgb(sheet.getCell(`${yesterdayColumnName}5`).fill as any, 'FFFCD4DD');
+    assertFillBackgroundArgb(sheet.getCell(`${todayColumnName}5`).fill as any, 'FFFCD4DD');
     assertArgbColor((sheet.getCell(`${todayColumnName}5`).font as any)?.color, 'FFDC2626');
     assert.equal(sheet.getCell(`${todayColumnName}5`).value, 0);
     assert.equal((sheet.getCell(`${tomorrowColumnName}5`).fill as any)?.pattern, 'gray0625');
     assertThemeColor((sheet.getCell(`${tomorrowColumnName}5`).fill as any)?.fgColor, { theme: 6, tint: 0.5999938962981048 });
-    assertArgbColor((sheet.getCell(`${tomorrowColumnName}5`).fill as any)?.bgColor, 'FFE0F2E9');
+    assertFillBackgroundArgb(sheet.getCell(`${tomorrowColumnName}5`).fill as any, 'FFC8F0C8');
     assertArgbColor((sheet.getCell(`${tomorrowColumnName}5`).font as any)?.color, 'FF15803D');
     assert.equal(sheet.getCell(`${tomorrowColumnName}5`).value, 2);
     assertArgbColor((sheet.getCell('C5').font as any)?.color, 'FFDC2626');

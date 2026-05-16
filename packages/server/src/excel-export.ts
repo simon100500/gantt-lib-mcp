@@ -967,8 +967,8 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
 
   const timelineIndexByDate = new Map(timelineDates.map((date, index) => [date, planFactStaticColumnCount + 1 + index]));
   const planFill = workbookStyles.styles.taskTimeline.default;
-  const factFill = solidFill({ argb: 'FFE0F2E9' });
-  const factWarningFill = solidFill({ argb: 'FFFCE7F3' });
+  const factFill = solidFill({ argb: 'FFC8F0C8' });
+  const factWarningFill = solidFill({ argb: 'FFFCD4DD' });
   const positiveFontColor = { argb: 'FF15803D' };
   const negativeFontColor = { argb: 'FFDC2626' };
 
