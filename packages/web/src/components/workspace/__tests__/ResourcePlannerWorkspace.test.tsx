@@ -527,6 +527,60 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
     await unmount(root);
   });
 
+  it('overlays current-project task date changes onto cached group-scope planner data', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/resources/planner?scope=all-projects') {
+        return {
+          ok: true,
+          json: async () => buildPlannerPayload({
+            scope: 'all-projects',
+            resources: [{
+              resourceId: 'resource-shared',
+              resourceName: 'Shared Crew',
+              intervals: [{
+                assignmentId: 'assignment-1',
+                resourceId: 'resource-shared',
+                resourceName: 'Shared Crew',
+                projectId: 'project-1',
+                projectName: 'Project 1',
+                taskId: 'task-1',
+                taskName: 'Install',
+                startDate: '2026-04-01',
+                endDate: '2026-04-03',
+                assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                hasConflict: false,
+                conflictCount: 0,
+                conflictAssignmentIds: [],
+              }],
+            }],
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useProjectStore.setState({
+      confirmed: {
+        version: 2,
+        snapshot: {
+          tasks: [{ id: 'task-1', name: 'Install', startDate: '2026-04-10', endDate: '2026-04-12', dependencies: [] }],
+          dependencies: [],
+        },
+      },
+      resources: [buildResource('resource-shared', 'Shared Crew', 'human', 'shared')],
+    });
+
+    const { root } = await renderPlannerWorkspace({ scope: 'all-projects' });
+    await flushEffects();
+
+    const item = latestGanttProps().resources?.[0]?.items[0];
+    expect(item?.startDate).toBe('2026-04-10');
+    expect(item?.endDate).toBe('2026-04-12');
+
+    await unmount(root);
+  });
+
   it('persists group-scope item moves through the planner move endpoint', async () => {
     let resolveMove: ((response: Response) => void) | null = null;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

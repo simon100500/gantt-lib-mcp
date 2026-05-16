@@ -28,6 +28,7 @@ import {
   mapTimelineResourceScopeToApiScope,
   mapTimelineResourceStatusToActive,
   mapTimelineResourceTypeToApiType,
+  applyVisibleTaskDatesToPlannerResult,
   mapResourcePlannerResultToTimelineResources,
 } from './resourcePlannerAdapter.ts';
 import type { ResourcePlannerTimelineItem, ResourcePlannerTimelineResource } from './resourcePlannerAdapter.ts';
@@ -1371,6 +1372,12 @@ export function ResourcePlannerWorkspace({
     [confirmedSnapshot, dragPreview, pendingCommands, scheduleOptions],
   );
   const displayedPlannerData = state.data;
+  const displayedPlannerDataWithVisibleDates = useMemo(
+    () => displayedPlannerData
+      ? applyVisibleTaskDatesToPlannerResult(displayedPlannerData, visibleProjectSnapshot.tasks)
+      : null,
+    [displayedPlannerData, visibleProjectSnapshot.tasks],
+  );
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
     () => getProjectWeekendPredicate(calendarWeeklyPattern, calendarDays),
@@ -1385,7 +1392,7 @@ export function ResourcePlannerWorkspace({
   const timelineResources = useMemo(
     () => (
       plannerScope === 'all-projects'
-        ? mapResourcePlannerResultToTimelineResources(displayedPlannerData ?? {
+        ? mapResourcePlannerResultToTimelineResources(displayedPlannerDataWithVisibleDates ?? {
             projectId,
             projectGroupId: '',
             scope: plannerScope,
@@ -1397,10 +1404,10 @@ export function ResourcePlannerWorkspace({
             visibleProjectSnapshot.tasks,
             resources,
             assignments,
-            displayedPlannerData,
+            displayedPlannerDataWithVisibleDates,
           )
     ),
-    [assignments, displayedPlannerData, plannerCatalogResources, plannerScope, projectId, resources, visibleProjectSnapshot.tasks],
+    [assignments, displayedPlannerDataWithVisibleDates, plannerCatalogResources, plannerScope, projectId, resources, visibleProjectSnapshot.tasks],
   );
   const filteredTimelineResources = useMemo(
     () => filterResourceTimelineResources(
