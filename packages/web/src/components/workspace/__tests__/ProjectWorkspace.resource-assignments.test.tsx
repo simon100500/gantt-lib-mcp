@@ -564,7 +564,8 @@ describe('ProjectWorkspace resource assignments', () => {
     const fetchPromise = new Promise<Response>((resolve) => {
       resolveFetch = resolve;
     });
-    vi.stubGlobal('fetch', vi.fn(() => fetchPromise));
+    const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => fetchPromise);
+    vi.stubGlobal('fetch', fetchMock);
 
     const { root } = await renderFactWorkspace();
     const getFactColumn = () => {
@@ -592,6 +593,7 @@ describe('ProjectWorkspace resource assignments', () => {
       await Promise.resolve();
     });
 
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/tasks/leaf-1/progress-entries/batch');
     expect(renderToStaticMarkup(<>{getFactColumn().renderCell({ task: tasks[1]! })}</>)).toContain('animate-pulse');
 
     await act(async () => {
@@ -620,6 +622,81 @@ describe('ProjectWorkspace resource assignments', () => {
     });
 
     expect(renderToStaticMarkup(<>{getFactColumn().renderCell({ task: { ...tasks[1]!, completedVolume: 4 } })}</>)).not.toContain('animate-pulse');
+
+    await unmountWorkspace(root);
+  });
+
+  it('sends dragged fact range changes as one batch request', async () => {
+    useProjectStore.setState((state) => ({
+      ...state,
+      progressEntries: [
+        {
+          id: 'entry-1',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-01',
+          amount: 1,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    }));
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+      task: {
+        completedVolume: 6,
+        progress: 60,
+        workVolume: 10,
+        workUnit: null,
+        status: 'in_progress',
+      },
+      progressEntries: [
+        {
+          id: 'entry-1',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-01',
+          amount: 2,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          id: 'entry-2',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          entryDate: '2026-04-02',
+          amount: 4,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { root } = await renderFactWorkspace();
+
+    await act(async () => {
+      const onTasksChange = ganttPropsSpy?.onTasksChange as (changedTasks: Task[]) => Promise<void>;
+      await onTasksChange([{
+        ...tasks[1]!,
+        planByDate: {
+          '2026-04-01': 5,
+          '2026-04-02': 5,
+        },
+        factByDate: {
+          '2026-04-01': 2,
+          '2026-04-02': 4,
+        },
+      } as Task]);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/tasks/leaf-1/progress-entries/batch');
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      factByDate: {
+        '2026-04-01': 2,
+        '2026-04-02': 4,
+      },
+    });
 
     await unmountWorkspace(root);
   });

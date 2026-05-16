@@ -171,6 +171,20 @@ export function normalizeTaskPlanByDate(input: {
       editedDateKeys.add(dateKey);
     }
   }
+  if (editedDateKeys.size === 0) {
+    const planByDate = Object.fromEntries(
+      Object.entries(input.nextPlanByDate)
+        .filter(([, amount]) => amount > PLAN_EPSILON)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([dateKey, amount]) => [dateKey, roundPlanValue(amount)]),
+    );
+    const positivePlanKeys = Object.keys(planByDate).sort();
+    return {
+      planByDate,
+      startDate: positivePlanKeys[0] ?? input.startDate,
+      endDate: positivePlanKeys.at(-1) ?? input.startDate,
+    };
+  }
   const redistributionAnchorDate = Array.from(editedDateKeys).sort().at(-1);
   const isFutureExtensionEdit = Boolean(
     redistributionAnchorDate
@@ -316,7 +330,12 @@ export function normalizeTaskPlanByDate(input: {
     }
   }
 
-  return { planByDate, startDate: nextStartDate, endDate: nextEndDate };
+  const positivePlanKeys = Object.keys(planByDate).sort();
+  return {
+    planByDate,
+    startDate: positivePlanKeys[0] ?? nextStartDate,
+    endDate: positivePlanKeys.at(-1) ?? nextEndDate,
+  };
 }
 
 export async function registerTaskPlanRoutes(fastify: FastifyInstance): Promise<void> {

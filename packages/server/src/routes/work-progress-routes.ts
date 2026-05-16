@@ -78,6 +78,23 @@ function parseIsoDateOnly(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function sanitizeFactByDate(values: unknown): Record<string, number> | null {
+  if (!values || typeof values !== 'object') {
+    return null;
+  }
+
+  const result: Record<string, number> = {};
+  for (const [dateKey, amount] of Object.entries(values as Record<string, unknown>)) {
+    if (!parseIsoDateOnly(dateKey) || typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
+      return null;
+    }
+    if (amount > 0.000001) {
+      result[dateKey] = Math.round((amount + Number.EPSILON) * 1_000_000) / 1_000_000;
+    }
+  }
+  return result;
+}
+
 async function buildTaskProgressResponse(projectId: string, taskId: string): Promise<WorkProgressResponse> {
   const prisma = getPrisma();
   const [task, progressEntries] = await Promise.all([
@@ -435,6 +452,59 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
               amount: incrementAmount,
             },
           });
+        }
+
+        await recomputeTaskProgress(tx, req.user!.projectId, taskId, taskWorkVolume);
+      });
+
+      return reply.send(await buildTaskProgressResponse(req.user!.projectId, taskId));
+    },
+  );
+
+  fastify.put<{
+    Params: { taskId: string };
+    Body: { factByDate?: Record<string, number> };
+  }>(
+    '/api/tasks/:taskId/progress-entries/batch',
+    { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] },
+    async (req, reply) => {
+      const prisma = getPrisma();
+      const { taskId } = req.params;
+      const factByDate = sanitizeFactByDate(req.body?.factByDate ?? {});
+      if (!factByDate) {
+        return reply.status(400).send({ error: 'factByDate must be a date-to-non-negative-number map' });
+      }
+
+      const task = await prisma.task.findFirst({
+        where: { id: taskId, projectId: req.user!.projectId },
+        select: { id: true, workVolume: true, _count: { select: { children: true } } },
+      });
+
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+      if (task._count.children > 0) {
+        return reply.status(400).send({ error: 'Completed work can only be edited for leaf tasks' });
+      }
+      if (!task.workVolume || task.workVolume <= 0) {
+        return reply.status(400).send({ error: 'Set total volume before editing completed work' });
+      }
+      const taskWorkVolume = task.workVolume;
+
+      await prisma.$transaction(async (tx) => {
+        await tx.taskProgressEntry.deleteMany({
+          where: { projectId: req.user!.projectId, taskId },
+        });
+
+        const entries = Object.entries(factByDate).map(([entryDate, amount]) => ({
+          projectId: req.user!.projectId,
+          taskId,
+          entryDate: parseIsoDateOnly(entryDate)!,
+          amount,
+        }));
+
+        if (entries.length > 0) {
+          await tx.taskProgressEntry.createMany({ data: entries });
         }
 
         await recomputeTaskProgress(tx, req.user!.projectId, taskId, taskWorkVolume);

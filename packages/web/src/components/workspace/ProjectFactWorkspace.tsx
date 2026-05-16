@@ -131,6 +131,7 @@ export function ProjectFactWorkspace({
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const progressEntries = useProjectStore((state) => state.progressEntries);
   const planEntries = useProjectStore((state) => state.planEntries);
+  const replaceProgressEntriesForTask = useProjectStore((state) => state.replaceProgressEntriesForTask);
   const replacePlanEntriesForTask = useProjectStore((state) => state.replacePlanEntriesForTask);
   const ganttSectionRef = useRef<HTMLDivElement | null>(null);
 
@@ -377,47 +378,68 @@ export function ProjectFactWorkspace({
     });
   }, [collapsedParentIds, projectId, setProjectState]);
 
-  const setPlanFactValueForDate = useCallback(async (task: Task, dateKey: string, nextValue: number | undefined) => {
-    if (parentTaskIds.has(task.id)) {
+  const saveTaskFactByDate = useCallback(async (
+    originalTask: Task,
+    nextFactByDate: Record<string, number> | undefined,
+  ) => {
+    if (!accessToken || !projectId || parentTaskIds.has(originalTask.id)) {
       return;
     }
 
-    const existingEntry = progressEntries.find((entry) => entry.taskId === task.id && entry.entryDate === dateKey);
-    const currentAmount = existingEntry?.amount ?? 0;
-    const nextAmount = nextValue ?? 0;
-    if (Math.abs(nextAmount - currentAmount) <= 0.000001) {
-      return;
-    }
-
-    await runWithWorkProgressLoader(task.id, async () => {
-      if (nextAmount <= 0.000001) {
-        if (existingEntry) {
-          await handleDeleteTaskProgressEntry(task, existingEntry);
-        }
-        return;
-      }
-
-      if (existingEntry) {
-        await handleUpdateTaskProgressEntry(task, existingEntry, {
-          entryDate: dateKey,
-          amount: Number(nextAmount.toFixed(6)),
-        });
-        return;
-      }
-
-      await handleAddTaskProgressEntry(task, {
-        entryDate: dateKey,
-        value: Number(nextAmount.toFixed(6)),
-        inputMode: 'volume',
+    await runWithWorkProgressLoader(originalTask.id, async () => {
+      const response = await fetch(`/api/tasks/${encodeURIComponent(originalTask.id)}/progress-entries/batch`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ factByDate: nextFactByDate ?? {} }),
       });
+      const body = await response.json().catch(() => null) as {
+        error?: string;
+        task?: {
+          completedVolume: number;
+          progress: number;
+          workVolume: number | null;
+          workUnit: string | null;
+          status: Task['status'];
+        };
+        progressEntries?: Array<{
+          id: string;
+          projectId: string;
+          taskId: string;
+          entryDate: string;
+          amount: number;
+          createdAt: string;
+          updatedAt: string;
+        }>;
+      } | null;
+
+      if (!response.ok || !body?.task) {
+        throw new Error(body?.error || `HTTP ${response.status}`);
+      }
+
+      setTasks((currentTasks) => currentTasks.map((task) => (
+        task.id === originalTask.id
+          ? {
+              ...task,
+              workVolume: body.task!.workVolume,
+              workUnit: body.task!.workUnit,
+              completedVolume: body.task!.completedVolume,
+              progress: body.task!.progress ?? 0,
+              status: body.task!.status ?? task.status,
+            }
+          : task
+      )));
+      replaceProgressEntriesForTask(originalTask.id, body.progressEntries ?? []);
     });
   }, [
-    handleAddTaskProgressEntry,
-    handleDeleteTaskProgressEntry,
-    handleUpdateTaskProgressEntry,
+    accessToken,
     parentTaskIds,
-    progressEntries,
+    projectId,
+    replaceProgressEntriesForTask,
     runWithWorkProgressLoader,
+    setTasks,
   ]);
 
   const saveTaskPlanByDate = useCallback(async (
@@ -566,18 +588,7 @@ export function ProjectFactWorkspace({
       });
 
       if (factChanged) {
-        const dateKeys = new Set([
-          ...Object.keys(originalPlanFactTask.factByDate ?? {}),
-          ...Object.keys(rawChangedTask.factByDate ?? {}),
-        ]);
-        for (const dateKey of dateKeys) {
-          const nextValue = rawChangedTask.factByDate?.[dateKey];
-          const previousValue = originalPlanFactTask.factByDate?.[dateKey];
-          if (Math.abs((nextValue ?? 0) - (previousValue ?? 0)) <= 0.000001) {
-            continue;
-          }
-          await setPlanFactValueForDate(originalTask, dateKey, nextValue);
-        }
+        await saveTaskFactByDate(originalTask, rawChangedTask.factByDate);
       }
 
       if (planChanged) {
@@ -629,7 +640,7 @@ export function ProjectFactWorkspace({
         planRecompute.nextPlanByDate,
       );
     }
-  }, [applyProgressColumnVolumeDeltas, batchUpdate, parentTaskIds, planFactTasks, saveTaskPlanByDate, setPlanFactValueForDate, tasks]);
+  }, [applyProgressColumnVolumeDeltas, batchUpdate, parentTaskIds, planFactTasks, saveTaskFactByDate, saveTaskPlanByDate, tasks]);
 
   useEffect(() => {
     if (!projectId || loading) {

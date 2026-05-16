@@ -136,4 +136,31 @@ describe('task plan normalization', () => {
       },
     });
   });
+
+  it('trims trailing empty task dates to the last non-empty plan date', async () => {
+    process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret';
+    const { normalizeTaskPlanByDate } = await import('./task-plan-routes.js');
+    const result = normalizeTaskPlanByDate({
+      startDate: '2026-05-18',
+      endDate: '2026-05-22',
+      workVolume: 10,
+      basePlanByDate: {
+        '2026-05-18': 5,
+        '2026-05-19': 5,
+      },
+      nextPlanByDate: {
+        '2026-05-18': 5,
+        '2026-05-19': 5,
+      },
+      todayIso: '2026-05-18',
+      calendarWeeklyPattern: weekdayCalendar,
+      calendarDays: [],
+    });
+
+    expect(result.endDate).toBe('2026-05-19');
+    expect(result.planByDate).toEqual({
+      '2026-05-18': 5,
+      '2026-05-19': 5,
+    });
+  });
 });
