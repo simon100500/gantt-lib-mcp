@@ -12,6 +12,7 @@ import type {
   TaskFinanceSetting,
   TaskFundingEvent,
   TaskProgressEntry,
+  TaskPlanEntry,
 } from '../types.ts';
 
 export type {
@@ -28,6 +29,7 @@ export type {
   TaskFinanceSetting,
   TaskFundingEvent,
   TaskProgressEntry,
+  TaskPlanEntry,
 } from '../types.ts';
 
 export interface ProjectResource {
@@ -81,6 +83,7 @@ export interface ProjectLoadResponse {
     resources: ProjectResource[];
     assignments: TaskAssignmentRecord[];
     progressEntries?: TaskProgressEntry[];
+    planEntries?: TaskPlanEntry[];
   };
 }
 

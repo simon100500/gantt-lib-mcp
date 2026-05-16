@@ -1168,6 +1168,8 @@ export function WorkspaceShell({
               shareStatus={shareStatus}
               onCreateShareLink={handleCreateShareLink}
               readOnly={isScheduleReadOnlyProject}
+              calendarWeeklyPattern={auth.project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}
+              calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
             />
           )
             : (

@@ -13,14 +13,17 @@ import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
 import { TASK_LIST_COLUMN_WIDTHS } from '../../lib/taskListColumns.ts';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
-import type { Task, ValidationResult } from '../../types.ts';
+import type { CalendarDay, CalendarWeeklyPattern, Task, ValidationResult } from '../../types.ts';
+import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
 import { TaskCompletedVolumeCell, TaskWorkMetadataCell } from './TaskWorkColumns.tsx';
 import { useTaskWorkProgressMutations } from './useTaskWorkProgressMutations.ts';
 import {
   buildFactByDate,
+  buildPlanEntriesByTaskId,
   buildPlanByDate,
   numberMapsEqual,
   omitPlanFactFields,
+  toDateKey,
   type PlanFactTask,
 } from './projectFactAdapter.ts';
 
@@ -76,6 +79,8 @@ interface ProjectFactWorkspaceProps {
   projectIdOverride?: string | null;
   hiddenTaskListColumnsDefaultOverride?: string[] | null;
   viewportOffsetPx?: number;
+  calendarWeeklyPattern: CalendarWeeklyPattern;
+  calendarDays: CalendarDay[];
 }
 
 function normalizeTaskListColumnWidthMap(value: unknown): TaskListColumnWidthMap {
@@ -115,6 +120,8 @@ export function ProjectFactWorkspace({
   shareStatus = 'idle',
   onCreateShareLink,
   viewportOffsetPx = 0,
+  calendarWeeklyPattern,
+  calendarDays,
 }: ProjectFactWorkspaceProps) {
   const workspace = useUIStore((state) => state.workspace);
   const searchResults = useUIStore((state) => state.searchResults);
@@ -124,6 +131,10 @@ export function ProjectFactWorkspace({
   const projectStates = useProjectUIStore((state) => state.projectStates);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const progressEntries = useProjectStore((state) => state.progressEntries);
+  const planEntries = useProjectStore((state) => state.planEntries);
+  const replaceProgressEntriesForTask = useProjectStore((state) => state.replaceProgressEntriesForTask);
+  const replacePlanEntriesForTask = useProjectStore((state) => state.replacePlanEntriesForTask);
+  const mergeConfirmedSnapshot = useProjectStore((state) => state.mergeConfirmedSnapshot);
   const ganttSectionRef = useRef<HTMLDivElement | null>(null);
 
   const projectId = workspace.kind === 'project' ? workspace.projectId : null;
@@ -132,6 +143,11 @@ export function ProjectFactWorkspace({
 
   useFilterPersistence();
   const taskFilter = useTaskFilter();
+  const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
+  const weekendPredicate = useMemo(
+    () => getProjectWeekendPredicate(calendarWeeklyPattern, calendarDays),
+    [calendarDays, calendarWeeklyPattern],
+  );
 
   const parentTaskIds = useMemo(() => {
     const ids = new Set<string>();
@@ -155,6 +171,7 @@ export function ProjectFactWorkspace({
     }
     return entriesByTaskId;
   }, [progressEntries]);
+  const planEntriesByTaskId = useMemo(() => buildPlanEntriesByTaskId(planEntries), [planEntries]);
 
   const {
     workProgressLoadingTaskIds,
@@ -243,10 +260,10 @@ export function ProjectFactWorkspace({
   const planFactTasks = useMemo<PlanFactTask[]>(() => (
     tasks.map((task) => ({
       ...task,
-      planByDate: buildPlanByDate(task, parentTaskIds),
+      planByDate: buildPlanByDate(task, parentTaskIds, planEntriesByTaskId.get(task.id) ?? [], calendarWeeklyPattern, calendarDays),
       factByDate: buildFactByDate(task.id, progressEntriesByTaskId.get(task.id) ?? []),
     }))
-  ), [tasks, parentTaskIds, progressEntriesByTaskId]);
+  ), [calendarDays, calendarWeeklyPattern, tasks, parentTaskIds, planEntriesByTaskId, progressEntriesByTaskId]);
 
   const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => [
     {
@@ -351,6 +368,23 @@ export function ProjectFactWorkspace({
     });
   }, [projectId, setProjectState]);
 
+  const mergeConfirmedTasks = useCallback((changedTasks: Task[]) => {
+    if (changedTasks.length === 0) {
+      return;
+    }
+
+    const confirmedSnapshot = useProjectStore.getState().confirmed.snapshot;
+    const changedTaskById = new Map(changedTasks.map((task) => [task.id, task]));
+    mergeConfirmedSnapshot({
+      ...confirmedSnapshot,
+      tasks: confirmedSnapshot.tasks.map((task) => (
+        changedTaskById.has(task.id)
+          ? { ...task, ...changedTaskById.get(task.id)! }
+          : task
+      )),
+    });
+  }, [mergeConfirmedSnapshot]);
+
   const handleToggleCollapse = useCallback((parentId: string) => {
     if (!projectId) {
       return;
@@ -368,51 +402,214 @@ export function ProjectFactWorkspace({
     });
   }, [collapsedParentIds, projectId, setProjectState]);
 
-  const setPlanFactValueForDate = useCallback(async (task: Task, dateKey: string, nextValue: number | undefined) => {
-    if (parentTaskIds.has(task.id)) {
+  const saveTaskFactByDate = useCallback(async (
+    originalTask: Task,
+    nextFactByDate: Record<string, number> | undefined,
+  ) => {
+    if (!accessToken || !projectId || parentTaskIds.has(originalTask.id)) {
       return;
     }
 
-    const existingEntry = progressEntries.find((entry) => entry.taskId === task.id && entry.entryDate === dateKey);
-    const currentAmount = existingEntry?.amount ?? 0;
-    const nextAmount = nextValue ?? 0;
-    if (Math.abs(nextAmount - currentAmount) <= 0.000001) {
-      return;
-    }
-
-    await runWithWorkProgressLoader(task.id, async () => {
-      if (nextAmount <= 0.000001) {
-        if (existingEntry) {
-          await handleDeleteTaskProgressEntry(task, existingEntry);
-        }
-        return;
-      }
-
-      if (existingEntry) {
-        await handleUpdateTaskProgressEntry(task, existingEntry, {
-          entryDate: dateKey,
-          amount: Number(nextAmount.toFixed(6)),
-        });
-        return;
-      }
-
-      await handleAddTaskProgressEntry(task, {
-        entryDate: dateKey,
-        value: Number(nextAmount.toFixed(6)),
-        inputMode: 'volume',
+    await runWithWorkProgressLoader(originalTask.id, async () => {
+      const response = await fetch(`/api/tasks/${encodeURIComponent(originalTask.id)}/progress-entries/batch`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ factByDate: nextFactByDate ?? {} }),
       });
+      const body = await response.json().catch(() => null) as {
+        error?: string;
+        task?: {
+          completedVolume: number;
+          progress: number;
+          workVolume: number | null;
+          workUnit: string | null;
+          status: Task['status'];
+        };
+        progressEntries?: Array<{
+          id: string;
+          projectId: string;
+          taskId: string;
+          entryDate: string;
+          amount: number;
+          createdAt: string;
+          updatedAt: string;
+        }>;
+      } | null;
+
+      if (!response.ok || !body?.task) {
+        throw new Error(body?.error || `HTTP ${response.status}`);
+      }
+
+      setTasks((currentTasks) => currentTasks.map((task) => (
+        task.id === originalTask.id
+          ? {
+              ...task,
+              workVolume: body.task!.workVolume,
+              workUnit: body.task!.workUnit,
+              completedVolume: body.task!.completedVolume,
+              progress: body.task!.progress ?? 0,
+              status: body.task!.status ?? task.status,
+            }
+          : task
+      )));
+      mergeConfirmedTasks([{
+        ...originalTask,
+        workVolume: body.task!.workVolume,
+        workUnit: body.task!.workUnit,
+        completedVolume: body.task!.completedVolume,
+        progress: body.task!.progress ?? 0,
+        status: body.task!.status ?? originalTask.status,
+      }]);
+      replaceProgressEntriesForTask(originalTask.id, body.progressEntries ?? []);
     });
   }, [
-    handleAddTaskProgressEntry,
-    handleDeleteTaskProgressEntry,
-    handleUpdateTaskProgressEntry,
+    accessToken,
+    mergeConfirmedTasks,
     parentTaskIds,
-    progressEntries,
+    projectId,
+    replaceProgressEntriesForTask,
     runWithWorkProgressLoader,
+    setTasks,
+  ]);
+
+  const saveTaskPlanByDate = useCallback(async (
+    originalTask: Task,
+    originalPlanByDate: Record<string, number> | undefined,
+    nextTask: Task,
+    nextPlanByDate: Record<string, number> | undefined,
+  ) => {
+    if (!accessToken || !projectId || parentTaskIds.has(originalTask.id)) {
+      return;
+    }
+
+    const previousTaskSnapshot = {
+      startDate: originalTask.startDate,
+      endDate: originalTask.endDate,
+      workVolume: originalTask.workVolume ?? null,
+      workUnit: originalTask.workUnit ?? null,
+      completedVolume: originalTask.completedVolume ?? 0,
+      progress: originalTask.progress ?? 0,
+      status: originalTask.status,
+    };
+    const previousPlanEntries = planEntriesByTaskId.get(originalTask.id) ?? [];
+
+    await runWithWorkProgressLoader(originalTask.id, async () => {
+      const optimisticPlanEntries = Object.entries(nextPlanByDate ?? {})
+        .map(([entryDate, amount], index) => ({
+          id: `optimistic-plan:${originalTask.id}:${entryDate}:${index}`,
+          projectId,
+          taskId: originalTask.id,
+          entryDate,
+          amount,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }));
+      setTasks((currentTasks) => currentTasks.map((task) => (
+        task.id === originalTask.id
+          ? {
+              ...task,
+              startDate: nextTask.startDate,
+              endDate: nextTask.endDate,
+              workVolume: nextTask.workVolume ?? task.workVolume ?? null,
+            }
+          : task
+      )));
+      replacePlanEntriesForTask(originalTask.id, optimisticPlanEntries);
+
+      const response = await fetch(`/api/tasks/${encodeURIComponent(originalTask.id)}/plan-entries`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          basePlanByDate: originalPlanByDate ?? {},
+          nextPlanByDate: nextPlanByDate ?? {},
+          startDate: toDateKey(nextTask.startDate),
+          endDate: toDateKey(nextTask.endDate),
+          workVolume: nextTask.workVolume ?? null,
+        }),
+      });
+
+      if (!response.ok) {
+        setTasks((currentTasks) => currentTasks.map((task) => (
+          task.id === originalTask.id
+            ? { ...task, ...previousTaskSnapshot }
+            : task
+        )));
+        replacePlanEntriesForTask(originalTask.id, previousPlanEntries);
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const body = await response.json() as {
+        task: {
+          id: string;
+          startDate: string;
+          endDate: string;
+          workVolume: number | null;
+          workUnit: string | null;
+          completedVolume: number;
+          progress: number;
+          status: Task['status'];
+        };
+        planEntries: Array<{
+          id: string;
+          projectId: string;
+          taskId: string;
+          entryDate: string;
+          amount: number;
+          createdAt: string;
+          updatedAt: string;
+        }>;
+        changedTasks?: Task[];
+      };
+
+      const changedTaskById = new Map((body.changedTasks ?? []).map((changedTask) => [changedTask.id, changedTask]));
+      const updatedTargetTask = {
+        ...originalTask,
+        startDate: body.task.startDate,
+        endDate: body.task.endDate,
+        workVolume: body.task.workVolume,
+        workUnit: body.task.workUnit,
+        completedVolume: body.task.completedVolume,
+        progress: body.task.progress ?? 0,
+        status: body.task.status ?? originalTask.status,
+      };
+      setTasks((currentTasks) => currentTasks.map((task) => (
+        task.id === body.task.id
+          ? { ...task, ...updatedTargetTask }
+          : changedTaskById.has(task.id)
+            ? { ...task, ...changedTaskById.get(task.id)! }
+          : task
+      )));
+      mergeConfirmedTasks([
+        updatedTargetTask,
+        ...(body.changedTasks ?? []).filter((changedTask) => changedTask.id !== body.task.id),
+      ]);
+      replacePlanEntriesForTask(originalTask.id, body.planEntries);
+    });
+  }, [
+    accessToken,
+    mergeConfirmedTasks,
+    parentTaskIds,
+    planEntriesByTaskId,
+    projectId,
+    replacePlanEntriesForTask,
+    runWithWorkProgressLoader,
+    setTasks,
   ]);
 
   const handlePlanFactTasksChange = useCallback(async (changedTasks: Task[]) => {
     const passthroughTasks: Task[] = [];
+    const taskPlanRecomputes: Array<{
+      originalTask: Task;
+      originalPlanByDate?: Record<string, number>;
+      nextTask: Task;
+      nextPlanByDate?: Record<string, number>;
+    }> = [];
     for (const rawChangedTask of changedTasks as PlanFactTask[]) {
       const originalTask = tasks.find((task) => task.id === rawChangedTask.id);
       const originalPlanFactTask = planFactTasks.find((task) => task.id === rawChangedTask.id);
@@ -430,22 +627,40 @@ export function ProjectFactWorkspace({
       });
 
       if (factChanged) {
-        const dateKeys = new Set([
-          ...Object.keys(originalPlanFactTask.factByDate ?? {}),
-          ...Object.keys(rawChangedTask.factByDate ?? {}),
-        ]);
-        for (const dateKey of dateKeys) {
-          const nextValue = rawChangedTask.factByDate?.[dateKey];
-          const previousValue = originalPlanFactTask.factByDate?.[dateKey];
-          if (Math.abs((nextValue ?? 0) - (previousValue ?? 0)) <= 0.000001) {
-            continue;
-          }
-          await setPlanFactValueForDate(originalTask, dateKey, nextValue);
-        }
+        await saveTaskFactByDate(originalTask, rawChangedTask.factByDate);
+      }
+
+      if (planChanged) {
+        taskPlanRecomputes.push({
+          originalTask,
+          originalPlanByDate: originalPlanFactTask.planByDate,
+          nextTask: {
+            ...originalTask,
+            ...strippedTask,
+          },
+          nextPlanByDate: rawChangedTask.planByDate,
+        });
       }
 
       if (nonMatrixChanged || (!factChanged && !planChanged)) {
         passthroughTasks.push(strippedTask);
+      }
+
+      if (
+        !planChanged
+        && !parentTaskIds.has(originalTask.id)
+        && (
+          toDateKey(strippedTask.startDate) !== toDateKey(originalTask.startDate)
+          || toDateKey(strippedTask.endDate) !== toDateKey(originalTask.endDate)
+          || (strippedTask.workVolume ?? null) !== (originalTask.workVolume ?? null)
+        )
+      ) {
+        taskPlanRecomputes.push({
+          originalTask,
+          originalPlanByDate: originalPlanFactTask.planByDate,
+          nextTask: strippedTask,
+          nextPlanByDate: originalPlanFactTask.planByDate,
+        });
       }
     }
 
@@ -455,7 +670,16 @@ export function ProjectFactWorkspace({
         await batchUpdate?.handleTasksChange(progressPassthroughTasks);
       }
     }
-  }, [applyProgressColumnVolumeDeltas, batchUpdate, planFactTasks, setPlanFactValueForDate, tasks]);
+
+    for (const planRecompute of taskPlanRecomputes) {
+      await saveTaskPlanByDate(
+        planRecompute.originalTask,
+        planRecompute.originalPlanByDate,
+        planRecompute.nextTask,
+        planRecompute.nextPlanByDate,
+      );
+    }
+  }, [applyProgressColumnVolumeDeltas, batchUpdate, parentTaskIds, planFactTasks, saveTaskFactByDate, saveTaskPlanByDate, tasks]);
 
   useEffect(() => {
     if (!projectId || loading) {
@@ -570,6 +794,8 @@ export function ProjectFactWorkspace({
                   highlightedTaskIds={highlightedTaskIds}
                   filterMode="highlight"
                   businessDays={true}
+                  customDays={customDays}
+                  isWeekend={weekendPredicate}
                 />
               )}
             </div>

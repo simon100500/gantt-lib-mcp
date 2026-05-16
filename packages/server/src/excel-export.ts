@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { getPrisma } from '@gantt/runtime-core/prisma';
 import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import type { CalendarWeeklyPattern, DependencyType } from '@gantt/mcp/types';
+import { listTaskPlanEntries } from './task-plan-entry-store.js';
 
 type ExportDependency = {
   predecessorTaskId: string;
@@ -23,6 +24,7 @@ type ExportTask = {
   workUnit?: string | null;
   completedVolume?: number;
   progressEntries?: Array<{ entryDate: string; amount: number }>;
+  planEntries?: Array<{ entryDate: string; amount: number }>;
   dependencies: ExportDependency[];
 };
 
@@ -396,18 +398,35 @@ function buildDateKeysInRange(startIso: string, endIso: string): string[] {
   return dates;
 }
 
-function buildPlanByDate(task: ExportTask, parentTaskIds: Set<string>): Record<string, number> | undefined {
+function buildPlanByDate(
+  task: ExportTask,
+  parentTaskIds: Set<string>,
+  ganttDayMode: 'business' | 'calendar',
+  calendarWeeklyPattern: CalendarWeeklyPattern,
+  calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>,
+): Record<string, number> | undefined {
   if (parentTaskIds.has(task.id) || !task.workVolume || task.workVolume <= 0) {
     return undefined;
   }
 
-  const dateKeys = buildDateKeysInRange(task.startDate, task.endDate);
-  if (dateKeys.length === 0) {
+  const explicitPlanByDate = Object.fromEntries(
+    (task.planEntries ?? [])
+      .filter((entry) => entry.entryDate && Number.isFinite(entry.amount) && entry.amount > 0)
+      .map((entry) => [entry.entryDate, Number(entry.amount.toFixed(6))]),
+  );
+  if (Object.keys(explicitPlanByDate).length > 0) {
+    return explicitPlanByDate;
+  }
+
+  const nonWorkingDates = buildNonWorkingSet(ganttDayMode, calendarWeeklyPattern, calendarDays, buildDateKeysInRange(task.startDate, task.endDate));
+  const dateKeys = buildDateKeysInRange(task.startDate, task.endDate).filter((dateKey) => !nonWorkingDates.has(dateKey));
+  const effectiveDateKeys = dateKeys.length > 0 ? dateKeys : buildDateKeysInRange(task.startDate, task.endDate);
+  if (effectiveDateKeys.length === 0) {
     return undefined;
   }
 
-  const dailyValue = task.workVolume / dateKeys.length;
-  return Object.fromEntries(dateKeys.map((dateKey) => [dateKey, Number(dailyValue.toFixed(6))]));
+  const dailyValue = task.workVolume / effectiveDateKeys.length;
+  return Object.fromEntries(effectiveDateKeys.map((dateKey) => [dateKey, Number(dailyValue.toFixed(6))]));
 }
 
 function buildFactByDate(task: ExportTask): Record<string, number> | undefined {
@@ -740,6 +759,16 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
   }
 
   const projectCalendar = await getProjectCalendarSettings(prisma, projectId);
+  const planEntries = await listTaskPlanEntries(prisma as any, projectId);
+  const planEntriesByTaskId = new Map<string, Array<{ entryDate: string; amount: number }>>();
+  for (const entry of planEntries) {
+    const taskEntries = planEntriesByTaskId.get(entry.taskId) ?? [];
+    taskEntries.push({
+      entryDate: toIsoDate(entry.entryDate),
+      amount: Number(entry.amount),
+    });
+    planEntriesByTaskId.set(entry.taskId, taskEntries);
+  }
 
   return {
     projectName: project.name,
@@ -762,6 +791,7 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
         entryDate: toIsoDate(entry.entryDate),
         amount: Number(entry.amount),
       })),
+      planEntries: planEntriesByTaskId.get(task.id) ?? [],
       dependencies: task.dependencies.map((dependency) => ({
         predecessorTaskId: dependency.depTaskId,
         predecessorTaskName: dependency.depTask?.name ?? null,
@@ -781,7 +811,12 @@ function applyPlanFactPairEdge(cell: ExcelJS.Cell, edge: 'top' | 'bottom'): void
   };
 }
 
-function buildPlanFactTimelineData(tasks: ExportTask[]) {
+function buildPlanFactTimelineData(
+  tasks: ExportTask[],
+  ganttDayMode: 'business' | 'calendar',
+  calendarWeeklyPattern: CalendarWeeklyPattern,
+  calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>,
+) {
   const parentTaskIds = new Set(tasks.filter((task) => task.parentId).map((task) => task.parentId!));
   const planByTaskId = new Map<string, Record<string, number> | undefined>();
   const factByTaskId = new Map<string, Record<string, number> | undefined>();
@@ -789,7 +824,7 @@ function buildPlanFactTimelineData(tasks: ExportTask[]) {
 
   for (const task of tasks) {
     rangeTasks.push(task);
-    const planByDate = buildPlanByDate(task, parentTaskIds);
+    const planByDate = buildPlanByDate(task, parentTaskIds, ganttDayMode, calendarWeeklyPattern, calendarDays);
     const factByDate = buildFactByDate(task);
     planByTaskId.set(task.id, planByDate);
     factByTaskId.set(task.id, factByDate);
@@ -839,7 +874,12 @@ async function buildPlanFactExcelExportBuffer(data: ProjectExcelExportData): Pro
   sheet.properties.defaultRowHeight = 18;
 
   const flattenedRows = buildFlattenedRows(data.tasks);
-  const { parentTaskIds, planByTaskId, factByTaskId, timelineDates } = buildPlanFactTimelineData(data.tasks);
+  const { parentTaskIds, planByTaskId, factByTaskId, timelineDates } = buildPlanFactTimelineData(
+    data.tasks,
+    data.ganttDayMode,
+    data.calendarWeeklyPattern,
+    data.calendarDays,
+  );
   const monthHeaders = suppressRepeatedLabels(timelineDates.map(formatMonthLabel));
   const totalColumnCount = planFactStaticColumnCount + timelineDates.length;
   const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarWeeklyPattern, data.calendarDays, timelineDates);

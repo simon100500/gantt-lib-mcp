@@ -142,6 +142,7 @@ export function useExportImportController(params: {
       resources: payload.snapshot.resources,
       assignments: payload.snapshot.assignments,
       progressEntries: payload.snapshot.progressEntries ?? [],
+      planEntries: payload.snapshot.planEntries ?? [],
     });
   }, [auth, onLoginRequired]);
 

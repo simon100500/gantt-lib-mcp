@@ -126,6 +126,7 @@ export function AdminProjectPreviewPage({
         resources: projectPayload.snapshot.resources,
         assignments: projectPayload.snapshot.assignments,
         progressEntries: projectPayload.snapshot.progressEntries ?? [],
+        planEntries: projectPayload.snapshot.planEntries ?? [],
       });
       useProjectStore.getState().clearTransientState();
 

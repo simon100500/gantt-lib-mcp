@@ -52,11 +52,13 @@ import { registerProjectIntentRoutes } from './routes/project-intent-routes.js';
 import { registerResourceRoutes } from './routes/resource-routes.js';
 import { registerTemplateRoutes } from './routes/template-routes.js';
 import { registerTemplatePublicationRoutes } from './routes/template-publication-routes.js';
+import { registerTaskPlanRoutes } from './routes/task-plan-routes.js';
 import { registerWorkProgressRoutes } from './routes/work-progress-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 import { runDirectSplitTask } from './split-task.js';
 import { normalizeStoredTaskStatus } from '@gantt/runtime-core/services/task-status';
+import { listTaskPlanEntries } from './task-plan-entry-store.js';
 import {
   markProjectGenerationJobCanceled,
   markProjectGenerationJobFailed,
@@ -94,6 +96,7 @@ await registerGrandSmetaImportRoutes(fastify);
 await registerHistoryRoutes(fastify);
 await registerProjectIntentRoutes(fastify);
 await registerResourceRoutes(fastify);
+await registerTaskPlanRoutes(fastify);
 await registerTemplateRoutes(fastify);
 await registerTemplatePublicationRoutes(fastify);
 await registerWorkProgressRoutes(fastify);
@@ -133,6 +136,15 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
       createdAt: string;
       updatedAt: string;
     }>;
+    planEntries: Array<{
+      id: string;
+      projectId: string;
+      taskId: string;
+      entryDate: string;
+      amount: number;
+      createdAt: string;
+      updatedAt: string;
+    }>;
   };
   project: {
     id: string;
@@ -164,7 +176,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     throw new Error('Project unavailable');
   }
 
-  const [projectVersion, tasks, dependencies, resourceCatalog, assignments, progressEntries, projectCalendar] = await Promise.all([
+  const [projectVersion, tasks, dependencies, resourceCatalog, assignments, progressEntries, planEntries, projectCalendar] = await Promise.all([
     prisma.project.findFirst({
       where: {
         id: projectId,
@@ -193,6 +205,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
       where: { projectId },
       orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
     }),
+    listTaskPlanEntries(prisma as any, projectId),
     getProjectCalendarSettings(prisma, projectId),
   ]);
   const viewPreference = requesterUserId
@@ -264,6 +277,15 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
         createdAt: assignment.createdAt.toISOString(),
       })),
       progressEntries: progressEntries.map((entry: any) => ({
+        id: entry.id,
+        projectId: entry.projectId,
+        taskId: entry.taskId,
+        entryDate: entry.entryDate.toISOString().split('T')[0],
+        amount: entry.amount,
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      })),
+      planEntries: planEntries.map((entry: any) => ({
         id: entry.id,
         projectId: entry.projectId,
         taskId: entry.taskId,
