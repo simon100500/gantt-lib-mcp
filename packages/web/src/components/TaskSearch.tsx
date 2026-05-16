@@ -203,8 +203,8 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
               }
             }
           }}
-          placeholder={readOnly ? 'Поиск...' : 'Поиск или новая задача...'}
-          className="h-9 w-full rounded-lg border-slate-200 bg-white pl-9 pr-28 text-[13px] shadow-none hover:border-slate-200 focus-visible:border-primary focus-visible:bg-white focus-visible:ring-0 focus-visible:ring-offset-0"
+          placeholder={readOnly ? 'Поиск...' : 'Поиск или задача...'}
+          className={`h-9 w-full rounded-lg border-slate-200 bg-white pl-9 text-[13px] shadow-none hover:border-slate-200 focus-visible:border-primary focus-visible:bg-white focus-visible:ring-0 focus-visible:ring-offset-0 ${searchQuery ? 'pr-28' : 'pr-12'}`}
           aria-label="Поиск задач"
           title="Ctrl+K или +"
         />
