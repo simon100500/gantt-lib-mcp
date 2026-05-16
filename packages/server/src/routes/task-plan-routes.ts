@@ -140,6 +140,10 @@ function distributeAmountAcrossDates(amount: number, dateKeys: string[], weightB
   return distributed;
 }
 
+function distributeEvenlyAcrossDates(amount: number, dateKeys: string[]): Record<string, number> {
+  return distributeAmountAcrossDates(amount, dateKeys, new Map(dateKeys.map((dateKey) => [dateKey, 1])));
+}
+
 function mergeChangedTasks<T extends { id: string }>(left: T[], right: T[]): T[] {
   const byId = new Map<string, T>();
   for (const task of left) {
@@ -173,10 +177,74 @@ export function normalizeTaskPlanByDate(input: {
     && redistributionAnchorDate > input.endDate
     && editedDateKeys.size === 1,
   );
+  const editedDateKeyList = Array.from(editedDateKeys).sort();
+  const editedNextAmounts = editedDateKeyList.map((dateKey) => input.nextPlanByDate[dateKey] ?? 0);
+  const isBulkPositiveFill = editedNextAmounts.length > 1
+    && editedNextAmounts.every((amount) => amount > PLAN_EPSILON)
+    && editedNextAmounts.every((amount) => Math.abs(amount - editedNextAmounts[0]!) <= PLAN_EPSILON);
 
   const positiveNextKeys = Object.entries(input.nextPlanByDate)
     .filter(([, amount]) => amount > PLAN_EPSILON)
     .map(([dateKey]) => dateKey);
+  const positiveBaseKeys = Object.entries(input.basePlanByDate)
+    .filter(([, amount]) => amount > PLAN_EPSILON)
+    .map(([dateKey]) => dateKey);
+
+  if (isBulkPositiveFill) {
+    const firstBulkDate = editedDateKeyList[0]!;
+    const fillAmount = editedNextAmounts[0]!;
+    const planByDate: Record<string, number> = {};
+    let remainingVolume = input.workVolume;
+
+    for (const dateKey of positiveNextKeys.filter((key) => key < firstBulkDate).sort()) {
+      const amount = roundPlanValue(Math.min(input.nextPlanByDate[dateKey] ?? 0, remainingVolume));
+      if (amount > PLAN_EPSILON) {
+        planByDate[dateKey] = amount;
+      }
+      remainingVolume = roundPlanValue(remainingVolume - amount);
+    }
+
+    for (const dateKey of editedDateKeyList) {
+      if (remainingVolume <= PLAN_EPSILON) {
+        break;
+      }
+      const amount = roundPlanValue(Math.min(fillAmount, remainingVolume));
+      if (amount > PLAN_EPSILON) {
+        planByDate[dateKey] = amount;
+      }
+      remainingVolume = roundPlanValue(remainingVolume - amount);
+    }
+
+    const positivePlanKeys = Object.keys(planByDate).sort();
+    return {
+      planByDate,
+      startDate: positivePlanKeys[0] ?? input.startDate,
+      endDate: positivePlanKeys.at(-1) ?? input.startDate,
+    };
+  }
+
+  const deletedPositiveKeys = editedDateKeyList.filter((dateKey) => (
+    (input.basePlanByDate[dateKey] ?? 0) > PLAN_EPSILON
+    && (input.nextPlanByDate[dateKey] ?? 0) <= PLAN_EPSILON
+  ));
+  const lastPositiveBaseKey = positiveBaseKeys.sort().at(-1);
+  const isDeletingLastFilledDay = Boolean(
+    lastPositiveBaseKey
+    && deletedPositiveKeys.includes(lastPositiveBaseKey)
+    && positiveNextKeys.every((dateKey) => dateKey < lastPositiveBaseKey),
+  );
+
+  if (isDeletingLastFilledDay) {
+    const remainingDateKeys = positiveNextKeys.sort();
+    const planByDate = distributeEvenlyAcrossDates(input.workVolume, remainingDateKeys);
+    const positivePlanKeys = Object.keys(planByDate).sort();
+    return {
+      planByDate,
+      startDate: positivePlanKeys[0] ?? input.startDate,
+      endDate: positivePlanKeys.at(-1) ?? input.startDate,
+    };
+  }
+
   const nextStartDate = [input.startDate, ...positiveNextKeys].sort()[0] ?? input.startDate;
   let nextEndDate = [input.endDate, ...positiveNextKeys].sort().at(-1) ?? input.endDate;
   const rangeDateKeys = enumerateDateKeys(nextStartDate, nextEndDate);

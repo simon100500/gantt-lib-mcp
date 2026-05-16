@@ -73,4 +73,67 @@ describe('task plan normalization', () => {
       '2026-05-20': 4,
     });
   });
+
+  it('caps bulk positive fill by total work volume and leaves over-selected dates empty', async () => {
+    process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret';
+    const { normalizeTaskPlanByDate } = await import('./task-plan-routes.js');
+    const result = normalizeTaskPlanByDate({
+      startDate: '2026-05-18',
+      endDate: '2026-05-22',
+      workVolume: 10,
+      basePlanByDate: {},
+      nextPlanByDate: {
+        '2026-05-18': 3,
+        '2026-05-19': 3,
+        '2026-05-20': 3,
+        '2026-05-21': 3,
+        '2026-05-22': 3,
+      },
+      todayIso: '2026-05-18',
+      calendarWeeklyPattern: weekdayCalendar,
+      calendarDays: [],
+    });
+
+    expect(result).toEqual({
+      startDate: '2026-05-18',
+      endDate: '2026-05-21',
+      planByDate: {
+        '2026-05-18': 3,
+        '2026-05-19': 3,
+        '2026-05-20': 3,
+        '2026-05-21': 1,
+      },
+    });
+  });
+
+  it('shortens the task and redistributes volume over remaining days when the last filled day is deleted', async () => {
+    process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret';
+    const { normalizeTaskPlanByDate } = await import('./task-plan-routes.js');
+    const result = normalizeTaskPlanByDate({
+      startDate: '2026-05-18',
+      endDate: '2026-05-20',
+      workVolume: 6,
+      basePlanByDate: {
+        '2026-05-18': 2,
+        '2026-05-19': 2,
+        '2026-05-20': 2,
+      },
+      nextPlanByDate: {
+        '2026-05-18': 2,
+        '2026-05-19': 2,
+      },
+      todayIso: '2026-05-18',
+      calendarWeeklyPattern: weekdayCalendar,
+      calendarDays: [],
+    });
+
+    expect(result).toEqual({
+      startDate: '2026-05-18',
+      endDate: '2026-05-19',
+      planByDate: {
+        '2026-05-18': 3,
+        '2026-05-19': 3,
+      },
+    });
+  });
 });
