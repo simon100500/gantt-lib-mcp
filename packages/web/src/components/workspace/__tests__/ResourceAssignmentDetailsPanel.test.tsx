@@ -89,6 +89,14 @@ afterEach(() => {
 });
 
 describe('ResourceAssignmentDetailsPanel', () => {
+  it('shows the assignment project under the task title', async () => {
+    const { container, root } = await renderPanel();
+
+    expect(container.querySelector('[data-testid="assignment-details-project-name"]')?.textContent).toBe('Project 1');
+
+    await unmount(root);
+  });
+
   it('renders a task navigation button near the assignment dates', async () => {
     const { container, root } = await renderPanel({ onOpenTask: vi.fn() });
 

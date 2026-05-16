@@ -6,6 +6,7 @@ import { ResourceTypeIcon } from './ResourceTypeIcon.tsx';
 export interface CreateResourceModalProps {
   pending?: boolean;
   error?: string | null;
+  forcedScope?: ResourceScope | null;
   onSubmit: (input: { name: string; type: ResourceType; scope: ResourceScope }) => void;
   onCancel: () => void;
 }
@@ -25,12 +26,14 @@ const SCOPE_OPTIONS: Array<{ value: ResourceScope; label: string; description: s
 export function CreateResourceModal({
   pending = false,
   error = null,
+  forcedScope = null,
   onSubmit,
   onCancel,
 }: CreateResourceModalProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState<ResourceType>('human');
   const [scope, setScope] = useState<ResourceScope>('project');
+  const effectiveScope = forcedScope ?? scope;
 
   const trimmedName = name.trim();
   const canSubmit = trimmedName.length > 0 && !pending;
@@ -38,7 +41,7 @@ export function CreateResourceModal({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canSubmit) return;
-    onSubmit({ name: trimmedName, type, scope });
+    onSubmit({ name: trimmedName, type, scope: effectiveScope });
   };
 
   return (
@@ -108,16 +111,23 @@ export function CreateResourceModal({
             <legend className="text-[12px] font-bold uppercase text-[#44546f]">Область</legend>
             <div className="flex gap-2">
               {SCOPE_OPTIONS.map((option) => {
-                const active = scope === option.value;
+                const active = effectiveScope === option.value;
+                const disabled = pending || (forcedScope !== null && forcedScope !== option.value);
                 return (
                   <button
                     key={option.value}
                     type="button"
                     className={active
                       ? 'flex-1 rounded-md border border-primary bg-primary/5 px-3 py-2 text-left'
-                      : 'flex-1 rounded-md border border-[#dfe1e6] bg-white px-3 py-2 text-left transition-colors hover:border-primary hover:bg-primary/5'}
-                    disabled={pending}
-                    onClick={() => setScope(option.value)}
+                      : disabled
+                        ? 'flex-1 cursor-not-allowed rounded-md border border-[#dfe1e6] bg-[#f7f8fa] px-3 py-2 text-left opacity-60'
+                        : 'flex-1 rounded-md border border-[#dfe1e6] bg-white px-3 py-2 text-left transition-colors hover:border-primary hover:bg-primary/5'}
+                    disabled={disabled}
+                    onClick={() => {
+                      if (!forcedScope) {
+                        setScope(option.value);
+                      }
+                    }}
                   >
                     <div className={active ? 'text-[13px] font-bold text-primary' : 'text-[13px] font-medium text-[#172b4d]'}>
                       {option.label}

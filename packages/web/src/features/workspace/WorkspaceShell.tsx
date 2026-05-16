@@ -1092,6 +1092,10 @@ export function WorkspaceShell({
         <ResourcePlannerWorkspace
           accessToken={auth.accessToken}
           projectId={workspace.projectId}
+          projectGroupName={auth.projectGroups.find((group) => group.id === (
+            auth.projects.find((project) => project.id === workspace.projectId)?.groupId
+            ?? auth.project?.groupId
+          ))?.name ?? null}
           scope={workspace.scope ?? 'current-project'}
           ganttDayMode={effectiveAuthGanttDayMode}
           calendarWeeklyPattern={auth.project?.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN}

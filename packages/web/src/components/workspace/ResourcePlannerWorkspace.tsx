@@ -39,6 +39,7 @@ import { CreateResourceModal } from './CreateResourceModal.tsx';
 interface ResourcePlannerWorkspaceProps {
   accessToken?: string | null;
   projectId: string;
+  projectGroupName?: string | null;
   scope?: PlannerScope;
   ganttDayMode?: 'business' | 'calendar';
   calendarWeeklyPattern?: CalendarWeeklyPattern;
@@ -84,8 +85,8 @@ const VIEW_MODE_OPTIONS: Array<{ mode: ViewMode; label: string }> = [
 ];
 
 const PLANNER_SCOPE_OPTIONS: Array<{ scope: PlannerScope; label: string }> = [
-  { scope: 'current-project', label: 'Проект' },
-  { scope: 'all-projects', label: 'Группа' },
+  { scope: 'current-project', label: 'Проектные' },
+  { scope: 'all-projects', label: 'Общие' },
 ];
 
 const AUTO_REFRESH_MIN_INTERVAL_MS = 60_000;
@@ -319,9 +320,79 @@ function removePlannerResource(
   };
 }
 
+function movePlannerIntervalOptimistically(
+  data: ResourcePlannerResult,
+  input: {
+    assignmentId: string;
+    fromResourceId: string;
+    toResourceId: string;
+    startDate: string;
+    endDate: string;
+    targetResourceName: string;
+  },
+): ResourcePlannerResult {
+  let movedInterval: ResourcePlannerInterval | null = null;
+  const resourcesWithoutMoved = data.resources.map((resource) => {
+    const nextIntervals = resource.intervals.filter((interval) => {
+      if (interval.assignmentId !== input.assignmentId) {
+        return true;
+      }
+
+      movedInterval = {
+        ...interval,
+        resourceId: input.toResourceId,
+        resourceName: input.targetResourceName,
+        startDate: input.startDate,
+        endDate: input.endDate,
+      };
+      return false;
+    });
+
+    return resource.resourceId === input.fromResourceId ? { ...resource, intervals: nextIntervals } : resource;
+  });
+
+  if (!movedInterval) {
+    return data;
+  }
+
+  const targetExists = resourcesWithoutMoved.some((resource) => resource.resourceId === input.toResourceId);
+  const resources = targetExists
+    ? resourcesWithoutMoved.map((resource) => (
+        resource.resourceId === input.toResourceId
+          ? {
+              ...resource,
+              resourceName: input.targetResourceName,
+              intervals: [...resource.intervals, movedInterval!].sort((left, right) => (
+                left.startDate.localeCompare(right.startDate)
+                || left.endDate.localeCompare(right.endDate)
+                || left.projectName.localeCompare(right.projectName)
+                || left.taskName.localeCompare(right.taskName)
+                || left.assignmentId.localeCompare(right.assignmentId)
+              )),
+            }
+          : resource
+      ))
+    : [
+        ...resourcesWithoutMoved,
+        {
+          resourceId: input.toResourceId,
+          resourceName: input.targetResourceName,
+          hasConflicts: false,
+          conflictCount: 0,
+          intervals: [movedInterval],
+        },
+      ];
+
+  return {
+    ...data,
+    resources,
+  };
+}
+
 export function ResourcePlannerWorkspace({
   accessToken = null,
   projectId,
+  projectGroupName = null,
   scope = 'current-project',
   ganttDayMode = 'calendar',
   calendarWeeklyPattern = DEFAULT_CALENDAR_WEEKLY_PATTERN,
@@ -797,7 +868,7 @@ export function ResourcePlannerWorkspace({
     if (nextType !== resource.type) {
       payload.type = nextType;
     }
-    if (nextScope !== resource.scope) {
+    if (plannerScope !== 'all-projects' && nextScope !== resource.scope) {
       payload.scope = nextScope;
     }
     if (nextIsActive !== resource.isActive) {
@@ -809,7 +880,7 @@ export function ResourcePlannerWorkspace({
     }
 
     await patchCatalogResource(resource, payload);
-  }, [patchCatalogResource, resources]);
+  }, [patchCatalogResource, plannerScope, resources]);
 
   const isActiveAssignableResource = useCallback((resourceId: string) => {
     const catalogResource = resources.find((resource) => resource.id === resourceId);
@@ -1056,11 +1127,74 @@ export function ResourcePlannerWorkspace({
     return true;
   }, [loadPlanner, persistResourceReplacement, plannerScope]);
 
+  const persistGroupPlannerMove = useCallback(async (classification: OptimisticPlannerMove, targetProjectId: string) => {
+    if (!accessToken) {
+      return;
+    }
+
+    incrementPendingMove(classification.itemId);
+    setPlannerSaveError(null);
+    applyPlannerMoveSelectionPreview(classification);
+    const targetResourceName = state.data?.resources.find((resource) => resource.resourceId === classification.toResourceId)?.resourceName
+      ?? resources.find((resource) => resource.id === classification.toResourceId)?.name
+      ?? classification.toResourceId;
+    syncPlannerCacheState((data) => movePlannerIntervalOptimistically(data, {
+      assignmentId: classification.assignmentId,
+      fromResourceId: classification.fromResourceId,
+      toResourceId: classification.toResourceId,
+      startDate: classification.startDate,
+      endDate: classification.endDate,
+      targetResourceName,
+    }));
+
+    try {
+      const response = await fetch('/api/resources/planner/move', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          projectId: targetProjectId,
+          taskId: classification.taskId,
+          assignmentId: classification.assignmentId,
+          fromResourceId: classification.fromResourceId,
+          toResourceId: classification.toResourceId,
+          startDate: classification.startDate,
+          endDate: classification.endDate,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+          ? body.error
+          : `HTTP ${response.status}`);
+      }
+
+      const planner = body && typeof body === 'object' && 'planner' in body
+        ? normalizePlannerPayload((body as { planner?: unknown }).planner)
+        : null;
+      if (!planner || planner.scope !== 'all-projects' || planner.projectId !== projectId) {
+        await loadPlanner(plannerScope, { keepData: true });
+        return;
+      }
+
+      setResourcePlannerCache(projectId, plannerScope, planner);
+      setState({ status: 'ready', data: planner, error: null });
+    } catch {
+      setPlannerSaveError('Не удалось сохранить изменение. Данные возвращены к последнему состоянию сервера.');
+      await loadPlanner(plannerScope, { keepData: true });
+    } finally {
+      decrementPendingMove(classification.itemId);
+    }
+  }, [accessToken, applyPlannerMoveSelectionPreview, decrementPendingMove, incrementPendingMove, loadPlanner, plannerScope, projectId, resources, setResourcePlannerCache, state.data?.resources, syncPlannerCacheState]);
+
   const persistPlannerMove = useCallback(async (move: ResourceTimelineMove<ResourcePlannerTimelineItem>) => {
     if (!accessToken || move.item.locked) {
       return;
     }
 
+    const metadata = getPlannerItemMetadata(move.item);
     const classification = classifyResourcePlannerMove(move);
     if (!isOptimisticPlannerMove(classification)) {
       return;
@@ -1069,6 +1203,14 @@ export function ResourcePlannerWorkspace({
       (classification.kind === 'resource-only' || classification.kind === 'combined')
       && !isActiveAssignableResource(classification.toResourceId)
     ) {
+      return;
+    }
+
+    if (plannerScope === 'all-projects') {
+      if (!metadata?.projectId) {
+        return;
+      }
+      await persistGroupPlannerMove(classification, metadata.projectId);
       return;
     }
 
@@ -1120,7 +1262,7 @@ export function ResourcePlannerWorkspace({
     } finally {
       decrementPendingMove(classification.itemId);
     }
-  }, [accessToken, applyOptimisticAssignmentPreview, applyPlannerMoveSelectionPreview, assignments, commitPlannerScheduleMove, decrementPendingMove, incrementPendingMove, isActiveAssignableResource, loadPlanner, plannerScope, reconcilePlannerAssignmentPreview, replaceAssignmentsForTask, selectedItem]);
+  }, [accessToken, applyOptimisticAssignmentPreview, applyPlannerMoveSelectionPreview, assignments, commitPlannerScheduleMove, decrementPendingMove, incrementPendingMove, isActiveAssignableResource, loadPlanner, persistGroupPlannerMove, plannerScope, reconcilePlannerAssignmentPreview, replaceAssignmentsForTask, selectedItem]);
 
   const handleDetailsResourceChange = useCallback((input: { assignmentId: string; resourceId: string }) => {
     if (!selectedItem || input.assignmentId !== selectedItem.id) {
@@ -1374,7 +1516,8 @@ export function ResourcePlannerWorkspace({
         : current
     ));
   }, [selectedItem, visibleProjectSnapshot.tasks]);
-  const effectiveReadonly = !accessToken || readonly || groupScopeReadonly;
+  const effectiveReadonly = !accessToken || readonly;
+  const resourceLifecycleReadonly = effectiveReadonly || groupScopeReadonly;
   const plannerResourceCount = timelineResources.length;
   const plannerAssignmentCount = timelineResources.reduce((total, resource) => total + resource.items.length, 0);
   const pendingMoveCount = Object.keys(pendingMoveCounts).length;
@@ -1431,7 +1574,7 @@ export function ResourcePlannerWorkspace({
       id: 'deactivate',
       label: 'Деактивировать',
       isVisible: (resource) => mapTimelineResourceStatusToActive(resource.status),
-      isDisabled: (resource) => effectiveReadonly || pendingCatalogResourceId === resource.id,
+      isDisabled: (resource) => resourceLifecycleReadonly || pendingCatalogResourceId === resource.id,
       danger: true,
       onSelect: (resource) => {
         const catalogResource = resources.find((candidate) => candidate.id === resource.id);
@@ -1444,7 +1587,7 @@ export function ResourcePlannerWorkspace({
       id: 'activate',
       label: 'Вернуть в пул',
       isVisible: (resource) => !mapTimelineResourceStatusToActive(resource.status),
-      isDisabled: (resource) => effectiveReadonly || pendingCatalogResourceId === resource.id,
+      isDisabled: (resource) => resourceLifecycleReadonly || pendingCatalogResourceId === resource.id,
       onSelect: (resource) => {
         const catalogResource = resources.find((candidate) => candidate.id === resource.id);
         if (catalogResource) {
@@ -1456,7 +1599,7 @@ export function ResourcePlannerWorkspace({
       id: 'delete',
       label: 'Удалить',
       danger: true,
-      isDisabled: (resource) => effectiveReadonly || pendingCatalogResourceId === resource.id,
+      isDisabled: (resource) => resourceLifecycleReadonly || pendingCatalogResourceId === resource.id,
       onSelect: (resource) => {
         const catalogResource = resources.find((candidate) => candidate.id === resource.id);
         if (!catalogResource) {
@@ -1467,7 +1610,7 @@ export function ResourcePlannerWorkspace({
         }
       },
     },
-  ], [effectiveReadonly, handleDeleteResource, handleSetResourceActive, pendingCatalogResourceId, resources]);
+  ], [handleDeleteResource, handleSetResourceActive, pendingCatalogResourceId, resourceLifecycleReadonly, resources]);
   const showSidePanel = Boolean(selectedItem);
 
   useEffect(() => {
@@ -1558,6 +1701,15 @@ export function ResourcePlannerWorkspace({
               <Plus className="h-4 w-4" />
               <span>Ресурс</span>
             </Button>
+          )}
+          {plannerScope === 'all-projects' && (
+            <div
+              className="ml-2 min-w-0 truncate text-[13px] font-semibold text-slate-700"
+              data-testid="planner-group-title"
+              title={projectGroupName ? `Ресурсы группы проектов ${projectGroupName}` : 'Ресурсы группы проектов'}
+            >
+              Ресурсы группы проектов {projectGroupName}
+            </div>
           )}
           <div className="ml-auto flex items-center gap-2">
             <DropdownMenu>
@@ -1825,8 +1977,8 @@ export function ResourcePlannerWorkspace({
                     resourceTableColumnWidths={resourceTableColumnWidths}
                     onResourceTableColumnWidthsChange={handleResourceTableColumnWidthsChange}
                     onResourceChange={effectiveReadonly ? undefined : handleResourceChange}
-                    onAddResource={effectiveReadonly ? undefined : handleAddResource}
-                    enableAddResource={!effectiveReadonly}
+                    onAddResource={resourceLifecycleReadonly ? undefined : handleAddResource}
+                    enableAddResource={!resourceLifecycleReadonly}
                     resourceMenuCommands={resourceMenuCommands}
                     getItemClassName={getTimelineItemClassName}
                     activeResourceItemId={selectedItem?.id ?? null}
@@ -1928,14 +2080,14 @@ export function ResourcePlannerWorkspace({
             <ResourceAssignmentDetailsPanel
               item={selectedItem}
               resource={selectedResource}
-              resources={resources}
+              resources={plannerCatalogResources}
               assignedResources={selectedAssignedResources}
               readonly={effectiveReadonly}
               onClose={() => setSelectedItem(null)}
               onOpenTask={onOpenTask}
-              onAddResource={handleAddAssignment}
+              onAddResource={plannerScope === 'all-projects' ? undefined : handleAddAssignment}
               onResourceChange={handleDetailsResourceChange}
-              onRemoveResource={handleRemoveResource}
+              onRemoveResource={plannerScope === 'all-projects' ? undefined : handleRemoveResource}
             />
           )}
         </div>
@@ -1945,6 +2097,7 @@ export function ResourcePlannerWorkspace({
         <CreateResourceModal
           pending={pendingCatalogResourceId === 'new'}
           error={resourceMutationError}
+          forcedScope={plannerScope === 'all-projects' ? 'shared' : null}
           onSubmit={handleCreateResource}
           onCancel={() => { setCreateModalOpen(false); setResourceMutationError(null); }}
         />

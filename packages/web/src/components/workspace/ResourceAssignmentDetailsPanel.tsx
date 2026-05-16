@@ -105,6 +105,12 @@ export function ResourceAssignmentDetailsPanel({
       <div className="flex items-start justify-between gap-3 border-b border-[#dfe1e6] px-4 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="break-words text-[15px] font-bold leading-snug text-[#172b4d]">{item.title}</h2>
+          <div
+            className="mt-1 break-words text-[12px] font-medium leading-snug text-[#5e6c84]"
+            data-testid="assignment-details-project-name"
+          >
+            {metadata.projectName}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center rounded-md bg-[#deebff] px-1.5 py-0.5 text-[11px] font-bold text-[#0747a6]">
               {Math.ceil((new Date(item.endDate).getTime() - new Date(item.startDate).getTime()) / 86400000) + 1} дн.

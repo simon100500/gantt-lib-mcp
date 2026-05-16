@@ -2,12 +2,16 @@ import type { FastifyInstance } from 'fastify';
 import {
   assignmentService,
   AssignmentValidationError,
+  commandService,
   plannerService,
   PlannerValidationError,
   resourceService,
   ResourceValidationError,
 } from '@gantt/mcp/services';
+import { getPrisma } from '@gantt/runtime-core/prisma';
+import type { ActorType, ProjectCommand } from '@gantt/mcp/types';
 import { authMiddleware } from '../middleware/auth-middleware.js';
+import { requireActiveSubscriptionForMutation } from '../middleware/constraint-middleware.js';
 import {
   requireCurrentProjectResourcesEditor,
   requireCurrentProjectResourcesViewer,
@@ -24,6 +28,16 @@ type ResourceBody = {
 
 type AssignmentBody = {
   resourceIds?: string[];
+};
+
+type PlannerMoveBody = {
+  projectId?: string;
+  taskId?: string;
+  assignmentId?: string;
+  fromResourceId?: string;
+  toResourceId?: string;
+  startDate?: string;
+  endDate?: string;
 };
 
 function parseResourceName(body: unknown): string | undefined {
@@ -95,6 +109,65 @@ function isPlannerValidationError(error: unknown): error is PlannerValidationErr
     typeof error.message === 'string' &&
     'issue' in error
   );
+}
+
+function normalizeDateOnlyInput(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().split('T')[0] ?? '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : null;
+}
+
+function utcDayIndex(value: string): number {
+  const [year, month, day] = value.split('-').map((part) => Number.parseInt(part, 10));
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+}
+
+function durationDays(startDate: string, endDate: string): number {
+  return utcDayIndex(endDate) - utcDayIndex(startDate) + 1;
+}
+
+function buildPlannerDateCommands(input: {
+  taskId: string;
+  originalStartDate: string;
+  originalEndDate: string;
+  nextStartDate: string;
+  nextEndDate: string;
+}): ProjectCommand[] {
+  const startChanged = input.originalStartDate !== input.nextStartDate;
+  const endChanged = input.originalEndDate !== input.nextEndDate;
+
+  if (!startChanged && !endChanged) {
+    return [];
+  }
+
+  if (
+    startChanged
+    && endChanged
+    && durationDays(input.originalStartDate, input.originalEndDate) === durationDays(input.nextStartDate, input.nextEndDate)
+  ) {
+    return [{ type: 'move_task', taskId: input.taskId, startDate: input.nextStartDate }];
+  }
+
+  if (startChanged && !endChanged) {
+    return [{ type: 'resize_task', taskId: input.taskId, anchor: 'start', date: input.nextStartDate }];
+  }
+
+  if (!startChanged && endChanged) {
+    return [{ type: 'resize_task', taskId: input.taskId, anchor: 'end', date: input.nextEndDate }];
+  }
+
+  return utcDayIndex(input.nextStartDate) < utcDayIndex(input.originalStartDate)
+    ? [
+        { type: 'resize_task', taskId: input.taskId, anchor: 'end', date: input.nextEndDate },
+        { type: 'resize_task', taskId: input.taskId, anchor: 'start', date: input.nextStartDate },
+      ]
+    : [
+        { type: 'resize_task', taskId: input.taskId, anchor: 'start', date: input.nextStartDate },
+        { type: 'resize_task', taskId: input.taskId, anchor: 'end', date: input.nextEndDate },
+      ];
 }
 
 export async function registerResourceRoutes(fastify: FastifyInstance): Promise<void> {
@@ -327,5 +400,120 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
 
       throw error;
     }
+  });
+
+  fastify.post('/api/resources/planner/move', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
+    const body = (req.body ?? {}) as PlannerMoveBody;
+    const targetProjectId = typeof body.projectId === 'string' ? body.projectId.trim() : '';
+    const taskId = typeof body.taskId === 'string' ? body.taskId.trim() : '';
+    const assignmentId = typeof body.assignmentId === 'string' ? body.assignmentId.trim() : '';
+    const fromResourceId = typeof body.fromResourceId === 'string' ? body.fromResourceId.trim() : '';
+    const toResourceId = typeof body.toResourceId === 'string' ? body.toResourceId.trim() : '';
+    const nextStartDate = normalizeDateOnlyInput(body.startDate);
+    const nextEndDate = normalizeDateOnlyInput(body.endDate);
+
+    if (!targetProjectId || !taskId || !assignmentId || !fromResourceId || !toResourceId || !nextStartDate || !nextEndDate) {
+      return reply.status(400).send({
+        reason: 'validation_error',
+        error: 'projectId, taskId, assignmentId, fromResourceId, toResourceId, startDate, and endDate are required',
+      });
+    }
+
+    const access = await resolveProjectAccess(req.user!.userId, targetProjectId);
+    if (!access || access.permissions.resources !== 'edit' || access.permissions.schedule !== 'edit') {
+      return reply.status(403).send({ error: 'Project schedule and resources edit access required' });
+    }
+
+    const prisma = getPrisma();
+    const task = await prisma.task.findFirst({
+      where: { id: taskId, projectId: targetProjectId },
+      select: { id: true, startDate: true, endDate: true },
+    });
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    const assignment = await prisma.taskAssignment.findFirst({
+      where: { id: assignmentId, projectId: targetProjectId, taskId, resourceId: fromResourceId },
+      select: { id: true },
+    });
+    if (!assignment) {
+      return reply.status(404).send({ error: 'Assignment not found' });
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: targetProjectId },
+      select: { version: true },
+    });
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const actorType: ActorType = 'user';
+    const actorId = req.user!.userId;
+    let baseVersion = project.version;
+    const dateCommands = buildPlannerDateCommands({
+      taskId,
+      originalStartDate: task.startDate.toISOString().slice(0, 10),
+      originalEndDate: task.endDate.toISOString().slice(0, 10),
+      nextStartDate,
+      nextEndDate,
+    });
+
+    for (const [index, command] of dateCommands.entries()) {
+      const response = await commandService.commitCommand({
+        projectId: targetProjectId,
+        clientRequestId: `${assignmentId}:${Date.now()}:${index}`,
+        baseVersion,
+        command,
+        history: {
+          title: 'Перенос назначения',
+          groupId: assignmentId,
+          requestContextId: assignmentId,
+          origin: 'user_ui',
+          finalizeGroup: index === dateCommands.length - 1,
+        },
+      }, actorType, actorId);
+
+      if (!response.accepted) {
+        return reply.status(response.reason === 'version_conflict' ? 409 : 400).send(response);
+      }
+      baseVersion = response.newVersion;
+    }
+
+    let assignments = null as Awaited<ReturnType<typeof assignmentService.replaceForTask>>['assignments'] | null;
+    if (fromResourceId !== toResourceId) {
+      const currentAssignments = await prisma.taskAssignment.findMany({
+        where: { projectId: targetProjectId, taskId },
+        select: { resourceId: true },
+        orderBy: [{ createdAt: 'asc' }, { resourceId: 'asc' }],
+      });
+      const resourceIds = currentAssignments
+        .map((entry) => (entry.resourceId === fromResourceId ? toResourceId : entry.resourceId))
+        .filter((resourceId, index, entries) => resourceId && entries.indexOf(resourceId) === index);
+      if (!resourceIds.includes(toResourceId)) {
+        resourceIds.push(toResourceId);
+      }
+
+      const response = await assignmentService.replaceForTask({
+        projectId: targetProjectId,
+        taskId,
+        resourceIds,
+      });
+      assignments = response.assignments;
+    }
+
+    const planner = await plannerService.getResourcePlanner({
+      projectId: req.user!.projectId,
+      scope: 'all-projects',
+    });
+
+    return reply.send({
+      accepted: true,
+      projectId: targetProjectId,
+      taskId,
+      assignments,
+      planner,
+    });
   });
 }

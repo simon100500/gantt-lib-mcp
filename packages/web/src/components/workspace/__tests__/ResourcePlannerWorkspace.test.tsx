@@ -21,6 +21,9 @@ type MockTimelineItem = {
 type MockTimelineResource = {
   id: string;
   name: string;
+  type?: string;
+  scope?: string;
+  status?: string;
   items: MockTimelineItem[];
 };
 
@@ -28,6 +31,7 @@ type MockGanttProps = {
   mode?: string;
   resources?: MockTimelineResource[];
   readonly?: boolean;
+  onResourceChange?: (resource: MockTimelineResource) => void;
   onResourceItemMove?: (move: {
     item: MockTimelineItem;
     itemId: string;
@@ -193,6 +197,7 @@ function latestGanttProps(): MockGanttProps {
 
 async function renderPlannerWorkspace(options: {
   scope?: 'current-project' | 'all-projects';
+  projectGroupName?: string | null;
   onScopeChange?: (scope: 'current-project' | 'all-projects') => void;
 } = {}): Promise<{ container: HTMLDivElement; root: Root }> {
   const container = document.createElement('div');
@@ -204,6 +209,7 @@ async function renderPlannerWorkspace(options: {
       <ResourcePlannerWorkspace
         accessToken="token"
         projectId="project-1"
+        projectGroupName={options.projectGroupName}
         scope={options.scope}
         onScopeChange={options.onScopeChange}
         onBackToProject={vi.fn()}
@@ -394,17 +400,191 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
       ],
     });
 
-    const { container, root } = await renderPlannerWorkspace({ scope: 'all-projects' });
+    const { container, root } = await renderPlannerWorkspace({ scope: 'all-projects', projectGroupName: 'Стройка 2026' });
     await flushEffects();
 
     expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=all-projects', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }));
     expect(container.querySelector('[data-testid="resource-planner-statusbar"]')?.textContent).toContain('Группа проектов');
-    expect(container.querySelector('[data-testid="planner-create-resource"]')).toBeNull();
-    expect(latestGanttProps().readonly).toBe(true);
+    expect(container.querySelector('[data-testid="planner-scope-current-project"]')?.textContent).toBe('Проектные');
+    expect(container.querySelector('[data-testid="planner-scope-all-projects"]')?.textContent).toBe('Общие');
+    expect(container.querySelector('[data-testid="planner-group-title"]')?.textContent).toContain('Ресурсы группы проектов Стройка 2026');
+    expect(container.querySelector('[data-testid="planner-create-resource"]')).not.toBeNull();
+    expect(latestGanttProps().readonly).toBe(false);
+    expect(latestGanttProps().onResourceChange).toEqual(expect.any(Function));
     expect(latestGanttProps().resources?.map((resource) => resource.id)).toEqual(['resource-shared']);
     expect(latestGanttProps().resources?.[0]?.items[0]?.title).toBe('Beta install');
+
+    await unmount(root);
+  });
+
+  it('creates shared resources from group scope with project scope disabled', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/resources/planner?scope=all-projects') {
+        return { ok: true, json: async () => buildPlannerPayload({ scope: 'all-projects', resources: [] }) } as Response;
+      }
+      if (url === '/api/resources?projectId=project-1') {
+        return { ok: true, json: async () => ({ resources: [] }) } as Response;
+      }
+      if (url === '/api/resources' && init?.method === 'POST') {
+        return { ok: true, json: async () => buildResource('resource-new', 'Shared Lift', 'equipment', 'shared') } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useProjectStore.setState({ resources: [] });
+
+    const { container, root } = await renderPlannerWorkspace({ scope: 'all-projects' });
+    await flushEffects();
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-create-resource"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    const modal = container.querySelector('[data-testid="create-resource-modal"]');
+    expect(modal).not.toBeNull();
+    const scopeButtons = Array.from(modal!.querySelectorAll('fieldset:last-of-type button')) as HTMLButtonElement[];
+    expect(scopeButtons[0]?.textContent).toContain('Проект');
+    expect(scopeButtons[0]?.disabled).toBe(true);
+    expect(scopeButtons[1]?.textContent).toContain('Общий');
+    expect(scopeButtons[1]?.disabled).toBe(false);
+
+    await act(async () => {
+      const input = modal!.querySelector('input') as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'Shared Lift');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      ((modal!.querySelector('button[type="submit"]') as HTMLButtonElement)).click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const createCall = fetchMock.mock.calls.find(([input, init]) => String(input) === '/api/resources' && init?.method === 'POST');
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      name: 'Shared Lift',
+      scope: 'shared',
+      projectId: 'project-1',
+    });
+
+    await unmount(root);
+  });
+
+  it('persists group-scope item moves through the planner move endpoint', async () => {
+    let resolveMove: ((response: Response) => void) | null = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/resources/planner?scope=all-projects') {
+        return {
+          ok: true,
+          json: async () => buildPlannerPayload({
+            scope: 'all-projects',
+            resources: [{
+              resourceId: 'resource-shared',
+              resourceName: 'Shared Crew',
+              intervals: [{
+                assignmentId: 'assignment-shared-beta',
+                resourceId: 'resource-shared',
+                resourceName: 'Shared Crew',
+                projectId: 'project-2',
+                projectName: 'Project 2',
+                taskId: 'task-2',
+                taskName: 'Beta install',
+                startDate: '2026-04-04',
+                endDate: '2026-04-06',
+                assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                hasConflict: false,
+                conflictCount: 0,
+                conflictAssignmentIds: [],
+              }],
+            }],
+          }),
+        } as Response;
+      }
+      if (url === '/api/resources/planner/move' && init?.method === 'POST') {
+        return await new Promise<Response>((resolve) => {
+          resolveMove = resolve;
+        });
+      }
+      if (url === '/api/resources?projectId=project-1') {
+        return { ok: true, json: async () => ({ resources: [buildResource('resource-shared', 'Shared Crew', 'human', 'shared')] }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useProjectStore.setState({
+      resources: [buildResource('resource-shared', 'Shared Crew', 'human', 'shared')],
+    });
+
+    const { root } = await renderPlannerWorkspace({ scope: 'all-projects' });
+    await flushEffects();
+    await flushEffects();
+
+    const props = [...ganttPropsHistory].reverse().find((entry) => entry.resources?.some((resource) => resource.items.length > 0)) ?? latestGanttProps();
+    const item = props.resources?.[0]?.items[0];
+    expect(item).toBeTruthy();
+
+    await act(async () => {
+      props.onResourceItemMove?.({
+        item: item!,
+        itemId: item!.id,
+        fromResourceId: 'resource-shared',
+        toResourceId: 'resource-shared',
+        startDate: new Date(Date.UTC(2026, 3, 7)),
+        endDate: new Date(Date.UTC(2026, 3, 9)),
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const moveCall = fetchMock.mock.calls.find(([input]) => String(input) === '/api/resources/planner/move');
+    expect(moveCall?.[1]).toEqual(expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        projectId: 'project-2',
+        taskId: 'task-2',
+        assignmentId: 'assignment-shared-beta',
+        fromResourceId: 'resource-shared',
+        toResourceId: 'resource-shared',
+        startDate: '2026-04-07',
+        endDate: '2026-04-09',
+      }),
+    }));
+    expect(latestGanttProps().resources?.[0]?.items[0]?.startDate).toBe('2026-04-07');
+
+    await act(async () => {
+      resolveMove?.({
+        ok: true,
+        json: async () => ({
+          accepted: true,
+          planner: buildPlannerPayload({
+            scope: 'all-projects',
+            resources: [{
+              resourceId: 'resource-shared',
+              resourceName: 'Shared Crew',
+              intervals: [{
+                assignmentId: 'assignment-shared-beta',
+                resourceId: 'resource-shared',
+                resourceName: 'Shared Crew',
+                projectId: 'project-2',
+                projectName: 'Project 2',
+                taskId: 'task-2',
+                taskName: 'Beta install',
+                startDate: '2026-04-07',
+                endDate: '2026-04-09',
+                assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                hasConflict: false,
+                conflictCount: 0,
+                conflictAssignmentIds: [],
+              }],
+            }],
+          }),
+        }),
+      } as Response);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     await unmount(root);
   });
