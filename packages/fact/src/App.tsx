@@ -131,6 +131,7 @@ function clampPercent(value: number): number {
 export function App() {
   const [token] = useState(() => readLaunchToken());
   const dateInputRef = useRef<HTMLInputElement | null>(null);
+  const sheetDragStartRef = useRef<number | null>(null);
   const [baseToday] = useState(() => todayKey());
   const [date, setDate] = useState(() => todayKey());
   const [activeDayPreset, setActiveDayPreset] = useState<DayPreset>('today');
@@ -144,6 +145,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
+  const [sheetClosing, setSheetClosing] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [hideMarkedTasks, setHideMarkedTasks] = useState(true);
 
@@ -255,19 +257,38 @@ export function App() {
       ...draft,
       state: mode === 'problem' ? 'problem' : draft.state === 'problem' ? 'fact' : draft.state,
     });
+    setSheetClosing(false);
     setActiveTaskId(task.id);
     setSheetMode(mode);
   };
 
   const openFreeProblem = () => {
+    setSheetClosing(false);
     setActiveTaskId(null);
     setFreeProblemDraft({ reason: '', comment: '' });
     setSheetMode('problem');
   };
 
   const closeSheet = () => {
-    setSheetMode(null);
-    setActiveTaskId(null);
+    if (!sheetMode || sheetClosing) return;
+    setSheetClosing(true);
+    window.setTimeout(() => {
+      setSheetMode(null);
+      setActiveTaskId(null);
+      setSheetClosing(false);
+    }, 180);
+  };
+
+  const startSheetDrag = (clientY: number) => {
+    sheetDragStartRef.current = clientY;
+  };
+
+  const finishSheetDrag = (clientY: number) => {
+    const startY = sheetDragStartRef.current;
+    sheetDragStartRef.current = null;
+    if (startY !== null && clientY - startY > 56) {
+      closeSheet();
+    }
   };
 
   const submit = async () => {
@@ -645,18 +666,35 @@ export function App() {
 
       {sheetMode && (
         <Container
-          className="modal-overlay"
+          className={`modal-overlay ${sheetClosing ? 'modal-overlay--closing' : ''}`}
           fullWidth
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeSheet();
           }}
         >
-          <Container className="modal-sheet" fullWidth>
+          <Container className={`modal-sheet ${sheetClosing ? 'modal-sheet--closing' : ''}`} fullWidth>
+            <button
+              className="modal-drag-handle"
+              type="button"
+              aria-label="Закрыть"
+              onClick={closeSheet}
+              onMouseDown={(event) => startSheetDrag(event.clientY)}
+              onMouseUp={(event) => finishSheetDrag(event.clientY)}
+              onTouchStart={(event) => startSheetDrag(event.touches[0]?.clientY ?? 0)}
+              onTouchEnd={(event) => finishSheetDrag(event.changedTouches[0]?.clientY ?? 0)}
+            />
             <Flex className="modal-header" align="center" justify="space-between">
               <Typography.Headline variant="small-strong">
                 {sheetMode === 'close-day' ? 'Закрытие дня' : sheetMode === 'photo' ? 'Фото' : activeTask?.name ?? 'Новая проблема'}
               </Typography.Headline>
-              <IconButton mode="secondary" appearance="neutral" size="small" onClick={closeSheet} aria-label="Закрыть">x</IconButton>
+              <IconButton mode="link" appearance="neutral" size="small" onClick={closeSheet} aria-label="Закрыть">
+                <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <path
+                    d="M5.23 5.23a.78.78 0 0 1 1.1 0L10 8.9l3.67-3.67a.78.78 0 1 1 1.1 1.1L11.1 10l3.67 3.67a.78.78 0 1 1-1.1 1.1L10 11.1l-3.67 3.67a.78.78 0 1 1-1.1-1.1L8.9 10 5.23 6.33a.78.78 0 0 1 0-1.1Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </IconButton>
             </Flex>
 
             {activeTask && activeDraft && sheetMode !== 'close-day' && (
