@@ -1990,6 +1990,7 @@ export function ResourcePlannerWorkspace({
                     readonly={effectiveReadonly}
                     disableResourceReassignment={false}
                     resourceGrouping="type"
+                    resourceItemTooltipLines={2}
                     resourceTableColumnWidths={resourceTableColumnWidths}
                     onResourceTableColumnWidthsChange={handleResourceTableColumnWidthsChange}
                     onResourceChange={effectiveReadonly ? undefined : handleResourceChange}

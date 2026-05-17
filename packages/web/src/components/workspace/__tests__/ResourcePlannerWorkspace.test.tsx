@@ -32,6 +32,7 @@ type MockGanttProps = {
   resources?: MockTimelineResource[];
   readonly?: boolean;
   enableAddResource?: boolean;
+  resourceItemTooltipLines?: 1 | 2;
   onAddResource?: (resource: MockTimelineResource) => void;
   onResourceChange?: (resource: MockTimelineResource) => void;
   onResourceItemMove?: (move: {
@@ -416,6 +417,7 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
     expect(container.querySelector('[data-testid="planner-create-resource"]')).not.toBeNull();
     expect(latestGanttProps().readonly).toBe(false);
     expect(latestGanttProps().enableAddResource).toBe(true);
+    expect(latestGanttProps().resourceItemTooltipLines).toBe(2);
     expect(latestGanttProps().onAddResource).toEqual(expect.any(Function));
     expect(latestGanttProps().onResourceChange).toEqual(expect.any(Function));
     expect(latestGanttProps().resources?.map((resource) => resource.id)).toEqual(['resource-shared']);
