@@ -95,19 +95,23 @@ textarea {
 }
 
 .date-picker-button {
-  position: relative;
   min-height: 44px;
+}
+
+.date-tool-icon {
+  display: inline-flex;
+  min-width: 28px;
+  min-height: 24px;
   align-items: center;
   justify-content: center;
 }
 
-.date-picker-button input {
+.date-picker-input {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  width: 1px;
+  height: 1px;
   opacity: 0;
-  cursor: pointer;
+  pointer-events: none;
 }
 
 .section-header {
@@ -146,12 +150,13 @@ textarea {
 }
 
 .task-section-title {
-  margin: 8px 16px 0;
-  color: var(--text-secondary);
+  margin: 14px 16px 2px;
+  color: #000;
 }
 
 .work-card {
   overflow: hidden;
+  width: 100%;
 }
 
 .work-card:active {

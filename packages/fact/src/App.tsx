@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   CellAction,
@@ -15,6 +15,7 @@ import {
   Spinner,
   Switch,
   Textarea,
+  ToolButton,
   Typography,
 } from '@maxhub/max-ui';
 import { closeFactDay, loadFactSession, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
@@ -41,6 +42,7 @@ type FreeProblem = {
 
 type SheetMode = 'fact' | 'problem' | 'photo' | 'close-day' | null;
 type Tab = 'today' | 'object' | 'problems' | 'journal';
+type DayPreset = 'yesterday' | 'today' | 'tomorrow' | 'custom';
 
 const reasonTags = ['Нет материала', 'Нет людей', 'Не готов фронт', 'Ждем смежников', 'Изменение проекта', 'Погода', 'Техника', 'Другое'];
 const navItems: Array<{ id: Tab; label: string }> = [
@@ -52,6 +54,7 @@ const navItems: Array<{ id: Tab; label: string }> = [
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const shortDateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' });
+const TypographyHeadline = Typography.Headline;
 
 function formatAmount(value: number, unit: string | null): string {
   const formatted = value.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
@@ -103,23 +106,33 @@ function getSectionTitle(task: FactTask, tasks: FactTask[]): string | null {
   return tasks.find((item) => item.id === task.parentId)?.name ?? null;
 }
 
-function buildDayOptions(date: string) {
-  return [-1, 0, 1].map((offset) => {
-    const itemDate = new Date(`${date}T00:00:00.000Z`);
-    itemDate.setUTCDate(itemDate.getUTCDate() + offset);
-    const key = itemDate.toISOString().slice(0, 10);
-    return {
-      key,
-      offset,
-      label: offset === 0 ? 'Сегодня' : offset === -1 ? 'Вчера' : offset === 1 ? 'Завтра' : formatShortRuDate(key),
-      day: key.slice(8, 10),
-    };
-  });
+const dayOptions: Array<{ key: Exclude<DayPreset, 'custom'>; label: string }> = [
+  { key: 'yesterday', label: 'Вчера' },
+  { key: 'today', label: 'Сегодня' },
+  { key: 'tomorrow', label: 'Завтра' },
+];
+
+function getPresetDateLabel(preset: Exclude<DayPreset, 'custom'>, baseDate: string): string {
+  return formatShortRuDate(getPresetDateKey(preset, baseDate));
+}
+
+function getPresetDateKey(preset: Exclude<DayPreset, 'custom'>, baseDate: string): string {
+  const offsetByPreset: Record<Exclude<DayPreset, 'custom'>, number> = {
+    yesterday: -1,
+    today: 0,
+    tomorrow: 1,
+  };
+  const itemDate = new Date(`${baseDate}T00:00:00.000Z`);
+  itemDate.setUTCDate(itemDate.getUTCDate() + offsetByPreset[preset]);
+  return itemDate.toISOString().slice(0, 10);
 }
 
 export function App() {
   const [token] = useState(() => readLaunchToken());
+  const dateInputRef = useRef<HTMLInputElement | null>(null);
+  const [baseToday] = useState(() => todayKey());
   const [date, setDate] = useState(() => todayKey());
+  const [activeDayPreset, setActiveDayPreset] = useState<DayPreset>('today');
   const [activeTab, setActiveTab] = useState<Tab>('today');
   const [session, setSession] = useState<FactSession | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
@@ -172,7 +185,6 @@ export function App() {
   }, [sheetMode]);
 
   const depthById = useMemo(() => buildDepthMap(session?.tasks ?? []), [session?.tasks]);
-  const dayOptions = useMemo(() => buildDayOptions(date), [date]);
   const writableTasks = session?.tasks.filter((task) => task.writable) ?? [];
   const activeTask = activeTaskId ? writableTasks.find((task) => task.id === activeTaskId) ?? null : null;
   const activeDraft = activeTask ? drafts[activeTask.id] ?? createDraft(activeTask) : null;
@@ -332,43 +344,53 @@ export function App() {
             <>
               <Flex className="day-switcher" gap={8}>
                 {dayOptions.map((item) => (
-                  <Button
+                  <ToolButton
                     key={item.key}
-                    mode={item.offset === 0 ? 'primary' : 'secondary'}
-                    appearance={item.offset === 0 ? 'themed' : 'neutral'}
-                    size="medium"
-                    onClick={() => setDate(item.key)}
+                    appearance={activeDayPreset === item.key ? 'default' : 'secondary'}
+                    icon={<span className="date-tool-icon">{getPresetDateLabel(item.key, baseToday)}</span>}
+                    onClick={() => {
+                      setActiveDayPreset(item.key);
+                      setDate(getPresetDateKey(item.key, baseToday));
+                    }}
                   >
-                    {item.label} · {item.day}
-                  </Button>
+                    {item.label}
+                  </ToolButton>
                 ))}
-                <Button mode="secondary" appearance="neutral" size="medium" className="date-picker-button" asChild>
-                  <label>
-                    Дата
-                    <input
-                      aria-label="Выбрать произвольную дату"
-                      name="custom-date"
-                      type="date"
-                      value={date}
-                      onChange={(event) => setDate(event.target.value)}
-                    />
-                  </label>
-                </Button>
+                <ToolButton
+                  appearance={activeDayPreset === 'custom' ? 'default' : 'secondary'}
+                  className="date-picker-button"
+                  icon={<span className="date-tool-icon">{formatShortRuDate(date)}</span>}
+                  onClick={() => {
+                    if (typeof dateInputRef.current?.showPicker === 'function') {
+                      dateInputRef.current.showPicker();
+                    } else {
+                      dateInputRef.current?.click();
+                    }
+                  }}
+                >
+                  Дата
+                </ToolButton>
+                <input
+                  ref={dateInputRef}
+                  className="date-picker-input"
+                  aria-label="Выбрать произвольную дату"
+                  name="custom-date"
+                  type="date"
+                  value={date}
+                  onChange={(event) => {
+                    setDate(event.target.value);
+                    setActiveDayPreset('custom');
+                  }}
+                />
               </Flex>
 
-              <CellList mode="island" header={<CellHeader titleStyle="normal">Закрытие дня</CellHeader>}>
+              <CellList mode="island" filled>
                 <CellSimple
-                  height="normal"
-                  title={`${markedCount} из ${writableTasks.length} работ отмечено`}
-                  subtitle={`${unmarkedTasks.length} не отмечено · ${problemTasks.length + freeProblems.length} с проблемами`}
-                  after={<Button mode="secondary" size="small" onClick={() => setSheetMode('close-day')}>Проверить</Button>}
+                  height="compact"
+                  title="Работы на сегодня"
+                  after={<Counter value={writableTasks.length} rounded appearance="neutral" />}
                 />
               </CellList>
-
-              <Container className="section-header" fullWidth>
-                <Typography.Label variant="small-caps">Работы на сегодня</Typography.Label>
-                <Counter value={writableTasks.length} rounded appearance="neutral" />
-              </Container>
 
               <Flex direction="column" gap={10}>
                 {session?.tasks.length === 0 && (
@@ -385,22 +407,21 @@ export function App() {
                   const previousSectionTitle = previousWritableTask ? getSectionTitle(previousWritableTask, allTasks) : null;
 
                   return (
-                    <Flex key={task.id} direction="column" gap={8}>
+                    <Fragment key={task.id}>
                       {sectionTitle && sectionTitle !== previousSectionTitle && (
-                        <Typography.Headline variant="small-strong" className="task-section-title" asChild>
+                        <TypographyHeadline variant="small-strong" className="task-section-title" asChild>
                           <h2>{sectionTitle}</h2>
-                        </Typography.Headline>
+                        </TypographyHeadline>
                       )}
                       <TaskCard
                         task={task}
-                        summary={task.name}
                         draft={drafts[task.id] ?? createDraft(task)}
                         onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                         onOpenProblem={(nextTask) => openTaskSheet(nextTask, 'problem')}
                         onOpenPhoto={(nextTask) => openTaskSheet(nextTask, 'photo')}
                         onMarkNotWorked={markNotWorked}
                       />
-                    </Flex>
+                    </Fragment>
                   );
                 })}
               </Flex>

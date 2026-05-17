@@ -1,4 +1,4 @@
-import { Button, CellHeader, CellList, CellSimple, Container, Counter, Flex, Grid, Typography } from '@maxhub/max-ui';
+import { Button, CellList, CellSimple, Container, Flex, Grid, Typography } from '@maxhub/max-ui';
 import type { FactMarkState, FactTask } from '../../api/factApi';
 
 type Draft = {
@@ -15,7 +15,6 @@ type Draft = {
 type TaskCardProps = {
   task: FactTask;
   draft: Draft;
-  summary: string;
   onOpenFact: (task: FactTask) => void;
   onOpenProblem: (task: FactTask) => void;
   onOpenPhoto: (task: FactTask) => void;
@@ -53,7 +52,6 @@ function formatDateRange(task: FactTask): string {
 export function TaskCard({
   task,
   draft,
-  summary,
   onOpenFact,
   onOpenProblem,
   onOpenPhoto,
@@ -72,27 +70,16 @@ export function TaskCard({
   return (
     <CellList
       mode="island"
+      filled
       className={`work-card ${status}`}
-      header={(
-        <CellHeader
-          titleStyle="normal"
-          after={(
-            <Typography.Label variant="small-strong" className={draft.state === 'problem' ? 'text-pill text-pill--negative' : 'text-pill'}>
-              {draft.value.trim() || draft.state !== 'fact' ? stateLabels[draft.state] : 'Не начата'}
-            </Typography.Label>
-          )}
-        >
-          {task.name}
-        </CellHeader>
-      )}
     >
       <CellSimple
-        height="compact"
-        title={summary}
+        height="normal"
+        title={task.name}
         subtitle={formatDateRange(task)}
         after={(
-          <Typography.Label variant="small-strong" className="progress-label">
-            {progress}%
+          <Typography.Label variant="small-strong" className={draft.state === 'problem' ? 'text-pill text-pill--negative' : 'text-pill'}>
+            {draft.value.trim() || draft.state !== 'fact' ? stateLabels[draft.state] : 'Не начата'}
           </Typography.Label>
         )}
       />
@@ -108,7 +95,7 @@ export function TaskCard({
         </div>
         <Flex justify="space-between" className="progress-caption">
           <Typography.Body variant="small">Всего выполнено</Typography.Body>
-          <Typography.Body variant="small">{formatAmount(task.completedVolume, task.workUnit)}</Typography.Body>
+          <Typography.Body variant="small">{formatAmount(task.completedVolume, task.workUnit)} · {progress}%</Typography.Body>
         </Flex>
       </Container>
 
