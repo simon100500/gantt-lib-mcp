@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, Home, RefreshCw } from 'lucide-react';
+import { ChevronDown, ExternalLink, Home, ListTree, RefreshCw } from 'lucide-react';
 import type { TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand } from 'gantt-lib';
 
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
 import { Toolbar, type ToolbarTaskListColumnRow } from '../layout/Toolbar.tsx';
 import { Button } from '../ui/button.tsx';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu.tsx';
 import type { GroupGanttOverviewResponse, GroupGanttSectionOverview } from '../../lib/apiTypes.ts';
 import { TASK_LIST_COLUMN_WIDTHS } from '../../lib/taskListColumns.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
@@ -23,6 +24,8 @@ type GroupGanttTask = Task & {
   sourceTaskId?: string;
   overviewDepth: 1 | 2 | 3;
 };
+
+type GroupOverviewLoadDepth = 1 | 2 | 3;
 
 type CollapseLevel = 'project' | 'section' | 'subsection' | 'custom';
 
@@ -95,7 +98,10 @@ function formatTaskCount(count: number): string {
   return `${count} задач`;
 }
 
-export function buildTasks(data: GroupGanttOverviewResponse): GroupGanttTask[] {
+export function buildTasks(
+  data: GroupGanttOverviewResponse,
+  loadDepth: GroupOverviewLoadDepth = 3,
+): GroupGanttTask[] {
   return data.projects.flatMap((project): GroupGanttTask[] => {
     if (!project.startDate || !project.endDate) {
       return [];
@@ -143,11 +149,13 @@ export function buildTasks(data: GroupGanttOverviewResponse): GroupGanttTask[] {
 
         return [
           sectionTask,
-          ...(depth < 3 ? buildSectionTasks(section.children ?? [], sectionTask.id, `${indexPrefix}${index + 1}`, 3) : []),
+          ...(depth < loadDepth ? buildSectionTasks(section.children ?? [], sectionTask.id, `${indexPrefix}${index + 1}`, 3) : []),
         ];
       });
 
-    const sectionTasks = buildSectionTasks(project.sections, projectTask.id, '1', 2);
+    const sectionTasks = loadDepth >= 2
+      ? buildSectionTasks(project.sections, projectTask.id, '1', 2)
+      : [];
     const projectTasks = [projectTask, ...sectionTasks];
     const parentTaskIds = new Set(projectTasks.flatMap((task) => (task.parentId ? [task.parentId] : [])));
 
@@ -205,6 +213,7 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
   const [state, setState] = useState<LoadState>({ status: 'loading', data: null, error: null });
   const groupStateId = useMemo(() => `group:${groupId}`, [groupId]);
   const viewMode = projectStates[groupStateId]?.viewMode ?? globalViewMode;
+  const groupOverviewLoadDepth = projectStates[groupStateId]?.groupOverviewLoadDepth ?? 3;
 
   const loadOverview = useCallback(async (keepData = false) => {
     if (!accessToken) {
@@ -245,7 +254,10 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
   }, [loadOverview]);
 
   const data = state.data;
-  const tasks = useMemo(() => (data ? buildTasks(data) : []), [data]);
+  const tasks = useMemo(
+    () => (data ? buildTasks(data, groupOverviewLoadDepth) : []),
+    [data, groupOverviewLoadDepth],
+  );
   const projectCount = data?.projects.length ?? 0;
   const sectionCount = data?.projects.reduce((sum, project) => sum + project.sectionCount, 0) ?? 0;
   const sourceTaskCount = data?.projects.reduce((sum, project) => sum + project.taskCount, 0) ?? 0;
@@ -336,6 +348,14 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
     setGlobalViewMode(nextViewMode);
     setProjectState(groupStateId, { viewMode: nextViewMode });
   }, [groupStateId, setGlobalViewMode, setProjectState]);
+  const handleGroupOverviewLoadDepthChange = useCallback((nextDepth: GroupOverviewLoadDepth) => {
+    setProjectState(groupStateId, { groupOverviewLoadDepth: nextDepth, collapsedParentIds: [] });
+  }, [groupStateId, setProjectState]);
+  const currentLoadDepthLabel = groupOverviewLoadDepth === 1
+    ? 'Проекты'
+    : groupOverviewLoadDepth === 2
+      ? 'Разделы'
+      : 'Подразделы';
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => [
     {
@@ -371,6 +391,47 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       <div className="px-3 md:px-4">
         <Toolbar
+          leadingControls={(
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="hidden h-8 gap-1.5 rounded-md border border-transparent bg-transparent px-2.5 text-xs font-medium text-slate-600 hover:border-primary hover:text-primary sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:bg-transparent data-[state=open]:text-slate-600"
+                  title="Уровень загрузки сводного графика"
+                >
+                  <ListTree className="h-3.5 w-3.5" />
+                  <span className="text-xs">{currentLoadDepthLabel}</span>
+                  <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                {[
+                  { level: 1, label: 'Проекты' },
+                  { level: 2, label: 'Разделы' },
+                  { level: 3, label: 'Подразделы' },
+                ].map(({ level, label }) => (
+                  <DropdownMenuItem
+                    key={level}
+                    data-testid={`group-gantt-load-depth-${level}`}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      handleGroupOverviewLoadDepthChange(level as GroupOverviewLoadDepth);
+                    }}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <input
+                      type="radio"
+                      checked={groupOverviewLoadDepth === level}
+                      readOnly
+                      className="pointer-events-none h-4 w-4 shrink-0 border-slate-300 accent-primary"
+                    />
+                    <span className="text-sm">{label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           onScrollToToday={() => ganttRef.current?.scrollToToday()}
           onCollapseAll={handleCollapseAll}
           onExpandAll={handleExpandAll}
@@ -387,7 +448,7 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
           hierarchyCollapseRows={[
             { id: 'project', label: 'Проекты' },
             { id: 'section', label: 'Разделы' },
-            { id: 'subsection', label: 'Подразделы' },
+            ...(groupOverviewLoadDepth === 3 ? [{ id: 'subsection', label: 'Подразделы' }] : []),
           ]}
           hierarchyCollapseValue={collapseLevel === 'custom' ? null : collapseLevel}
           onHierarchyCollapseChange={(value) => {

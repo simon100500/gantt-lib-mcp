@@ -31,7 +31,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { Button } from '../ui/button.tsx';
 import { Input } from '../ui/input.tsx';
@@ -139,6 +139,7 @@ interface ToolbarProps {
   showDataMenuControl?: boolean;
   showViewScaleControl?: boolean;
   showTaskChartToggle?: boolean;
+  leadingControls?: ReactNode;
 }
 
 function TriStateCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate: boolean }) {
@@ -427,6 +428,7 @@ export function Toolbar({
   showDataMenuControl = true,
   showViewScaleControl = true,
   showTaskChartToggle = true,
+  leadingControls,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
@@ -592,6 +594,8 @@ export function Toolbar({
           </button>
         </div>
       )}
+
+      {leadingControls}
 
       <Button
         size="sm"
@@ -1377,11 +1381,10 @@ export function Toolbar({
                 <span className="text-sm">Рабочие дни</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+        </DropdownMenu>
 
-        </>
+      </>
       )}
-
       <FilterPopup>
         <Button
           size="sm"

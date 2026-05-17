@@ -19,6 +19,7 @@ interface ProjectUIState {
   viewMode: ViewMode;
   projectDisplayMode: 'gantt' | 'fact';
   activeWorkspace: 'project' | 'planner' | 'finance' | 'group-gantt';
+  groupOverviewLoadDepth: 1 | 2 | 3;
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
   taskDateChangeMode: TaskDateChangeMode;
@@ -52,6 +53,7 @@ const DEFAULT_STATE: ProjectUIState = {
   viewMode: 'day',
   projectDisplayMode: 'gantt',
   activeWorkspace: 'project',
+  groupOverviewLoadDepth: 3,
   collapsedParentIds: [],
   disableTaskDrag: false,
   taskDateChangeMode: 'preserve-duration',
