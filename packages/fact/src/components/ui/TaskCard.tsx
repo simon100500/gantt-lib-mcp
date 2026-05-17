@@ -1,4 +1,5 @@
 import { CellSimple, Counter } from '@maxhub/max-ui';
+import type { CSSProperties } from 'react';
 import type { FactMarkState, FactTask } from '../../api/factApi';
 
 type Draft = {
@@ -19,6 +20,11 @@ type TaskCardProps = {
 };
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const markedCounterStyle: CSSProperties = {
+  color: 'var(--text-contrast-static)',
+  backgroundColor: 'var(--background-accent-positive)',
+};
+
 function formatDateRange(task: FactTask): string {
   const start = task.startDate ? dateFormatter.format(new Date(`${task.startDate}T00:00:00.000Z`)) : 'дата не задана';
   const end = task.endDate ? dateFormatter.format(new Date(`${task.endDate}T00:00:00.000Z`)) : 'дата не задана';
@@ -27,6 +33,7 @@ function formatDateRange(task: FactTask): string {
 
 export function TaskCard({
   task,
+  draft,
   onOpenFact,
 }: TaskCardProps) {
   if (!task.writable) {
@@ -34,13 +41,14 @@ export function TaskCard({
   }
 
   const progress = Math.max(0, Math.min(100, Math.round(task.progress || 0)));
+  const isMarked = draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || draft.value.trim();
 
   return (
     <CellSimple
       height="normal"
       title={task.name}
       subtitle={formatDateRange(task)}
-      after={<Counter value={progress} appearance="themed" mode="filled" className="percent-counter" />}
+      after={<Counter value={progress} appearance="themed" mode="filled" className="percent-counter" style={isMarked ? markedCounterStyle : undefined} />}
       showChevron
       onClick={() => onOpenFact(task)}
     />

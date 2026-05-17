@@ -13,11 +13,12 @@ import {
   Input,
   Panel,
   Spinner,
+  Switch,
   Textarea,
   ToolButton,
   Typography,
 } from '@maxhub/max-ui';
-import { closeFactDay, loadFactSession, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
+import { closeFactDay, loadFactSession, saveFactTaskMark, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
 import { readLaunchToken, todayKey } from './session/token';
 import { TaskCard } from './components/ui/TaskCard';
 
@@ -31,6 +32,10 @@ type Draft = {
   people: string;
   workTitle: string;
 };
+
+function isDraftMarked(draft: Draft | undefined): boolean {
+  return Boolean(draft && (draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || draft.value.trim()));
+}
 
 type FreeProblem = {
   id: string;
@@ -135,6 +140,7 @@ export function App() {
   const [saved, setSaved] = useState(false);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [hideMarkedTasks, setHideMarkedTasks] = useState(true);
 
   useEffect(() => {
     if (!token) {
@@ -178,16 +184,10 @@ export function App() {
   const writableTasks = session?.tasks.filter((task) => task.writable) ?? [];
   const activeTask = activeTaskId ? writableTasks.find((task) => task.id === activeTaskId) ?? null : null;
   const activeDraft = activeTask ? drafts[activeTask.id] ?? createDraft(activeTask) : null;
-  const markedTasks = writableTasks.filter((task) => {
-    const draft = drafts[task.id];
-    return draft && (draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || draft.value.trim());
-  });
+  const markedTasks = writableTasks.filter((task) => isDraftMarked(drafts[task.id]));
   const markedCount = markedTasks.length;
   const problemTasks = writableTasks.filter((task) => drafts[task.id]?.state === 'problem');
-  const unmarkedTasks = writableTasks.filter((task) => {
-    const draft = drafts[task.id];
-    return !draft || !(draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || draft.value.trim());
-  });
+  const unmarkedTasks = writableTasks.filter((task) => !isDraftMarked(drafts[task.id]));
   const taskSections = useMemo(() => {
     const sections: Array<{ title: string | null; tasks: FactTask[] }> = [];
     const allTasks = session?.tasks ?? [];
@@ -206,14 +206,25 @@ export function App() {
 
     return sections;
   }, [session?.tasks]);
+  const visibleTaskSections = useMemo(() => {
+    if (!hideMarkedTasks) {
+      return taskSections;
+    }
+
+    return taskSections
+      .map((section) => ({
+        ...section,
+        tasks: section.tasks.filter((task) => !isDraftMarked(drafts[task.id])),
+      }))
+      .filter((section) => section.tasks.length > 0);
+  }, [drafts, hideMarkedTasks, taskSections]);
   const journalSections = useMemo(() => {
     const sections: Array<{ dateKey: string; title: string; tasks: FactTask[] }> = [];
     const allTasks = session?.tasks ?? [];
 
     for (const task of allTasks) {
       const draft = drafts[task.id];
-      const marked = draft && (draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || draft.value.trim());
-      if (!task.writable || !marked) continue;
+      if (!task.writable || !isDraftMarked(draft)) continue;
 
       const dateKey = task.dayFactUpdatedAt?.slice(0, 10) || date;
       const title = formatRuDate(dateKey);
@@ -282,6 +293,35 @@ export function App() {
       setActiveTab('journal');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось отправить закрытие дня.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const saveActiveTaskMark = async () => {
+    if (!token || !activeTask || !activeDraft) return;
+
+    const parsedValue = Number(activeDraft.value.replace(',', '.'));
+    setSubmitting(true);
+    setError(null);
+    try {
+      await saveFactTaskMark({
+        token,
+        taskId: activeTask.id,
+        date,
+        state: activeDraft.state,
+        value: Number.isFinite(parsedValue) ? parsedValue : 0,
+        inputMode: activeDraft.inputMode,
+        reason: activeDraft.reason,
+        comment: activeDraft.comment,
+      });
+      const refreshed = await loadFactSession({ token, date });
+      setSession(refreshed);
+      setDrafts(Object.fromEntries(refreshed.tasks.filter((task) => task.writable).map((task) => [task.id, createDraft(task)])));
+      setSaved(true);
+      closeSheet();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сохранить отметку.');
     } finally {
       setSubmitting(false);
     }
@@ -420,6 +460,15 @@ export function App() {
                   title={getWorkListTitle(activeDayPreset, date)}
                   after={<Counter value={writableTasks.length} rounded appearance="neutral" />}
                 />
+                {markedCount > 0 && (
+                  <CellSimple
+                    as="label"
+                    height="normal"
+                    title="Скрыть отмеченные"
+                    subtitle={`${markedCount} уже отмечено`}
+                    after={<Switch checked={hideMarkedTasks} onChange={(event) => setHideMarkedTasks(event.target.checked)} />}
+                  />
+                )}
               </CellList>
 
               <Flex direction="column" gap={10}>
@@ -428,7 +477,12 @@ export function App() {
                     <Typography.Body variant="medium">Нет доступных работ на выбранный день.</Typography.Body>
                   </Container>
                 )}
-                {taskSections.map((section, sectionIndex) => {
+                {session?.tasks.length !== 0 && visibleTaskSections.length === 0 && (
+                  <Container className="state-box state-box--compact">
+                    <Typography.Body variant="medium">Все работы уже отмечены.</Typography.Body>
+                  </Container>
+                )}
+                {visibleTaskSections.map((section, sectionIndex) => {
                   return (
                     <Fragment key={`${section.title ?? 'root'}-${sectionIndex}`}>
                       {section.title && (
@@ -607,9 +661,34 @@ export function App() {
                     <Grid cols={2} gap={8} className="status-selector">
                       <CellAction height="normal" mode={activeDraft.state === 'fact' ? 'primary' : 'custom'} onClick={() => setActiveState('fact')}>Выполнялась</CellAction>
                       <CellAction height="normal" mode={activeDraft.state === 'done' ? 'primary' : 'custom'} onClick={() => setActiveState('done')}>Завершена</CellAction>
-                      <CellAction height="normal" mode={activeDraft.state === 'not_worked' ? 'primary' : 'custom'} onClick={() => setActiveState('not_worked')}>Не выполнялась</CellAction>
-                      <CellAction height="normal" mode={activeDraft.state === 'problem' ? 'primary' : 'custom'} onClick={() => setActiveState('problem')}>Есть проблема</CellAction>
                     </Grid>
+
+                    <CellList mode="island" filled>
+                      <CellSimple
+                        as="label"
+                        height="normal"
+                        title="Не выполнялась"
+                        subtitle="Работы по этой позиции сегодня не было"
+                        after={(
+                          <Switch
+                            checked={activeDraft.state === 'not_worked'}
+                            onChange={(event) => setActiveState(event.target.checked ? 'not_worked' : 'fact')}
+                          />
+                        )}
+                      />
+                      <CellSimple
+                        as="label"
+                        height="normal"
+                        title="Есть проблема"
+                        subtitle="Нужна причина или комментарий к отклонению"
+                        after={(
+                          <Switch
+                            checked={activeDraft.state === 'problem'}
+                            onChange={(event) => setActiveState(event.target.checked ? 'problem' : 'fact')}
+                          />
+                        )}
+                      />
+                    </CellList>
 
                     {(activeDraft.state === 'fact' || activeDraft.state === 'done') && (
                       <CellList mode="island" header={<CellHeader titleStyle="normal">Объем</CellHeader>}>
@@ -647,19 +726,20 @@ export function App() {
                             onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, value: event.target.value })}
                           />
                         </Container>
-                        <Flex wrap="wrap" gap={8} className="quick-progress">
+                        <Grid cols={5} gap={8} className="quick-progress">
                           {[0, 25, 50, 75, 100].map((value) => (
                             <Button
                               key={value}
                               mode={activeDraft.inputMode === 'percent' && activeDraft.value === String(value) ? 'primary' : 'secondary'}
                               appearance="neutral"
                               size="small"
+                              stretched
                               onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: String(value) })}
                             >
                               {value}%
                             </Button>
                           ))}
-                        </Flex>
+                        </Grid>
                         <CellSimple
                           height="compact"
                           title="Всего выполнено"
@@ -689,7 +769,7 @@ export function App() {
                 )}
 
                 <Container className="modal-actions">
-                  <Button mode="primary" size="large" stretched onClick={closeSheet}>
+                  <Button mode="primary" size="large" stretched loading={submitting} disabled={submitting} onClick={saveActiveTaskMark}>
                     Сохранить отметку
                   </Button>
                 </Container>

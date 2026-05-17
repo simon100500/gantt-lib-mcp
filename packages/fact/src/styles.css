@@ -151,7 +151,7 @@ textarea {
 
 .task-section-title {
   margin: 14px 16px 2px;
-  color: #000;
+  color: var(--text-primary);
 }
 
 .work-card {
@@ -249,8 +249,10 @@ textarea {
 }
 
 .card-actions button,
-.close-actions button {
+.close-actions button,
+.quick-progress button {
   overflow: hidden;
+  min-width: 0;
 }
 
 .modal-header button {

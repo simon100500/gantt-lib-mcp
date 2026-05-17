@@ -84,3 +84,20 @@ export async function closeFactDay(input: {
     body: JSON.stringify(input),
   });
 }
+
+export async function saveFactTaskMark(input: {
+  token: string;
+  taskId: string;
+  date: string;
+  state: FactMarkState;
+  value?: number;
+  inputMode?: 'volume' | 'percent';
+  reason?: string;
+  comment?: string;
+}): Promise<{ ok: true }> {
+  const { taskId, ...body } = input;
+  return request(`/api/fact/tasks/${encodeURIComponent(taskId)}/progress`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
