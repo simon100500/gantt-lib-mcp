@@ -1,4 +1,4 @@
-import { Button, CellHeader, CellList, CellSimple, Container, Flex, Typography } from '@maxhub/max-ui';
+import { Button, CellHeader, CellList, CellSimple, Container, Counter, Flex, Grid, Typography } from '@maxhub/max-ui';
 import type { FactMarkState, FactTask } from '../../api/factApi';
 
 type Draft = {
@@ -7,22 +7,30 @@ type Draft = {
   value: string;
   reason: string;
   comment: string;
+  worked: boolean;
+  people: string;
+  team: string;
 };
 
 type TaskCardProps = {
   task: FactTask;
   draft: Draft;
-  depth: number;
+  location: string;
+  team: string;
   onOpenFact: (task: FactTask) => void;
   onOpenProblem: (task: FactTask) => void;
+  onOpenPhoto: (task: FactTask) => void;
+  onMarkNotWorked: (task: FactTask) => void;
 };
 
 const stateLabels: Record<FactMarkState, string> = {
   fact: 'В работе',
-  done: 'Готово',
+  done: 'Завершена',
   not_worked: 'Не работали',
   problem: 'Проблема',
 };
+
+const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 function formatAmount(value: number, unit: string | null): string {
   const formatted = value.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
@@ -37,17 +45,22 @@ function statusClass(state: FactMarkState, value: string): string {
   return 'status-not-started';
 }
 
-function taskIcon(task: FactTask): string {
-  const normalized = task.name.toLowerCase();
-  if (normalized.includes('элект') || normalized.includes('кабел')) return '⚡';
-  if (normalized.includes('сант') || normalized.includes('труб')) return '🔧';
-  if (normalized.includes('бетон') || normalized.includes('стяж')) return '⬛';
-  if (normalized.includes('маляр') || normalized.includes('краск')) return '🎨';
-  if (normalized.includes('монтаж') || normalized.includes('перегород')) return '🔲';
-  return '✓';
+function formatDateRange(task: FactTask): string {
+  const start = task.startDate ? dateFormatter.format(new Date(`${task.startDate}T00:00:00.000Z`)) : 'дата не задана';
+  const end = task.endDate ? dateFormatter.format(new Date(`${task.endDate}T00:00:00.000Z`)) : 'дата не задана';
+  return `${start} - ${end}`;
 }
 
-export function TaskCard({ task, draft, depth, onOpenFact, onOpenProblem }: TaskCardProps) {
+export function TaskCard({
+  task,
+  draft,
+  location,
+  team,
+  onOpenFact,
+  onOpenProblem,
+  onOpenPhoto,
+  onMarkNotWorked,
+}: TaskCardProps) {
   if (!task.writable) {
     return (
       <CellList
@@ -62,32 +75,29 @@ export function TaskCard({ task, draft, depth, onOpenFact, onOpenProblem }: Task
   const dayValue = draft.inputMode === 'percent'
     ? `${draft.value || progress || 0}%`
     : formatAmount(task.dayFact, task.workUnit);
+  const status = statusClass(draft.state, draft.value);
 
   return (
     <CellList
       mode="island"
-      className={`work-card ${statusClass(draft.state, draft.value)}`}
-      style={{ marginLeft: Math.min(depth * 8, 24) }}
+      className={`work-card ${status}`}
       header={(
         <CellHeader
           titleStyle="normal"
           after={(
-            <Typography.Label variant="small-strong" className={`card-badge ${statusClass(draft.state, draft.value)}`}>
-              {draft.value.trim() || draft.state !== 'fact' ? stateLabels[draft.state] : 'Не начато'}
+            <Typography.Label variant="small-strong" className={draft.state === 'problem' ? 'text-pill text-pill--negative' : 'text-pill'}>
+              {draft.value.trim() || draft.state !== 'fact' ? stateLabels[draft.state] : 'Не начата'}
             </Typography.Label>
           )}
         >
-          <Flex align="center" gap={10}>
-            <span className="card-icon">{taskIcon(task)}</span>
-            <span>{task.name}</span>
-          </Flex>
+          {task.name}
         </CellHeader>
       )}
     >
       <CellSimple
-        height="compact"
-        title={`План: ${formatAmount(task.dayPlan, task.workUnit)}`}
-        subtitle={`Сегодня: ${dayValue}`}
+        height="normal"
+        title={location}
+        subtitle={`${team} · ${formatDateRange(task)}`}
         after={(
           <Typography.Label variant="small-strong" className="progress-label">
             {progress}%
@@ -95,24 +105,35 @@ export function TaskCard({ task, draft, depth, onOpenFact, onOpenProblem }: Task
         )}
       />
 
+      <Grid cols={2} gap={8} className="task-facts-grid">
+        <CellSimple height="compact" title="План" subtitle={task.dayPlan ? formatAmount(task.dayPlan, task.workUnit) : 'без единиц'} />
+        <CellSimple height="compact" title="Сегодня" subtitle={dayValue} />
+      </Grid>
+
       <Container className="progress-block" fullWidth>
-        <div className="progress-bar">
-          <div className={`progress-fill ${statusClass(draft.state, draft.value)}`} style={{ width: `${progress}%` }} />
+        <div className="progress-bar" aria-label={`Прогресс ${progress}%`}>
+          <div className={`progress-fill ${status}`} style={{ width: `${progress}%` }} />
         </div>
         <Flex justify="space-between" className="progress-caption">
-          <Typography.Body variant="small">Выполнено</Typography.Body>
+          <Typography.Body variant="small">Всего выполнено</Typography.Body>
           <Typography.Body variant="small">{formatAmount(task.completedVolume, task.workUnit)}</Typography.Body>
         </Flex>
       </Container>
 
-      <Flex gap={8} className="card-actions">
+      <Grid cols={2} gap={8} className="card-actions">
         <Button mode="primary" size="small" stretched onClick={() => onOpenFact(task)}>
           Факт
         </Button>
         <Button mode="secondary" appearance="negative" size="small" stretched onClick={() => onOpenProblem(task)}>
           Проблема
         </Button>
-      </Flex>
+        <Button mode="secondary" appearance="neutral" size="small" stretched onClick={() => onOpenPhoto(task)}>
+          Фото
+        </Button>
+        <Button mode="secondary" appearance="neutral" size="small" stretched onClick={() => onMarkNotWorked(task)}>
+          Не работали
+        </Button>
+      </Grid>
     </CellList>
   );
 }

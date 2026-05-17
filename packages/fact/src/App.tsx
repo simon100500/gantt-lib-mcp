@@ -1,5 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, CellAction, CellHeader, CellInput, CellList, CellSimple, Container, Counter, Flex, Grid, Panel, Spinner, Textarea, Typography } from '@maxhub/max-ui';
+import {
+  Button,
+  CellAction,
+  CellHeader,
+  CellInput,
+  CellList,
+  CellSimple,
+  Container,
+  Counter,
+  Flex,
+  Grid,
+  IconButton,
+  Input,
+  Panel,
+  Spinner,
+  Switch,
+  Textarea,
+  Typography,
+} from '@maxhub/max-ui';
 import { closeFactDay, loadFactSession, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
 import { readLaunchToken, todayKey } from './session/token';
 import { TaskCard } from './components/ui/TaskCard';
@@ -10,11 +28,57 @@ type Draft = {
   value: string;
   reason: string;
   comment: string;
+  worked: boolean;
+  people: string;
+  team: string;
 };
 
-type SheetMode = 'fact' | 'problem' | 'close-day' | null;
+type FreeProblem = {
+  id: string;
+  location: string;
+  reason: string;
+  comment: string;
+  status: 'open' | 'waiting' | 'resolved';
+};
 
-const reasonTags = ['Нет материала', 'Нет людей', 'Не готов фронт', 'Ждем смежников', 'Изменение проекта', 'Погода'];
+type SheetMode = 'fact' | 'problem' | 'photo' | 'close-day' | null;
+type Tab = 'today' | 'object' | 'problems' | 'journal';
+
+const reasonTags = ['Нет материала', 'Нет людей', 'Не готов фронт', 'Ждем смежников', 'Изменение проекта', 'Погода', 'Техника', 'Другое'];
+const navItems: Array<{ id: Tab; label: string }> = [
+  { id: 'today', label: 'Сегодня' },
+  { id: 'object', label: 'Объект' },
+  { id: 'problems', label: 'Проблемы' },
+  { id: 'journal', label: 'Журнал' },
+];
+
+const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const shortDateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' });
+
+function formatAmount(value: number, unit: string | null): string {
+  const formatted = value.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function formatRuDate(key: string): string {
+  return dateFormatter.format(new Date(`${key}T00:00:00.000Z`));
+}
+
+function formatShortRuDate(key: string): string {
+  return shortDateFormatter.format(new Date(`${key}T00:00:00.000Z`));
+}
+
+function taskLocation(task: FactTask, depth: number): string {
+  if (!task.writable) {
+    return 'Объект';
+  }
+  const building = depth > 0 ? depth : 1;
+  return `Корпус ${building} · Секция ${Math.max(1, depth)} · Этаж уточняется`;
+}
+
+function taskTeam(task: FactTask): string {
+  return task.writable ? 'Бригада по плану' : 'Ответственные уточняются';
+}
 
 function createDraft(task: FactTask): Draft {
   const inputMode = task.closeInputMode ?? (task.workVolume && task.workVolume > 0 ? 'volume' : 'percent');
@@ -25,6 +89,9 @@ function createDraft(task: FactTask): Draft {
     value: value ? String(value) : '',
     reason: task.closeReason ?? '',
     comment: task.closeComment ?? '',
+    worked: task.closeState !== 'not_worked',
+    people: '',
+    team: taskTeam(task),
   };
 }
 
@@ -43,11 +110,28 @@ function buildDepthMap(tasks: FactTask[]): Map<string, number> {
   return depthById;
 }
 
+function buildDayOptions(date: string) {
+  return [-3, -2, -1, 0, 1, 2, 3].map((offset) => {
+    const itemDate = new Date(`${date}T00:00:00.000Z`);
+    itemDate.setUTCDate(itemDate.getUTCDate() + offset);
+    const key = itemDate.toISOString().slice(0, 10);
+    return {
+      key,
+      offset,
+      label: offset === 0 ? 'Сегодня' : offset === -1 ? 'Вчера' : offset === 1 ? 'Завтра' : formatShortRuDate(key),
+      day: key.slice(8, 10),
+    };
+  });
+}
+
 export function App() {
   const [token] = useState(() => readLaunchToken());
   const [date, setDate] = useState(() => todayKey());
+  const [activeTab, setActiveTab] = useState<Tab>('today');
   const [session, setSession] = useState<FactSession | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [freeProblems, setFreeProblems] = useState<FreeProblem[]>([]);
+  const [freeProblemDraft, setFreeProblemDraft] = useState({ location: '', reason: '', comment: '' });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,9 +151,7 @@ export function App() {
     setError(null);
     loadFactSession({ token, date })
       .then((nextSession) => {
-        if (!alive) {
-          return;
-        }
+        if (!alive) return;
         setSession(nextSession);
         setDrafts(Object.fromEntries(nextSession.tasks.filter((task) => task.writable).map((task) => [task.id, createDraft(task)])));
       })
@@ -97,6 +179,7 @@ export function App() {
   }, [sheetMode]);
 
   const depthById = useMemo(() => buildDepthMap(session?.tasks ?? []), [session?.tasks]);
+  const dayOptions = useMemo(() => buildDayOptions(date), [date]);
   const writableTasks = session?.tasks.filter((task) => task.writable) ?? [];
   const activeTask = activeTaskId ? writableTasks.find((task) => task.id === activeTaskId) ?? null : null;
   const activeDraft = activeTask ? drafts[activeTask.id] ?? createDraft(activeTask) : null;
@@ -104,6 +187,7 @@ export function App() {
     const draft = drafts[task.id];
     return draft && (draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || draft.value.trim());
   }).length;
+  const problemTasks = writableTasks.filter((task) => drafts[task.id]?.state === 'problem');
   const unmarkedTasks = writableTasks.filter((task) => {
     const draft = drafts[task.id];
     return !draft || !(draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || draft.value.trim());
@@ -114,7 +198,7 @@ export function App() {
     setDrafts((current) => ({ ...current, [taskId]: nextDraft }));
   };
 
-  const openTaskSheet = (task: FactTask, mode: 'fact' | 'problem') => {
+  const openTaskSheet = (task: FactTask, mode: Exclude<SheetMode, 'close-day' | null>) => {
     const draft = drafts[task.id] ?? createDraft(task);
     updateDraft(task.id, {
       ...draft,
@@ -124,15 +208,19 @@ export function App() {
     setSheetMode(mode);
   };
 
+  const openFreeProblem = () => {
+    setActiveTaskId(null);
+    setFreeProblemDraft({ location: '', reason: '', comment: '' });
+    setSheetMode('problem');
+  };
+
   const closeSheet = () => {
     setSheetMode(null);
     setActiveTaskId(null);
   };
 
   const submit = async () => {
-    if (!token || !session) {
-      return;
-    }
+    if (!token || !session) return;
 
     const entries: FactDayCloseEntry[] = writableTasks.map((task) => {
       const draft = drafts[task.id] ?? createDraft(task);
@@ -156,6 +244,7 @@ export function App() {
       setDrafts(Object.fromEntries(refreshed.tasks.filter((task) => task.writable).map((task) => [task.id, createDraft(task)])));
       setSaved(true);
       closeSheet();
+      setActiveTab('journal');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось отправить закрытие дня.');
     } finally {
@@ -163,17 +252,12 @@ export function App() {
     }
   };
 
-  const shiftDate = (offset: number) => {
-    const nextDate = new Date(`${date}T00:00:00.000Z`);
-    nextDate.setUTCDate(nextDate.getUTCDate() + offset);
-    setDate(nextDate.toISOString().slice(0, 10));
-  };
-
   const setActiveState = (state: FactMarkState) => {
     if (!activeTask || !activeDraft) return;
     updateDraft(activeTask.id, {
       ...activeDraft,
       state,
+      worked: state !== 'not_worked',
       value: state === 'done'
         ? activeDraft.inputMode === 'percent' ? '100' : String(activeTask.workVolume ?? activeTask.dayPlan ?? activeDraft.value)
         : state === 'not_worked' ? '0' : activeDraft.value,
@@ -181,10 +265,36 @@ export function App() {
   };
 
   const toggleReason = (reason: string) => {
-    if (!activeTask || !activeDraft) return;
-    const parts = activeDraft.reason.split(',').map((part) => part.trim()).filter(Boolean);
+    if (activeTask && activeDraft) {
+      const parts = activeDraft.reason.split(',').map((part) => part.trim()).filter(Boolean);
+      const nextParts = parts.includes(reason) ? parts.filter((part) => part !== reason) : [...parts, reason];
+      updateDraft(activeTask.id, { ...activeDraft, reason: nextParts.join(', ') });
+      return;
+    }
+
+    const parts = freeProblemDraft.reason.split(',').map((part) => part.trim()).filter(Boolean);
     const nextParts = parts.includes(reason) ? parts.filter((part) => part !== reason) : [...parts, reason];
-    updateDraft(activeTask.id, { ...activeDraft, reason: nextParts.join(', ') });
+    setFreeProblemDraft((current) => ({ ...current, reason: nextParts.join(', ') }));
+  };
+
+  const markNotWorked = (task: FactTask) => {
+    const draft = drafts[task.id] ?? createDraft(task);
+    updateDraft(task.id, { ...draft, state: 'not_worked', worked: false, value: '0' });
+  };
+
+  const submitFreeProblem = () => {
+    setFreeProblems((current) => [
+      {
+        id: `${Date.now()}`,
+        location: freeProblemDraft.location || 'Локация уточняется',
+        reason: freeProblemDraft.reason || 'Другое',
+        comment: freeProblemDraft.comment || 'Описание будет добавлено позже',
+        status: 'open',
+      },
+      ...current,
+    ]);
+    closeSheet();
+    setActiveTab('problems');
   };
 
   if (loading) {
@@ -192,7 +302,7 @@ export function App() {
       <Panel mode="secondary" className="app-shell">
         <Container className="state-box">
           <Spinner />
-          <Typography.Body variant="medium">Загружаем работы</Typography.Body>
+          <Typography.Body variant="medium">Загружаем работы…</Typography.Body>
         </Container>
       </Panel>
     );
@@ -214,99 +324,180 @@ export function App() {
       <Container className="app-frame" fullWidth>
         <Container className="app-header" fullWidth>
           <Flex align="center" justify="space-between" gap={12}>
-            <Flex align="center" gap={10}>
-              <span className="header-logo">Fact<span>GetGantt</span></span>
-              <Flex direction="column">
-                <Typography.Label variant="medium-strong">{session?.project.name}</Typography.Label>
-                <Typography.Body variant="small" className="muted-text">Факт с площадки</Typography.Body>
-              </Flex>
+            <Flex direction="column" className="header-title">
+              <Typography.Label variant="large-strong">Fact</Typography.Label>
+              <Typography.Body variant="small" className="muted-text">{session?.project.name ?? 'Объект'}</Typography.Body>
             </Flex>
-            <Typography.Label variant="small-strong" className="date-pill">{date.split('-').reverse().join('.')}</Typography.Label>
+            <Typography.Label variant="small-strong" className="date-pill">{formatRuDate(date)}</Typography.Label>
           </Flex>
         </Container>
 
         <Container className="content" fullWidth>
-          <Flex className="day-switcher" gap={8}>
-            {[-1, 0, 1].map((offset) => {
-              const itemDate = new Date(`${date}T00:00:00.000Z`);
-              itemDate.setUTCDate(itemDate.getUTCDate() + offset);
-              const itemKey = itemDate.toISOString().slice(0, 10);
-              return (
-                <Button
-                  key={offset}
-                  mode={offset === 0 ? 'primary' : 'secondary'}
-                  appearance={offset === 0 ? 'themed' : 'neutral'}
-                  size="small"
-                  onClick={() => setDate(itemKey)}
-                >
-                  {offset === 0 ? 'Сегодня' : offset < 0 ? 'Вчера' : 'Завтра'} · {itemKey.slice(8, 10)}
-                </Button>
-              );
-            })}
-          </Flex>
-
-          <CellList mode="island" header={<CellHeader titleStyle="normal">Дата закрытия</CellHeader>}>
-            <CellInput
-              height="compact"
-              before="День"
-              type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-            />
-          </CellList>
-
           {error && <Container className="notice notice--error">{error}</Container>}
           {saved && <Container className="notice">День сохранен.</Container>}
 
-          <Container className="section-header" fullWidth>
-            <Typography.Label variant="small-caps">Работы на сегодня</Typography.Label>
-            <Counter value={writableTasks.length} rounded appearance="neutral" />
-          </Container>
+          {activeTab === 'today' && (
+            <>
+              <Flex className="day-switcher" gap={8}>
+                {dayOptions.map((item) => (
+                  <Button
+                    key={item.key}
+                    mode={item.offset === 0 ? 'primary' : 'secondary'}
+                    appearance={item.offset === 0 ? 'themed' : 'neutral'}
+                    size="small"
+                    onClick={() => setDate(item.key)}
+                  >
+                    {item.label} · {item.day}
+                  </Button>
+                ))}
+              </Flex>
 
-          <Flex direction="column" gap={10}>
-          {session?.tasks.length === 0 && (
-            <Container className="state-box">
-              <Typography.Body variant="medium">Нет доступных работ на выбранный день.</Typography.Body>
-            </Container>
+              <CellList mode="island" header={<CellHeader titleStyle="normal">Закрытие дня</CellHeader>}>
+                <CellSimple
+                  height="normal"
+                  title={`${markedCount} из ${writableTasks.length} работ отмечено`}
+                  subtitle={`${unmarkedTasks.length} не отмечено · ${problemTasks.length + freeProblems.length} с проблемами`}
+                  after={<Button mode="secondary" size="small" onClick={() => setSheetMode('close-day')}>Проверить</Button>}
+                />
+              </CellList>
+
+              <Container className="section-header" fullWidth>
+                <Typography.Label variant="small-caps">Работы на сегодня</Typography.Label>
+                <Counter value={writableTasks.length} rounded appearance="neutral" />
+              </Container>
+
+              <Flex direction="column" gap={10}>
+                {session?.tasks.length === 0 && (
+                  <Container className="state-box state-box--compact">
+                    <Typography.Body variant="medium">Нет доступных работ на выбранный день.</Typography.Body>
+                  </Container>
+                )}
+                {session?.tasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    location={taskLocation(task, depthById.get(task.id) ?? 0)}
+                    team={taskTeam(task)}
+                    draft={drafts[task.id] ?? createDraft(task)}
+                    onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
+                    onOpenProblem={(nextTask) => openTaskSheet(nextTask, 'problem')}
+                    onOpenPhoto={(nextTask) => openTaskSheet(nextTask, 'photo')}
+                    onMarkNotWorked={markNotWorked}
+                  />
+                ))}
+              </Flex>
+            </>
           )}
-          {session?.tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              depth={depthById.get(task.id) ?? 0}
-              draft={drafts[task.id] ?? createDraft(task)}
-              onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
-              onOpenProblem={(nextTask) => openTaskSheet(nextTask, 'problem')}
-            />
-          ))}
-          </Flex>
 
-          <Container className="close-day-banner" fullWidth onClick={() => setSheetMode('close-day')}>
-            <Typography.Label variant="large-strong">Закрыть день</Typography.Label>
-            <Typography.Body variant="small">Проверить неотмеченные работы и отправить отчет</Typography.Body>
-            <Flex gap={16} className="close-day-stats">
-              <Flex direction="column">
-                <Typography.Headline variant="medium-strong">{markedCount}</Typography.Headline>
-                <Typography.Body variant="small">отмечено</Typography.Body>
+          {activeTab === 'object' && (
+            <>
+              <Container className="section-header" fullWidth>
+                <Typography.Label variant="small-caps">Структура объекта</Typography.Label>
+                <Counter value={writableTasks.length} rounded appearance="neutral" />
+              </Container>
+              <CellList mode="island" header={<CellHeader titleStyle="normal">{session?.project.name ?? 'Объект'}</CellHeader>}>
+                {session?.tasks.map((task) => {
+                  const depth = depthById.get(task.id) ?? 0;
+                  return (
+                    <CellSimple
+                      key={task.id}
+                      height="normal"
+                      title={task.name}
+                      subtitle={task.writable ? `${taskLocation(task, depth)} · ${formatAmount(task.dayPlan, task.workUnit)}` : 'Раздел работ'}
+                      after={<Counter value={task.writable ? 1 : writableTasks.filter((item) => item.parentId === task.id).length} rounded appearance="neutral" />}
+                      className="tree-cell"
+                      style={{ paddingLeft: depth * 12 }}
+                    />
+                  );
+                })}
+              </CellList>
+              <CellList mode="island" header={<CellHeader titleStyle="normal">Завтра по плану</CellHeader>}>
+                {(writableTasks.slice(0, 3).length ? writableTasks.slice(0, 3) : []).map((task) => (
+                  <CellSimple key={task.id} height="compact" title={task.name} subtitle={taskLocation(task, depthById.get(task.id) ?? 0)} />
+                ))}
+                {writableTasks.length === 0 && <CellSimple height="compact" title="План на завтра появится после синхронизации" />}
+              </CellList>
+            </>
+          )}
+
+          {activeTab === 'problems' && (
+            <>
+              <Flex className="section-header" align="center" justify="space-between">
+                <Typography.Label variant="small-caps">Проблемы</Typography.Label>
+                <Button mode="secondary" size="small" onClick={openFreeProblem}>Создать</Button>
               </Flex>
-              <Flex direction="column">
-                <Typography.Headline variant="medium-strong">{unmarkedTasks.length}</Typography.Headline>
-                <Typography.Body variant="small">осталось</Typography.Body>
-              </Flex>
-            </Flex>
-          </Container>
+              <CellList mode="island" header={<CellHeader titleStyle="normal">Открытые</CellHeader>}>
+                {problemTasks.map((task) => {
+                  const draft = drafts[task.id] ?? createDraft(task);
+                  return (
+                    <CellSimple
+                      key={task.id}
+                      height="normal"
+                      title={task.name}
+                      subtitle={`${taskLocation(task, depthById.get(task.id) ?? 0)} · ${draft.reason || 'Причина не выбрана'}`}
+                      after={<Button mode="secondary" appearance="neutral" size="small" onClick={() => openTaskSheet(task, 'problem')}>Открыть</Button>}
+                    />
+                  );
+                })}
+                {freeProblems.map((problem) => (
+                  <CellSimple
+                    key={problem.id}
+                    height="normal"
+                    title={problem.reason}
+                    subtitle={`${problem.location} · ${problem.comment}`}
+                    after={<Typography.Label variant="small-strong" className="text-pill">{problem.status === 'resolved' ? 'решено' : 'открыта'}</Typography.Label>}
+                  />
+                ))}
+                {problemTasks.length === 0 && freeProblems.length === 0 && (
+                  <CellSimple height="normal" title="Открытых проблем нет" subtitle="Можно создать проблему без привязки к работе." />
+                )}
+              </CellList>
+            </>
+          )}
+
+          {activeTab === 'journal' && (
+            <>
+              <Container className="section-header" fullWidth>
+                <Typography.Label variant="small-caps">Журнал факта</Typography.Label>
+                <Counter value={markedCount} rounded appearance="neutral" />
+              </Container>
+              <CellList mode="island" header={<CellHeader titleStyle="normal">{formatRuDate(date)}</CellHeader>}>
+                {writableTasks.filter((task) => drafts[task.id]?.value || drafts[task.id]?.state !== 'fact').map((task) => {
+                  const draft = drafts[task.id] ?? createDraft(task);
+                  return (
+                    <CellSimple
+                      key={task.id}
+                      height="normal"
+                      title={task.name}
+                      subtitle={`${draft.inputMode === 'percent' ? `${draft.value || 0}%` : `${draft.value || 0}${task.workUnit ? ` ${task.workUnit}` : ''}`} · ${draft.team} · Отправлено`}
+                      after={<Typography.Label variant="small-strong" className={draft.state === 'problem' ? 'text-pill text-pill--negative' : 'text-pill'}>{draft.state === 'problem' ? 'проблема' : 'факт'}</Typography.Label>}
+                    />
+                  );
+                })}
+                {markedCount === 0 && <CellSimple height="normal" title="Записей пока нет" subtitle="Отправленные факты появятся после отметки работ." />}
+              </CellList>
+            </>
+          )}
         </Container>
       </Container>
 
       <Container className="bottom-nav" fullWidth>
-        <Button mode="link" appearance="neutral" size="small" onClick={() => shiftDate(-1)}>← День</Button>
-        <Button mode="link" size="small">Работы</Button>
-        <Button mode="primary" size="small" onClick={() => setSheetMode('close-day')}>Закрыть</Button>
+        {navItems.map((item) => (
+          <button
+            key={item.id}
+            className={`nav-button ${activeTab === item.id ? 'nav-button--active' : ''}`}
+            type="button"
+            onClick={() => setActiveTab(item.id)}
+          >
+            <span>{item.label}</span>
+            {item.id === 'problems' && problemTasks.length + freeProblems.length > 0 && <Counter value={problemTasks.length + freeProblems.length} rounded appearance="negative" />}
+          </button>
+        ))}
       </Container>
 
       {sheetMode && (
         <Container
-          className="modal-overlay visible"
+          className="modal-overlay"
           fullWidth
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeSheet();
@@ -315,9 +506,9 @@ export function App() {
           <Container className="modal-sheet" fullWidth>
             <Flex className="modal-header" align="center" justify="space-between">
               <Typography.Headline variant="small-strong">
-                {sheetMode === 'close-day' ? 'Закрытие дня' : activeTask?.name}
+                {sheetMode === 'close-day' ? 'Закрытие дня' : sheetMode === 'photo' ? 'Фото' : activeTask?.name ?? 'Новая проблема'}
               </Typography.Headline>
-              <Button mode="secondary" appearance="neutral" size="small" onClick={closeSheet}>×</Button>
+              <IconButton mode="secondary" appearance="neutral" size="small" onClick={closeSheet} aria-label="Закрыть">x</IconButton>
             </Flex>
 
             {activeTask && activeDraft && sheetMode !== 'close-day' && (
@@ -326,75 +517,131 @@ export function App() {
                   <CellSimple
                     height="compact"
                     title={activeTask.name}
-                    subtitle={`План: ${activeTask.dayPlan || 0}${activeTask.workUnit ? ` ${activeTask.workUnit}` : ''} · Прогресс: ${Math.round(activeTask.progress || 0)}%`}
+                    subtitle={`${taskLocation(activeTask, depthById.get(activeTask.id) ?? 0)} · План ${formatAmount(activeTask.dayPlan, activeTask.workUnit)}`}
                   />
                 </CellList>
 
-                <Grid cols={2} gap={8} className="status-selector">
-                  <CellAction height="normal" mode={activeDraft.state === 'fact' ? 'primary' : 'custom'} onClick={() => setActiveState('fact')}>В работе</CellAction>
-                  <CellAction height="normal" mode={activeDraft.state === 'done' ? 'primary' : 'custom'} onClick={() => setActiveState('done')}>Готово</CellAction>
-                  <CellAction height="normal" mode={activeDraft.state === 'not_worked' ? 'primary' : 'custom'} onClick={() => setActiveState('not_worked')}>Не работали</CellAction>
-                  <CellAction height="normal" mode={activeDraft.state === 'problem' ? 'primary' : 'custom'} onClick={() => setActiveState('problem')}>Проблема</CellAction>
-                </Grid>
-
-                {(activeDraft.state === 'fact' || activeDraft.state === 'done') && (
-                  <CellList mode="island" header={<CellHeader titleStyle="normal">Факт</CellHeader>}>
-                    <Grid cols={2} gap={8} className="input-mode-grid">
-                      <CellAction
-                        height="compact"
-                        mode={activeDraft.inputMode === 'volume' ? 'primary' : 'custom'}
-                        disabled={!activeTask.workVolume || activeTask.workVolume <= 0}
-                        onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'volume', value: activeTask.dayFact ? String(activeTask.dayFact) : '' })}
-                      >
-                        Объем
-                      </CellAction>
-                      <CellAction
-                        height="compact"
-                        mode={activeDraft.inputMode === 'percent' ? 'primary' : 'custom'}
-                        onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: activeDraft.value || String(Math.round(activeTask.progress || 0)) })}
-                      >
-                        Процент
-                      </CellAction>
+                {sheetMode !== 'photo' && (
+                  <>
+                    <Grid cols={2} gap={8} className="status-selector">
+                      <CellAction height="normal" mode={activeDraft.state === 'fact' ? 'primary' : 'custom'} onClick={() => setActiveState('fact')}>Выполнялась</CellAction>
+                      <CellAction height="normal" mode={activeDraft.state === 'done' ? 'primary' : 'custom'} onClick={() => setActiveState('done')}>Завершена</CellAction>
+                      <CellAction height="normal" mode={activeDraft.state === 'not_worked' ? 'primary' : 'custom'} onClick={() => setActiveState('not_worked')}>Не выполнялась</CellAction>
+                      <CellAction height="normal" mode={activeDraft.state === 'problem' ? 'primary' : 'custom'} onClick={() => setActiveState('problem')}>Есть проблема</CellAction>
                     </Grid>
-                    <CellInput
-                      height="compact"
-                      before={activeDraft.inputMode === 'percent' ? 'Значение, %' : activeTask.workUnit ? `Значение, ${activeTask.workUnit}` : 'Значение'}
-                      type="number"
-                      min="0"
-                      max={activeDraft.inputMode === 'percent' ? 100 : undefined}
-                      step={activeDraft.inputMode === 'percent' ? 1 : 0.01}
-                      value={activeDraft.value}
-                      onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, value: event.target.value })}
-                    />
-                  </CellList>
+
+                    {(activeDraft.state === 'fact' || activeDraft.state === 'done') && (
+                      <CellList mode="island" header={<CellHeader titleStyle="normal">Объем</CellHeader>}>
+                        <Grid cols={2} gap={8} className="input-mode-grid">
+                          <CellAction
+                            height="compact"
+                            mode={activeDraft.inputMode === 'volume' ? 'primary' : 'custom'}
+                            disabled={!activeTask.workVolume || activeTask.workVolume <= 0}
+                            onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'volume', value: activeTask.dayFact ? String(activeTask.dayFact) : '' })}
+                          >
+                            Сделано сегодня
+                          </CellAction>
+                          <CellAction
+                            height="compact"
+                            mode={activeDraft.inputMode === 'percent' ? 'primary' : 'custom'}
+                            onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: activeDraft.value || String(Math.round(activeTask.progress || 0)) })}
+                          >
+                            Процент
+                          </CellAction>
+                        </Grid>
+                        <CellInput
+                          height="compact"
+                          before={activeDraft.inputMode === 'percent' ? 'Значение, %' : activeTask.workUnit ? `Значение, ${activeTask.workUnit}` : 'Значение'}
+                          name="fact-value"
+                          aria-label={activeDraft.inputMode === 'percent' ? 'Значение факта в процентах' : 'Значение факта за день'}
+                          autoComplete="off"
+                          inputMode="decimal"
+                          type="number"
+                          min="0"
+                          max={activeDraft.inputMode === 'percent' ? 100 : undefined}
+                          step={activeDraft.inputMode === 'percent' ? 1 : 0.01}
+                          value={activeDraft.value}
+                          onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, value: event.target.value })}
+                        />
+                        <Flex wrap="wrap" gap={8} className="quick-progress">
+                          {[0, 25, 50, 75, 100].map((value) => (
+                            <Button
+                              key={value}
+                              mode={activeDraft.inputMode === 'percent' && activeDraft.value === String(value) ? 'primary' : 'secondary'}
+                              appearance="neutral"
+                              size="small"
+                              onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: String(value) })}
+                            >
+                              {value}%
+                            </Button>
+                          ))}
+                        </Flex>
+                        <CellSimple
+                          height="compact"
+                          title="Всего выполнено"
+                          subtitle={`${formatAmount(activeTask.completedVolume, activeTask.workUnit)} · ${Math.round(activeTask.progress || 0)}%`}
+                        />
+                      </CellList>
+                    )}
+
+                    <CellList mode="island" header={<CellHeader titleStyle="normal">Ресурсы</CellHeader>}>
+                      <CellSimple
+                        height="normal"
+                        title={activeDraft.worked ? 'Работали' : 'Не работали'}
+                        subtitle={activeDraft.team}
+                        after={<Switch checked={activeDraft.worked} onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, worked: event.target.checked, state: event.target.checked ? 'fact' : 'not_worked', value: event.target.checked ? activeDraft.value : '0' })} />}
+                      />
+                      <CellInput
+                        height="compact"
+                        before="Кол-во человек"
+                        name="fact-people"
+                        aria-label="Количество человек"
+                        autoComplete="off"
+                        inputMode="numeric"
+                        type="number"
+                        min="0"
+                        value={activeDraft.people}
+                        placeholder="0"
+                        onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, people: event.target.value })}
+                      />
+                      <CellSimple height="compact" title="Фактическая бригада" subtitle={activeDraft.team} />
+                    </CellList>
+
+                    {(activeDraft.state === 'not_worked' || activeDraft.state === 'problem') && (
+                      <CellList mode="island" header={<CellHeader titleStyle="normal">Причина</CellHeader>}>
+                        <Flex wrap="wrap" gap={8} className="reason-tags">
+                          {reasonTags.map((reason) => (
+                            <Button
+                              key={reason}
+                              mode={activeDraft.reason.includes(reason) ? 'primary' : 'secondary'}
+                              appearance={activeDraft.reason.includes(reason) ? 'themed' : 'neutral'}
+                              size="small"
+                              onClick={() => toggleReason(reason)}
+                            >
+                              {reason}
+                            </Button>
+                          ))}
+                        </Flex>
+                      </CellList>
+                    )}
+                  </>
                 )}
 
-                {(activeDraft.state === 'not_worked' || activeDraft.state === 'problem') && (
-                  <CellList mode="island" header={<CellHeader titleStyle="normal">Причина</CellHeader>}>
-                    <Flex wrap="wrap" gap={8} className="reason-tags">
-                      {reasonTags.map((reason) => (
-                        <Button
-                          key={reason}
-                          mode={activeDraft.reason.includes(reason) ? 'primary' : 'secondary'}
-                          appearance={activeDraft.reason.includes(reason) ? 'themed' : 'neutral'}
-                          size="small"
-                          onClick={() => toggleReason(reason)}
-                        >
-                          {reason}
-                        </Button>
-                      ))}
-                    </Flex>
-                    <Container className="textarea-wrap" fullWidth>
-                      <Textarea
-                        mode="secondary"
-                        rows={3}
-                        value={activeDraft.comment}
-                        placeholder="Комментарий"
-                        onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, comment: event.target.value })}
-                      />
-                    </Container>
-                  </CellList>
-                )}
+                <CellList mode="island" header={<CellHeader titleStyle="normal">Фото и комментарий</CellHeader>}>
+                  <CellSimple height="normal" title="Фото" subtitle="Загрузка будет привязана к задаче, дате и объекту" after={<Button mode="secondary" size="small">Добавить</Button>} />
+                  <Container className="textarea-wrap" fullWidth>
+                    <Textarea
+                      mode="secondary"
+                      rows={3}
+                      value={activeDraft.comment}
+                      placeholder="Комментарий"
+                      aria-label="Комментарий к факту"
+                      name="fact-comment"
+                      autoComplete="off"
+                      onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, comment: event.target.value })}
+                    />
+                  </Container>
+                </CellList>
 
                 <Button mode="primary" size="large" stretched onClick={closeSheet}>
                   Сохранить отметку
@@ -402,12 +649,60 @@ export function App() {
               </Flex>
             )}
 
+            {!activeTask && sheetMode === 'problem' && (
+              <Flex direction="column" gap={16} className="modal-body">
+                <CellList mode="island" header={<CellHeader titleStyle="normal">Проблема без привязки</CellHeader>}>
+                  <Container className="input-wrap" fullWidth>
+                    <Input
+                      value={freeProblemDraft.location}
+                      placeholder="Локация…"
+                      aria-label="Локация проблемы"
+                      name="problem-location"
+                      autoComplete="off"
+                      onChange={(event) => setFreeProblemDraft((current) => ({ ...current, location: event.target.value }))}
+                    />
+                  </Container>
+                  <Flex wrap="wrap" gap={8} className="reason-tags">
+                    {reasonTags.map((reason) => (
+                      <Button
+                        key={reason}
+                        mode={freeProblemDraft.reason.includes(reason) ? 'primary' : 'secondary'}
+                        appearance={freeProblemDraft.reason.includes(reason) ? 'themed' : 'neutral'}
+                        size="small"
+                        onClick={() => toggleReason(reason)}
+                      >
+                        {reason}
+                      </Button>
+                    ))}
+                  </Flex>
+                  <Container className="textarea-wrap" fullWidth>
+                    <Textarea
+                      mode="secondary"
+                      rows={4}
+                      value={freeProblemDraft.comment}
+                      placeholder="Описание…"
+                      aria-label="Описание проблемы"
+                      name="problem-description"
+                      autoComplete="off"
+                      onChange={(event) => setFreeProblemDraft((current) => ({ ...current, comment: event.target.value }))}
+                    />
+                  </Container>
+                </CellList>
+                <Button mode="primary" size="large" stretched onClick={submitFreeProblem}>
+                  Отправить проблему
+                </Button>
+              </Flex>
+            )}
+
             {sheetMode === 'close-day' && (
               <Flex direction="column" gap={16} className="modal-body">
-                <Container className="close-day-summary" fullWidth>
-                  <Typography.Headline variant="large-strong">{markedCount} / {writableTasks.length}</Typography.Headline>
-                  <Typography.Body variant="small">работ отмечено</Typography.Body>
-                </Container>
+                <CellList mode="island">
+                  <CellSimple
+                    height="normal"
+                    title={`${markedCount} / ${writableTasks.length} работ отмечено`}
+                    subtitle={`${unmarkedTasks.length} требуют реакции перед закрытием`}
+                  />
+                </CellList>
                 <CellList mode="island" header={<CellHeader titleStyle="normal">Неотмеченные работы</CellHeader>}>
                   {unmarkedTasks.length === 0 ? (
                     <CellSimple height="compact" title="Все работы отмечены" />
@@ -417,10 +712,19 @@ export function App() {
                       height="normal"
                       title={task.name}
                       subtitle="Что было сегодня?"
-                      after={(
-                        <Button size="small" mode="secondary" onClick={() => openTaskSheet(task, 'fact')}>Факт</Button>
-                      )}
-                    />
+                    >
+                      <Grid cols={2} gap={8} className="close-actions">
+                        <Button size="small" mode="secondary" onClick={() => openTaskSheet(task, 'fact')}>Внести факт</Button>
+                        <Button size="small" mode="secondary" appearance="neutral" onClick={() => markNotWorked(task)}>Не работали</Button>
+                        <Button size="small" mode="secondary" appearance="neutral" onClick={() => {
+                          const draft = drafts[task.id] ?? createDraft(task);
+                          updateDraft(task.id, { ...draft, state: 'problem', reason: 'Перенос', comment: 'Нужна корректировка сроков' });
+                        }}>
+                          Перенести
+                        </Button>
+                        <Button size="small" mode="link" appearance="neutral" onClick={() => markNotWorked(task)}>Пропустить</Button>
+                      </Grid>
+                    </CellSimple>
                   ))}
                 </CellList>
                 <Button mode="primary" size="large" stretched loading={submitting} disabled={submitting || writableTasks.length === 0} onClick={submit}>
