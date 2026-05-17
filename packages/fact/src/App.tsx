@@ -147,7 +147,6 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -251,7 +250,6 @@ export function App() {
   }, [date, drafts, session?.tasks]);
 
   const updateDraft = (taskId: string, nextDraft: Draft) => {
-    setSaved(false);
     setDrafts((current) => ({ ...current, [taskId]: nextDraft }));
   };
 
@@ -318,7 +316,6 @@ export function App() {
       const refreshed = await loadFactSession({ token, date });
       setSession(refreshed);
       setDrafts(Object.fromEntries(refreshed.tasks.filter((task) => task.writable).map((task) => [task.id, createDraft(task)])));
-      setSaved(true);
       closeSheet();
       setActiveTab('journal');
     } catch (err) {
@@ -348,7 +345,6 @@ export function App() {
       const refreshed = await loadFactSession({ token, date });
       setSession(refreshed);
       setDrafts(Object.fromEntries(refreshed.tasks.filter((task) => task.writable).map((task) => [task.id, createDraft(task)])));
-      setSaved(true);
       closeSheet();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить отметку.');
@@ -429,8 +425,7 @@ export function App() {
         <Container className="app-header" fullWidth>
           <Flex align="center" justify="space-between" gap={12}>
             <Flex direction="column" className="header-title">
-              <Typography.Label variant="large-strong">Fact</Typography.Label>
-              <Typography.Body variant="small" className="muted-text">{session?.project.name ?? 'Объект'}</Typography.Body>
+              <Typography.Label variant="large-strong">{session?.project.name ?? 'Объект'}</Typography.Label>
             </Flex>
             <Typography.Label variant="small-strong" className="date-pill">{formatRuDate(date)}</Typography.Label>
           </Flex>
@@ -438,7 +433,6 @@ export function App() {
 
         <Container className="content" fullWidth>
           {error && <Container className="notice notice--error">{error}</Container>}
-          {saved && <Container className="notice">День сохранен.</Container>}
 
           {activeTab === 'today' && (
             <>
