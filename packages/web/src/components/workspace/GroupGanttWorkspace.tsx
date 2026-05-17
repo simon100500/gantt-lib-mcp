@@ -8,6 +8,8 @@ import { Button } from '../ui/button.tsx';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu.tsx';
 import type { GroupGanttOverviewResponse, GroupGanttSectionOverview } from '../../lib/apiTypes.ts';
 import { TASK_LIST_COLUMN_WIDTHS } from '../../lib/taskListColumns.ts';
+import { useFilterPersistence } from '../../hooks/useFilterPersistence.ts';
+import { useTaskFilter } from '../../hooks/useTaskFilter.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { cn } from '../../lib/utils.ts';
@@ -204,6 +206,7 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
   const ganttRef = useRef<GanttChartRef>(null);
   const globalViewMode = useUIStore((state) => state.viewMode);
   const setGlobalViewMode = useUIStore((state) => state.setViewMode);
+  const filterMode = useUIStore((state) => state.filterMode);
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
   const projectStates = useProjectUIStore((state) => state.projectStates);
@@ -212,6 +215,8 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
   const groupStateId = useMemo(() => `group:${groupId}`, [groupId]);
   const viewMode = projectStates[groupStateId]?.viewMode ?? globalViewMode;
   const groupOverviewLoadDepth = projectStates[groupStateId]?.groupOverviewLoadDepth ?? 3;
+  useFilterPersistence();
+  const taskFilter = useTaskFilter();
 
   const loadOverview = useCallback(async (keepData = false) => {
     if (!accessToken) {
@@ -494,6 +499,7 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
                   ref={ganttRef}
                   tasks={tasks}
                   mode="gantt"
+                  taskFilter={taskFilter}
                   taskListMenuCommands={taskListMenuCommands}
                   getTaskListNamePrefixIcon={(task) => (
                     !task.parentId ? <Home className="h-4 w-4" /> : undefined
@@ -515,6 +521,7 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
                   viewMode={viewMode}
                   collapsedParentIds={collapsedParentIds}
                   onToggleCollapse={handleToggleCollapse}
+                  filterMode={filterMode}
                   businessDays={false}
                 />
               )}
