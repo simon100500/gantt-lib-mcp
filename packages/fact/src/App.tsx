@@ -59,11 +59,6 @@ const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 
 const shortDateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' });
 const TypographyHeadline = Typography.Headline;
 
-function formatAmount(value: number, unit: string | null): string {
-  const formatted = value.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
-  return unit ? `${formatted} ${unit}` : formatted;
-}
-
 function formatRuDate(key: string): string {
   return dateFormatter.format(new Date(`${key}T00:00:00.000Z`));
 }
@@ -710,22 +705,7 @@ export function App() {
               <Flex direction="column" gap={16} className="modal-body">
                 {sheetMode !== 'photo' && (
                   <>
-                    <CellList mode="island" filled>
-                      <CellSimple
-                        as="label"
-                        height="normal"
-                        title="Не выполнялась"
-                        subtitle="Работы по этой позиции сегодня не было"
-                        after={(
-                          <Switch
-                            checked={activeDraft.state === 'not_worked'}
-                            onChange={(event) => setActiveState(event.target.checked ? 'not_worked' : 'fact')}
-                          />
-                        )}
-                      />
-                    </CellList>
-
-                    {(activeDraft.state === 'fact' || activeDraft.state === 'done') && (
+                    {activeDraft.state !== 'not_worked' && (
                       <CellList mode="island" header={<CellHeader titleStyle="normal">Объем</CellHeader>}>
                         <Container className="fact-progress-control" fullWidth>
                           <Flex align="center" gap={8} className="fact-progress-row">
@@ -794,11 +774,6 @@ export function App() {
                             ))}
                           </Flex>
                         </Container>
-                        <CellSimple
-                          height="compact"
-                          title="Всего выполнено"
-                          subtitle={`${formatAmount(activeTask.completedVolume, activeTask.workUnit)} · ${Math.round(activeTask.progress || 0)}%`}
-                        />
                       </CellList>
                     )}
 
@@ -806,15 +781,28 @@ export function App() {
                       <CellSimple
                         as="label"
                         height="normal"
-                        title="Есть проблема"
-                        subtitle="Нужна причина или комментарий к отклонению"
+                        title="Работы не велись"
                         after={(
                           <Switch
-                            checked={activeDraft.state === 'problem'}
-                            onChange={(event) => setActiveState(event.target.checked ? 'problem' : 'fact')}
+                            checked={activeDraft.state === 'not_worked'}
+                            onChange={(event) => setActiveState(event.target.checked ? 'not_worked' : 'fact')}
                           />
                         )}
                       />
+
+                      {activeDraft.state !== 'not_worked' && (
+                        <CellSimple
+                          as="label"
+                          height="normal"
+                          title="Есть проблема"
+                          after={(
+                            <Switch
+                              checked={activeDraft.state === 'problem'}
+                              onChange={(event) => setActiveState(event.target.checked ? 'problem' : 'fact')}
+                            />
+                          )}
+                        />
+                      )}
                     </CellList>
 
                     {(activeDraft.state === 'not_worked' || activeDraft.state === 'problem') && (
@@ -832,6 +820,23 @@ export function App() {
                             </Button>
                           ))}
                         </Flex>
+                      </CellList>
+                    )}
+
+                    {activeDraft.state === 'not_worked' && (
+                      <CellList mode="island" header={<CellHeader titleStyle="normal">Комментарий</CellHeader>}>
+                        <Container className="textarea-wrap" fullWidth>
+                          <Textarea
+                            mode="secondary"
+                            rows={4}
+                            value={activeDraft.comment}
+                            placeholder="Комментарий"
+                            aria-label="Комментарий к невыполненной работе"
+                            name="not-worked-comment"
+                            autoComplete="off"
+                            onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, comment: event.target.value })}
+                          />
+                        </Container>
                       </CellList>
                     )}
                   </>
