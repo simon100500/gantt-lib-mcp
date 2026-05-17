@@ -22,7 +22,7 @@
     "dump:db": "node scripts/dump-db.js",
     "dev:server": "npm run dev -w packages/server",
     "dev:web": "npm run dev -w packages/web",
-    "dev:fact": "npm run dev -w packages/fact -- --host localhost --port 5175 --strictPort",
+    "dev:fact": "npm run dev -w packages/fact",
     "dev:site": "npm run dev -w packages/site"
   },
   "keywords": [
