@@ -697,98 +697,67 @@ export function App() {
 
                     {(activeDraft.state === 'fact' || activeDraft.state === 'done') && (
                       <CellList mode="island" header={<CellHeader titleStyle="normal">Объем</CellHeader>}>
-                        <Grid cols={2} gap={8} className="input-mode-grid">
-                          <CellAction
-                            height="compact"
-                            mode={activeDraft.inputMode === 'volume' ? 'primary' : 'custom'}
-                            disabled={!activeTask.workVolume || activeTask.workVolume <= 0}
-                            onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'volume', value: activeTask.dayFact ? String(activeTask.dayFact) : '' })}
-                          >
-                            Сделано сегодня
-                          </CellAction>
-                          <CellAction
-                            height="compact"
-                            mode={activeDraft.inputMode === 'percent' ? 'primary' : 'custom'}
-                            onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: activeDraft.value || String(Math.round(activeTask.progress || 0)) })}
-                          >
-                            Процент
-                          </CellAction>
-                        </Grid>
-                        {activeDraft.inputMode === 'percent' ? (
-                          <Container className="fact-progress-control" fullWidth>
-                            <Flex align="center" gap={8} className="fact-progress-row">
-                              <Button
-                                mode="secondary"
-                                appearance="neutral"
-                                size="medium"
-                                onClick={() => updateDraft(activeTask.id, { ...activeDraft, value: String(clampPercent(Number(activeDraft.value || 0) - 5)) })}
-                                aria-label="Уменьшить процент выполнения"
-                              >
-                                -
-                              </Button>
-                              <Input
-                                mode="secondary"
-                                className="fact-progress-input"
-                                placeholder="0"
-                                name="fact-value"
-                                aria-label="Значение факта в процентах"
-                                autoComplete="off"
-                                inputMode="decimal"
-                                type="number"
-                                min="0"
-                                max={100}
-                                step={1}
-                                value={activeDraft.value}
-                                onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, value: event.target.value })}
-                              />
-                              <Typography.Label variant="large-strong" className="fact-progress-sign">%</Typography.Label>
-                              <Button
-                                mode="secondary"
-                                appearance="neutral"
-                                size="medium"
-                                onClick={() => updateDraft(activeTask.id, { ...activeDraft, value: String(clampPercent(Number(activeDraft.value || 0) + 5)) })}
-                                aria-label="Увеличить процент выполнения"
-                              >
-                                +
-                              </Button>
-                            </Flex>
-                            <input
-                              className="fact-progress-range"
-                              aria-label="Процент выполнения работы"
-                              type="range"
-                              min="0"
-                              max="100"
-                              step="5"
-                              value={clampPercent(Number(activeDraft.value || 0))}
-                              onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, value: event.target.value })}
-                              style={{ '--fact-progress-value': `${clampPercent(Number(activeDraft.value || 0))}%` } as CSSProperties}
-                            />
-                            <Flex justify="space-between" className="fact-progress-marks">
-                              <Typography.Label variant="small-strong">0%</Typography.Label>
-                              <Typography.Label variant="small-strong">25</Typography.Label>
-                              <Typography.Label variant="small-strong">50</Typography.Label>
-                              <Typography.Label variant="small-strong">75</Typography.Label>
-                              <Typography.Label variant="small-strong">100</Typography.Label>
-                            </Flex>
-                          </Container>
-                        ) : (
-                          <Container className="fact-value-input" fullWidth>
+                        <Container className="fact-progress-control" fullWidth>
+                          <Flex align="center" gap={8} className="fact-progress-row">
+                            <Button
+                              mode="secondary"
+                              appearance="neutral"
+                              size="medium"
+                              onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: String(clampPercent(Number(activeDraft.value || 0) - 5)) })}
+                              aria-label="Уменьшить процент выполнения"
+                            >
+                              -
+                            </Button>
                             <Input
                               mode="secondary"
-                              placeholder={activeTask.workUnit ? `Значение, ${activeTask.workUnit}` : 'Значение'}
-                              withClearButton
+                              className="fact-progress-input"
+                              placeholder="0"
                               name="fact-value"
-                              aria-label="Значение факта за день"
+                              aria-label="Значение факта в процентах"
                               autoComplete="off"
                               inputMode="decimal"
                               type="number"
                               min="0"
-                              step={0.01}
+                              max={100}
+                              step={1}
                               value={activeDraft.value}
-                              onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, value: event.target.value })}
+                              onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: event.target.value })}
                             />
-                          </Container>
-                        )}
+                            <Typography.Label variant="large-strong" className="fact-progress-sign">%</Typography.Label>
+                            <Button
+                              mode="secondary"
+                              appearance="neutral"
+                              size="medium"
+                              onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: String(clampPercent(Number(activeDraft.value || 0) + 5)) })}
+                              aria-label="Увеличить процент выполнения"
+                            >
+                              +
+                            </Button>
+                          </Flex>
+                          <input
+                            className="fact-progress-range"
+                            aria-label="Процент выполнения работы"
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            value={clampPercent(Number(activeDraft.value || 0))}
+                            onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: event.target.value })}
+                            style={{ '--fact-progress-value': `${clampPercent(Number(activeDraft.value || 0))}%` } as CSSProperties}
+                          />
+                          <Flex justify="space-between" className="fact-progress-marks">
+                            {[0, 25, 50, 75, 100].map((value) => (
+                              <button
+                                key={value}
+                                className="fact-progress-mark"
+                                type="button"
+                                onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: String(value) })}
+                              >
+                                {value === 0 ? '0%' : value}
+                              </button>
+                            ))}
+                          </Flex>
+                        </Container>
                         <CellSimple
                           height="compact"
                           title="Всего выполнено"
