@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
+import { randomBytes } from 'node:crypto';
 import { getPrisma } from '@gantt/runtime-core/prisma';
 import { normalizeStoredTaskStatus, synchronizeTaskStatus } from '@gantt/runtime-core/services/task-status';
+import { authMiddleware } from '../middleware/auth-middleware.js';
+import { resolveProjectAccess } from '../access-control.js';
 
 const FACT_EPSILON = 0.000001;
 
@@ -25,6 +28,32 @@ type FactMarkInput = {
   reason?: string;
   comment?: string;
 };
+
+type FactAccessTokenListItem = {
+  id: string;
+  slug: string;
+  projectId: string;
+  includedTaskIds: string[];
+  previewTitles: string[];
+  label: string;
+  revokedAt: string | null;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  url: string;
+};
+
+function generateFactSlug(): string {
+  return `f_${randomBytes(9).toString('base64url')}`;
+}
+
+function buildFactOrigin(): string {
+  return (process.env.FACT_PUBLIC_APP_URL ?? 'https://fact.getgantt.ru').replace(/\/$/, '');
+}
+
+function buildFactUrl(slug: string): string {
+  return `${buildFactOrigin()}?token=${encodeURIComponent(slug)}`;
+}
 
 function parseIsoDateOnly(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -59,6 +88,58 @@ function sanitizeText(value: unknown): string | null {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed.slice(0, 2000) : null;
+}
+
+function sanitizeFactLabel(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, 120) : fallback;
+}
+
+function buildPreviewTitles(
+  tasks: Array<{ id: string; name: string; sortOrder: number }>,
+  includedTaskIds: string[],
+): string[] {
+  if (includedTaskIds.length === 0) {
+    return [];
+  }
+  const included = new Set(includedTaskIds);
+  return tasks
+    .filter((task) => included.has(task.id))
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .slice(0, 4)
+    .map((task) => task.name);
+}
+
+function serializeFactAccessToken(
+  token: {
+    id: string;
+    slug: string;
+    projectId: string;
+    includedTaskIds: string[];
+    label: string;
+    revokedAt: Date | null;
+    expiresAt: Date | null;
+    lastUsedAt: Date | null;
+    createdAt: Date;
+  },
+  previewTitles: string[] = [],
+): FactAccessTokenListItem {
+  return {
+    id: token.id,
+    slug: token.slug,
+    projectId: token.projectId,
+    includedTaskIds: token.includedTaskIds,
+    previewTitles,
+    label: token.label,
+    revokedAt: token.revokedAt?.toISOString() ?? null,
+    expiresAt: token.expiresAt?.toISOString() ?? null,
+    lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
+    createdAt: token.createdAt.toISOString(),
+    url: buildFactUrl(token.slug),
+  };
 }
 
 function assertUsableToken(token: FactAccessTokenRecord | null): FactAccessTokenRecord | null {
@@ -242,6 +323,131 @@ async function applyFactMark(input: {
 }
 
 export async function registerFactRoutes(fastify: FastifyInstance): Promise<void> {
+  fastify.get('/api/projects/:id/fact-access-tokens', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const prisma = getPrisma();
+    const projectId = (req.params as { id?: string }).id?.trim();
+    if (!projectId) {
+      return reply.status(400).send({ error: 'project id required' });
+    }
+
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const tokens = await prisma.factAccessToken.findMany({
+      where: { projectId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+    const tasks = tokens.some((token) => token.includedTaskIds.length > 0)
+      ? await prisma.task.findMany({
+        where: { projectId },
+        select: { id: true, name: true, sortOrder: true },
+      })
+      : [];
+
+    return reply.send({
+      tokens: tokens.map((token) => serializeFactAccessToken(token, buildPreviewTitles(tasks, token.includedTaskIds))),
+    });
+  });
+
+  fastify.post('/api/projects/:id/fact-access-tokens', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const prisma = getPrisma();
+    const projectId = (req.params as { id?: string }).id?.trim();
+    const body = (req.body ?? {}) as {
+      label?: unknown;
+      includedTaskIds?: unknown;
+      expiresAt?: unknown;
+    };
+    if (!projectId) {
+      return reply.status(400).send({ error: 'project id required' });
+    }
+
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    const project = access
+      ? await prisma.project.findFirst({ where: { id: projectId, status: { not: 'deleted' } }, select: { id: true, name: true } })
+      : null;
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access?.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
+    }
+
+    const allTasks = await prisma.task.findMany({
+      where: { projectId },
+      select: { id: true, name: true, sortOrder: true },
+    });
+    const taskIds = new Set(allTasks.map((task) => task.id));
+    const includedTaskIds = Array.isArray(body.includedTaskIds)
+      ? Array.from(new Set(body.includedTaskIds.filter((taskId): taskId is string => typeof taskId === 'string' && taskIds.has(taskId))))
+      : [];
+
+    const expiresAt = typeof body.expiresAt === 'string' && body.expiresAt.trim()
+      ? new Date(body.expiresAt)
+      : null;
+    if (expiresAt && Number.isNaN(expiresAt.getTime())) {
+      return reply.status(400).send({ error: 'expiresAt must be an ISO date string' });
+    }
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const token = await prisma.factAccessToken.create({
+          data: {
+            slug: generateFactSlug(),
+            projectId,
+            includedTaskIds,
+            label: sanitizeFactLabel(body.label, `${project.name} · закрытие дня`),
+            expiresAt,
+            createdByUserId: req.user!.userId,
+          },
+        });
+
+        return reply.send({
+          token: serializeFactAccessToken(token, buildPreviewTitles(allTasks, token.includedTaskIds)),
+        });
+      } catch {
+        // Retry on rare slug collision.
+      }
+    }
+
+    return reply.status(500).send({ error: 'Failed to create fact access token' });
+  });
+
+  fastify.post('/api/projects/:id/fact-access-tokens/:tokenId/revoke', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const prisma = getPrisma();
+    const params = req.params as { id?: string; tokenId?: string };
+    const projectId = params.id?.trim();
+    const tokenId = params.tokenId?.trim();
+    if (!projectId || !tokenId) {
+      return reply.status(400).send({ error: 'project id and token id required' });
+    }
+
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
+    }
+
+    const existing = await prisma.factAccessToken.findFirst({
+      where: { id: tokenId, projectId },
+    });
+    if (!existing) {
+      return reply.status(404).send({ error: 'Fact access token not found' });
+    }
+
+    const token = existing.revokedAt
+      ? existing
+      : await prisma.factAccessToken.update({
+        where: { id: tokenId },
+        data: { revokedAt: new Date() },
+      });
+
+    return reply.send({ token: serializeFactAccessToken(token) });
+  });
+
   fastify.get('/api/fact/session', async (req, reply) => {
     const prisma = getPrisma();
     const query = req.query as { token?: string; date?: string };

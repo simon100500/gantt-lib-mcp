@@ -24,6 +24,20 @@ describe('fact routes', () => {
     assert.doesNotMatch(factRoutesSource, /shareLink/i);
   });
 
+  it('exposes authenticated manager endpoints for creating, listing, and revoking fact tokens', () => {
+    assert.match(factRoutesSource, /fastify\.get\('\/api\/projects\/:id\/fact-access-tokens', \{ preHandler: \[authMiddleware\] \}/);
+    assert.match(factRoutesSource, /fastify\.post\('\/api\/projects\/:id\/fact-access-tokens', \{ preHandler: \[authMiddleware\] \}/);
+    assert.match(factRoutesSource, /fastify\.post\('\/api\/projects\/:id\/fact-access-tokens\/:tokenId\/revoke', \{ preHandler: \[authMiddleware\] \}/);
+    assert.match(factRoutesSource, /resolveProjectAccess\(req\.user!\.userId, projectId\)/);
+    assert.match(factRoutesSource, /createdByUserId: req\.user!\.userId/);
+  });
+
+  it('generates short opaque MAX-compatible slugs instead of JWTs', () => {
+    assert.match(factRoutesSource, /function generateFactSlug\(\): string \{/);
+    assert.match(factRoutesSource, /`f_\$\{randomBytes\(9\)\.toString\('base64url'\)\}`/);
+    assert.doesNotMatch(factRoutesSource, /jwt\.sign/);
+  });
+
   it('replaces a task date fact amount instead of incrementing it', () => {
     assert.match(factRoutesSource, /taskProgressEntry\.upsert/);
     assert.match(factRoutesSource, /update: \{ amount \}/);
