@@ -19,6 +19,8 @@ interface GroupGanttWorkspaceProps {
   accessToken?: string | null;
   groupId: string;
   onOpenProject: (projectId: string, taskId?: string) => void;
+  onExportExcel?: () => void;
+  isExportExcelLoading?: boolean;
 }
 
 type GroupGanttTask = Task & {
@@ -202,7 +204,13 @@ function getCollapseLevelFromIds(
   return 'custom';
 }
 
-export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject }: GroupGanttWorkspaceProps) {
+export function GroupGanttWorkspace({
+  accessToken = null,
+  groupId,
+  onOpenProject,
+  onExportExcel,
+  isExportExcelLoading = false,
+}: GroupGanttWorkspaceProps) {
   const ganttRef = useRef<GanttChartRef>(null);
   const globalViewMode = useUIStore((state) => state.viewMode);
   const setGlobalViewMode = useUIStore((state) => state.setViewMode);
@@ -438,6 +446,8 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
           onScrollToToday={() => ganttRef.current?.scrollToToday()}
           onCollapseAll={handleCollapseAll}
           onExpandAll={handleExpandAll}
+          onExportExcel={onExportExcel}
+          isExportExcelLoading={isExportExcelLoading}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           ganttDayMode="calendar"

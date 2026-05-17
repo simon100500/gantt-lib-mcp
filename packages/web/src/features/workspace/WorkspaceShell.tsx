@@ -1056,6 +1056,15 @@ export function WorkspaceShell({
       },
     });
   }, [currentProjectLabel, ganttRef]);
+  const groupExcelExportUrl = useMemo(() => {
+    if (workspace.kind !== 'group-gantt') {
+      return null;
+    }
+
+    const groupStateId = `group:${workspace.groupId}`;
+    const loadDepth = projectStates[groupStateId]?.groupOverviewLoadDepth ?? 3;
+    return `/api/project-groups/${encodeURIComponent(workspace.groupId)}/overview-gantt/export/excel?loadDepth=${loadDepth}`;
+  }, [projectStates, workspace]);
   const exportImportController = useExportImportController({
     auth: {
       accessToken: auth.accessToken,
@@ -1072,6 +1081,7 @@ export function WorkspaceShell({
     doExportPdf,
     isPdfHelperDismissed,
     excelExportMode: isFactModeActive ? 'plan-fact' : 'gantt',
+    excelExportUrl: groupExcelExportUrl,
   });
   const {
     backupImportInputRef,
@@ -1165,6 +1175,8 @@ export function WorkspaceShell({
         <GroupGanttWorkspace
           accessToken={auth.accessToken}
           groupId={workspace.groupId}
+          onExportExcel={handleExportExcel}
+          isExportExcelLoading={isExportExcelLoading}
           onOpenProject={async (projectId, taskId) => {
             setShowChart(true);
             setProjectState(projectId, { projectDisplayMode: 'gantt' });

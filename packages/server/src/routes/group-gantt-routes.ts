@@ -18,7 +18,7 @@ type DbTask = {
   sortOrder: number;
 };
 
-type GroupGanttSectionOverview = {
+export type GroupGanttSectionOverview = {
   taskId: string;
   name: string;
   startDate: string;
@@ -28,6 +28,33 @@ type GroupGanttSectionOverview = {
   color: string | null;
   children?: GroupGanttSectionOverview[];
 };
+
+export type GroupGanttOverviewProject = {
+  id: string;
+  name: string;
+  status: 'active' | 'archived' | 'deleted';
+  ganttDayMode: 'business' | 'calendar';
+  startDate: string | null;
+  endDate: string | null;
+  progress: number;
+  taskCount: number;
+  sectionCount: number;
+  sections: GroupGanttSectionOverview[];
+};
+
+export type GroupGanttOverviewPayload = {
+  group: {
+    id: string;
+    name: string;
+  };
+  projects: GroupGanttOverviewProject[];
+};
+
+export type GroupGanttOverviewLoadResult =
+  | { kind: 'ok'; payload: GroupGanttOverviewPayload }
+  | { kind: 'forbidden' }
+  | { kind: 'hidden' }
+  | { kind: 'not_found' };
 
 function toDateOnly(value: Date): string {
   return value.toISOString().split('T')[0] ?? '';
@@ -144,61 +171,79 @@ export async function registerGroupGanttRoutes(fastify: FastifyInstance): Promis
       return reply.status(400).send({ error: 'groupId required' });
     }
 
-    const access = await resolveGroupAccess(req.user!.userId, groupId);
-    if (!access) {
+    const result = await loadGroupGanttOverview(req.user!.userId, groupId);
+    if (result.kind === 'forbidden') {
       return reply.status(403).send({ error: 'Project group access denied' });
     }
-    if (access.permissions.schedule === 'none') {
+    if (result.kind === 'hidden') {
       return reply.status(403).send({ error: 'Project group schedule is hidden for this user' });
     }
-
-    const prisma = getPrisma();
-    const group = await prisma.projectGroup.findUnique({
-      where: { id: groupId },
-      select: { id: true, name: true },
-    });
-    if (!group) {
+    if (result.kind === 'not_found') {
       return reply.status(404).send({ error: 'Project group not found' });
     }
 
-    const projects = await prisma.project.findMany({
-      where: {
-        groupId,
-        status: 'active',
-      },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        ganttDayMode: true,
-        tasks: {
-          select: {
-            id: true,
-            name: true,
-            startDate: true,
-            endDate: true,
-            type: true,
-            status: true,
-            color: true,
-            progress: true,
-            workVolume: true,
-            parentId: true,
-            sortOrder: true,
-          },
-          orderBy: [
-            { sortOrder: 'asc' },
-            { startDate: 'asc' },
-            { name: 'asc' },
-          ],
-        },
-      },
-      orderBy: [
-        { createdAt: 'asc' },
-        { name: 'asc' },
-      ],
-    });
+    return reply.send(result.payload);
+  });
+}
 
-    return reply.send({
+export async function loadGroupGanttOverview(userId: string, groupId: string): Promise<GroupGanttOverviewLoadResult> {
+  const access = await resolveGroupAccess(userId, groupId);
+  if (!access) {
+    return { kind: 'forbidden' };
+  }
+  if (access.permissions.schedule === 'none') {
+    return { kind: 'hidden' };
+  }
+
+  const prisma = getPrisma();
+  const group = await prisma.projectGroup.findUnique({
+    where: { id: groupId },
+    select: { id: true, name: true },
+  });
+  if (!group) {
+    return { kind: 'not_found' };
+  }
+
+  const projects = await prisma.project.findMany({
+    where: {
+      groupId,
+      status: 'active',
+    },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      ganttDayMode: true,
+      tasks: {
+        select: {
+          id: true,
+          name: true,
+          startDate: true,
+          endDate: true,
+          type: true,
+          status: true,
+          color: true,
+          progress: true,
+          workVolume: true,
+          parentId: true,
+          sortOrder: true,
+        },
+        orderBy: [
+          { sortOrder: 'asc' },
+          { startDate: 'asc' },
+          { name: 'asc' },
+        ],
+      },
+    },
+    orderBy: [
+      { createdAt: 'asc' },
+      { name: 'asc' },
+    ],
+  });
+
+  return {
+    kind: 'ok',
+    payload: {
       group: {
         id: group.id,
         name: group.name,
@@ -236,6 +281,6 @@ export async function registerGroupGanttRoutes(fastify: FastifyInstance): Promis
           sections,
         };
       }),
-    });
-  });
+    },
+  };
 }

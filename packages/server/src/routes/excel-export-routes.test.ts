@@ -14,6 +14,7 @@ describe('excel export routes', () => {
 
   it('defines authenticated excel export route with xlsx headers', () => {
     assert.match(routeSource, /fastify\.get\('\/api\/export\/excel', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
+    assert.match(routeSource, /\/api\/project-groups\/:groupId\/overview-gantt\/export\/excel/);
     assert.match(routeSource, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
     assert.match(routeSource, /Content-Disposition/);
     assert.match(routeSource, /filename\*=/);

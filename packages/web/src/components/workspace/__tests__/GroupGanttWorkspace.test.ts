@@ -88,4 +88,13 @@ describe('GroupGanttWorkspace buildTasks', () => {
     ]);
     expect(tasks.some((task) => task.overviewDepth === 3)).toBe(false);
   });
+
+  it('limits overview tasks to projects only when requested', () => {
+    const tasks = buildTasks(payload, 1);
+
+    expect(tasks.map((task) => task.id)).toEqual([
+      'project:project-1',
+    ]);
+    expect(tasks.every((task) => task.overviewDepth === 1)).toBe(true);
+  });
 });
