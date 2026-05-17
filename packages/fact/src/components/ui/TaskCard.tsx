@@ -1,5 +1,4 @@
-import { CellAction, CellHeader, CellInput, CellList, CellSimple, Grid, Textarea, Typography } from '@maxhub/max-ui';
-import type { ChangeEvent } from 'react';
+import { Button, CellHeader, CellList, CellSimple, Container, Flex, Typography } from '@maxhub/max-ui';
 import type { FactMarkState, FactTask } from '../../api/factApi';
 
 type Draft = {
@@ -14,12 +13,13 @@ type TaskCardProps = {
   task: FactTask;
   draft: Draft;
   depth: number;
-  onDraftChange: (taskId: string, draft: Draft) => void;
+  onOpenFact: (task: FactTask) => void;
+  onOpenProblem: (task: FactTask) => void;
 };
 
 const stateLabels: Record<FactMarkState, string> = {
-  fact: 'Факт',
-  done: 'Выполнено',
+  fact: 'В работе',
+  done: 'Готово',
   not_worked: 'Не работали',
   problem: 'Проблема',
 };
@@ -29,17 +29,25 @@ function formatAmount(value: number, unit: string | null): string {
   return unit ? `${formatted} ${unit}` : formatted;
 }
 
-function normalizeDoneValue(task: FactTask, currentValue: string): string {
-  if (!task.workVolume || task.workVolume <= 0) {
-    return '100';
-  }
-  if (task.workVolume && task.workVolume > 0) {
-    return String(task.workVolume);
-  }
-  return currentValue.trim() || String(task.dayFact || task.dayPlan || 0);
+function statusClass(state: FactMarkState, value: string): string {
+  if (state === 'done') return 'status-done';
+  if (state === 'problem') return 'status-problem';
+  if (state === 'not_worked') return 'status-risk';
+  if (value.trim()) return 'status-progress';
+  return 'status-not-started';
 }
 
-export function TaskCard({ task, draft, depth, onDraftChange }: TaskCardProps) {
+function taskIcon(task: FactTask): string {
+  const normalized = task.name.toLowerCase();
+  if (normalized.includes('элект') || normalized.includes('кабел')) return '⚡';
+  if (normalized.includes('сант') || normalized.includes('труб')) return '🔧';
+  if (normalized.includes('бетон') || normalized.includes('стяж')) return '⬛';
+  if (normalized.includes('маляр') || normalized.includes('краск')) return '🎨';
+  if (normalized.includes('монтаж') || normalized.includes('перегород')) return '🔲';
+  return '✓';
+}
+
+export function TaskCard({ task, draft, depth, onOpenFact, onOpenProblem }: TaskCardProps) {
   if (!task.writable) {
     return (
       <CellList
@@ -50,112 +58,61 @@ export function TaskCard({ task, draft, depth, onDraftChange }: TaskCardProps) {
     );
   }
 
-  const setState = (state: FactMarkState) => {
-    onDraftChange(task.id, {
-      ...draft,
-      state,
-      value: state === 'done' ? normalizeDoneValue(task, draft.value) : state === 'not_worked' ? '0' : draft.value,
-    });
-  };
+  const progress = Math.max(0, Math.min(100, Math.round(task.progress || 0)));
+  const dayValue = draft.inputMode === 'percent'
+    ? `${draft.value || progress || 0}%`
+    : formatAmount(task.dayFact, task.workUnit);
 
   return (
     <CellList
       mode="island"
-      className="work-list"
+      className={`work-card ${statusClass(draft.state, draft.value)}`}
       style={{ marginLeft: Math.min(depth * 8, 24) }}
       header={(
         <CellHeader
           titleStyle="normal"
           after={(
-            <Typography.Label variant="small-strong" className={`state-label state-label--${draft.state}`}>
-              {stateLabels[draft.state]}
+            <Typography.Label variant="small-strong" className={`card-badge ${statusClass(draft.state, draft.value)}`}>
+              {draft.value.trim() || draft.state !== 'fact' ? stateLabels[draft.state] : 'Не начато'}
             </Typography.Label>
           )}
         >
-          {task.name}
+          <Flex align="center" gap={10}>
+            <span className="card-icon">{taskIcon(task)}</span>
+            <span>{task.name}</span>
+          </Flex>
         </CellHeader>
       )}
     >
       <CellSimple
         height="compact"
         title={`План: ${formatAmount(task.dayPlan, task.workUnit)}`}
-        subtitle={
-          draft.inputMode === 'percent'
-            ? `Прогресс задачи: ${Math.round(task.progress)}%`
-            : `Сохранено за день: ${formatAmount(task.dayFact, task.workUnit)}`
-        }
-        after={task.progress > 0 ? (
+        subtitle={`Сегодня: ${dayValue}`}
+        after={(
           <Typography.Label variant="small-strong" className="progress-label">
-            {Math.round(task.progress)}%
+            {progress}%
           </Typography.Label>
-        ) : undefined}
+        )}
       />
 
-      <Grid cols={2} gap={8} className="state-grid">
-        <CellAction height="compact" mode={draft.state === 'fact' ? 'primary' : 'custom'} onClick={() => setState('fact')}>
-          Факт
-        </CellAction>
-        <CellAction height="compact" mode={draft.state === 'done' ? 'primary' : 'custom'} onClick={() => setState('done')}>
-          Выполнено
-        </CellAction>
-        <CellAction height="compact" mode={draft.state === 'not_worked' ? 'primary' : 'custom'} onClick={() => setState('not_worked')}>
-          Не работали
-        </CellAction>
-        <CellAction height="compact" mode={draft.state === 'problem' ? 'primary' : 'custom'} onClick={() => setState('problem')}>
-          Проблема
-        </CellAction>
-      </Grid>
-
-      <Grid cols={2} gap={8} className="input-mode-grid">
-        <CellAction
-          height="compact"
-          mode={draft.inputMode === 'volume' ? 'primary' : 'custom'}
-          disabled={!task.workVolume || task.workVolume <= 0}
-          onClick={() => onDraftChange(task.id, { ...draft, inputMode: 'volume', value: task.dayFact ? String(task.dayFact) : '' })}
-        >
-          Объем
-        </CellAction>
-        <CellAction
-          height="compact"
-          mode={draft.inputMode === 'percent' ? 'primary' : 'custom'}
-          onClick={() => onDraftChange(task.id, { ...draft, inputMode: 'percent', value: task.closeValue ? String(task.closeValue) : String(Math.round(task.progress || 0)) })}
-        >
-          Процент
-        </CellAction>
-      </Grid>
-
-      <CellInput
-        height="compact"
-        before={draft.inputMode === 'percent' ? 'Факт, %' : task.workUnit ? `Факт, ${task.workUnit}` : 'Факт'}
-        type="number"
-        inputMode="decimal"
-        min="0"
-        max={draft.inputMode === 'percent' ? 100 : undefined}
-        step={draft.inputMode === 'percent' ? 1 : 0.01}
-        value={draft.value}
-        disabled={draft.state === 'not_worked'}
-        placeholder="0"
-        onChange={(event: ChangeEvent<HTMLInputElement>) => onDraftChange(task.id, { ...draft, state: 'fact', value: event.target.value })}
-      />
-
-      {(draft.state === 'not_worked' || draft.state === 'problem') && (
-        <div className="notes-stack">
-          <Textarea
-            mode="secondary"
-            rows={2}
-            value={draft.reason}
-            placeholder="Причина"
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onDraftChange(task.id, { ...draft, reason: event.target.value })}
-          />
-          <Textarea
-            mode="secondary"
-            rows={3}
-            value={draft.comment}
-            placeholder="Комментарий"
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onDraftChange(task.id, { ...draft, comment: event.target.value })}
-          />
+      <Container className="progress-block" fullWidth>
+        <div className="progress-bar">
+          <div className={`progress-fill ${statusClass(draft.state, draft.value)}`} style={{ width: `${progress}%` }} />
         </div>
-      )}
+        <Flex justify="space-between" className="progress-caption">
+          <Typography.Body variant="small">Выполнено</Typography.Body>
+          <Typography.Body variant="small">{formatAmount(task.completedVolume, task.workUnit)}</Typography.Body>
+        </Flex>
+      </Container>
+
+      <Flex gap={8} className="card-actions">
+        <Button mode="primary" size="small" stretched onClick={() => onOpenFact(task)}>
+          Факт
+        </Button>
+        <Button mode="secondary" appearance="negative" size="small" stretched onClick={() => onOpenProblem(task)}>
+          Проблема
+        </Button>
+      </Flex>
     </CellList>
   );
 }

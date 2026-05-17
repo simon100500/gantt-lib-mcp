@@ -76,3 +76,4 @@ target/
 vendor/
 .cache/
 tmp/
+max-ui/
