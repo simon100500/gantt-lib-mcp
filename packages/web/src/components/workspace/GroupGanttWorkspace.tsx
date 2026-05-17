@@ -3,10 +3,10 @@ import { ExternalLink, RefreshCw } from 'lucide-react';
 import type { TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand } from 'gantt-lib';
 
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
-import { Toolbar } from '../layout/Toolbar.tsx';
+import { Toolbar, type ToolbarTaskListColumnRow } from '../layout/Toolbar.tsx';
 import { Button } from '../ui/button.tsx';
 import type { GroupGanttOverviewResponse, GroupGanttSectionOverview } from '../../lib/apiTypes.ts';
-import { TASK_LIST_COLUMN_ROWS, TASK_LIST_COLUMN_WIDTHS } from '../../lib/taskListColumns.ts';
+import { TASK_LIST_COLUMN_WIDTHS } from '../../lib/taskListColumns.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { cn } from '../../lib/utils.ts';
@@ -31,7 +31,20 @@ type LoadState =
   | { status: 'ready'; data: GroupGanttOverviewResponse; error: null }
   | { status: 'error'; data: GroupGanttOverviewResponse | null; error: string };
 
-const HIDDEN_COLUMNS: TaskListColumnId[] = [
+const GROUP_GANTT_TASK_LIST_COLUMN_ROWS: ToolbarTaskListColumnRow[] = [
+  { id: 'number', label: 'Номер' },
+  { id: 'name', label: 'Имя' },
+  { id: 'startDate', label: 'Начало' },
+  { id: 'endDate', label: 'Окончание' },
+  { id: 'duration', label: 'Длительность' },
+  { id: 'progress', label: '% выполнения' },
+];
+
+const GROUP_GANTT_TASK_LIST_COLUMN_IDS = new Set(GROUP_GANTT_TASK_LIST_COLUMN_ROWS.map((column) => column.id));
+
+const DEFAULT_GROUP_GANTT_HIDDEN_COLUMNS: TaskListColumnId[] = [];
+
+const ALWAYS_HIDDEN_COLUMNS: TaskListColumnId[] = [
   'work-volume',
   'completed-volume',
   'status',
@@ -44,6 +57,31 @@ const TASK_LIST_COLUMN_WIDTHS_OVERVIEW: TaskListColumnWidthMap = {
   name: 260,
   progress: 74,
 };
+
+function normalizeGroupGanttHiddenColumns(value: readonly string[] | null | undefined): TaskListColumnId[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((columnId) => (
+    typeof columnId === 'string' && GROUP_GANTT_TASK_LIST_COLUMN_IDS.has(columnId)
+      ? [columnId as TaskListColumnId]
+      : []
+  ));
+}
+
+function normalizeTaskListColumnWidthMap(value: unknown): TaskListColumnWidthMap {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce<TaskListColumnWidthMap>((acc, [key, width]) => {
+    if (typeof width === 'number' && Number.isFinite(width) && width > 0) {
+      acc[key] = width;
+    }
+    return acc;
+  }, {});
+}
 
 function formatTaskCount(count: number): string {
   const mod10 = count % 10;
@@ -207,6 +245,20 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
   const collapsedParentIds = useMemo(() => (
     new Set(projectStates[groupStateId]?.collapsedParentIds ?? [])
   ), [groupStateId, projectStates]);
+  const hiddenGroupGanttTaskListColumns = useMemo<TaskListColumnId[]>(() => {
+    const groupState = projectStates[groupStateId];
+    return groupState?.taskListColumnsInitialized
+      ? normalizeGroupGanttHiddenColumns(groupState.hiddenTaskListColumns)
+      : DEFAULT_GROUP_GANTT_HIDDEN_COLUMNS;
+  }, [groupStateId, projectStates]);
+  const effectiveHiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => [
+    ...hiddenGroupGanttTaskListColumns,
+    ...ALWAYS_HIDDEN_COLUMNS,
+  ], [hiddenGroupGanttTaskListColumns]);
+  const taskListColumnWidths = useMemo<TaskListColumnWidthMap>(() => ({
+    ...TASK_LIST_COLUMN_WIDTHS_OVERVIEW,
+    ...normalizeTaskListColumnWidthMap(projectStates[groupStateId]?.taskListColumnWidths),
+  }), [groupStateId, projectStates]);
   const collapseLevel = useMemo(
     () => getCollapseLevelFromIds(collapsedParentIds, tasks, parentTaskIds),
     [collapsedParentIds, parentTaskIds, tasks],
@@ -229,6 +281,48 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
       collapsedParentIds: getCollapsedIdsForLevel(level, tasks, parentTaskIds),
     });
   }, [groupStateId, parentTaskIds, setProjectState, tasks]);
+
+  const handleToggleTaskListColumn = useCallback((columnId: string) => {
+    if (!GROUP_GANTT_TASK_LIST_COLUMN_IDS.has(columnId)) {
+      return;
+    }
+
+    const groupState = projectStates[groupStateId];
+    const currentColumns = groupState?.taskListColumnsInitialized
+      ? groupState.hiddenTaskListColumns
+      : hiddenGroupGanttTaskListColumns;
+    const nextHiddenColumns = new Set(normalizeGroupGanttHiddenColumns(currentColumns));
+    if (nextHiddenColumns.has(columnId as TaskListColumnId)) {
+      nextHiddenColumns.delete(columnId as TaskListColumnId);
+    } else {
+      nextHiddenColumns.add(columnId as TaskListColumnId);
+    }
+
+    setProjectState(groupStateId, {
+      taskListColumnsInitialized: true,
+      hiddenTaskListColumns: Array.from(nextHiddenColumns),
+    });
+  }, [groupStateId, hiddenGroupGanttTaskListColumns, projectStates, setProjectState]);
+
+  const handleSetAllTaskListColumnsVisible = useCallback((visible: boolean) => {
+    setProjectState(groupStateId, {
+      taskListColumnsInitialized: true,
+      hiddenTaskListColumns: visible ? [] : GROUP_GANTT_TASK_LIST_COLUMN_ROWS.map((column) => column.id),
+    });
+  }, [groupStateId, setProjectState]);
+
+  const handleResetTaskListColumnOverride = useCallback(() => {
+    setProjectState(groupStateId, {
+      taskListColumnsInitialized: false,
+      hiddenTaskListColumns: [],
+    });
+  }, [groupStateId, setProjectState]);
+
+  const handleTaskListColumnWidthsChange = useCallback((widths: TaskListColumnWidthMap) => {
+    setProjectState(groupStateId, {
+      taskListColumnWidths: normalizeTaskListColumnWidthMap(widths),
+    });
+  }, [groupStateId, setProjectState]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => [
     {
@@ -271,8 +365,12 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
           onViewModeChange={setViewMode}
           ganttDayMode="calendar"
           readOnly
-          taskListColumnRows={TASK_LIST_COLUMN_ROWS}
-          hiddenTaskListColumns={HIDDEN_COLUMNS}
+          taskListColumnRows={GROUP_GANTT_TASK_LIST_COLUMN_ROWS}
+          hiddenTaskListColumns={hiddenGroupGanttTaskListColumns}
+          onToggleTaskListColumn={handleToggleTaskListColumn}
+          onSetAllTaskListColumnsVisible={handleSetAllTaskListColumnsVisible}
+          onResetTaskListColumnOverride={handleResetTaskListColumnOverride}
+          taskListColumnResetLabel="По умолчанию сводного графика"
           hierarchyCollapseRows={[
             { id: 'project', label: 'Проекты' },
             { id: 'section', label: 'Разделы' },
@@ -325,8 +423,9 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
                   tasks={tasks}
                   mode="gantt"
                   taskListMenuCommands={taskListMenuCommands}
-                  hiddenTaskListColumns={HIDDEN_COLUMNS}
-                  taskListColumnWidths={TASK_LIST_COLUMN_WIDTHS_OVERVIEW}
+                  hiddenTaskListColumns={effectiveHiddenTaskListColumns}
+                  taskListColumnWidths={taskListColumnWidths}
+                  onTaskListColumnWidthsChange={handleTaskListColumnWidthsChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                   rowHeight={36}
                   containerHeight="calc(100dvh - 132px)"
