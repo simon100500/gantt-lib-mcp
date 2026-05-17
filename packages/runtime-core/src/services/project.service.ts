@@ -503,7 +503,7 @@ export class ProjectService {
       const matchesSystemCalendar = calendarWeeklyPatternEquals(nextWeeklyPattern, systemWeeklyPattern)
         && calendarDaysEqual(nextCalendarDays, systemCalendarDays);
 
-      if (matchesSystemCalendar) {
+      if (updates.calendarId !== undefined && resolvedCalendarId === systemCalendarId && matchesSystemCalendar) {
         await this.deleteOwnedProjectCalendars(projectId);
         resolvedCalendarId = systemCalendarId;
       } else {
@@ -533,7 +533,7 @@ export class ProjectService {
     const data: Prisma.ProjectUncheckedUpdateInput = {
       ...(updates.name !== undefined ? { name: updates.name } : {}),
       ...(updates.ganttDayMode !== undefined ? { ganttDayMode: updates.ganttDayMode } : {}),
-      ...(updates.calendarId !== undefined ? { calendarId: resolvedCalendarId } : {}),
+      ...(updates.calendarId !== undefined || updatesCalendarShape ? { calendarId: resolvedCalendarId } : {}),
       ...(updates.groupId !== undefined ? { groupId: resolvedGroupId } : {}),
       ...(updates.timelineMarkers !== undefined
         ? { timelineMarkers: updates.timelineMarkers as unknown as Prisma.InputJsonValue }

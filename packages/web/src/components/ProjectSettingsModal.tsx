@@ -3,7 +3,7 @@ import { CalendarClock, ChevronDown, Columns3Cog, Plus, RefreshCw, Settings2, Tr
 
 import type { CalendarDay, CalendarWeeklyPattern, TimelineMarker } from '../types.ts';
 import { ProjectCalendarModal } from './ProjectCalendarModal.tsx';
-import { formatCalendarDayKind, getWeeklyPatternLabel } from '../lib/projectCalendar.ts';
+import { getWeeklyPatternLabel } from '../lib/projectCalendar.ts';
 import type { ToolbarTaskListColumnRow } from './layout/Toolbar.tsx';
 import { DEFAULT_HIDDEN_TASK_LIST_COLUMNS } from '../lib/taskListColumns.ts';
 import {
@@ -175,7 +175,6 @@ export function ProjectSettingsModal({
   };
 
   const currentDayModeLabel = draftMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни';
-  const calendarPreview = draftCalendarDays.slice(0, 3);
 
   return (
     <div
@@ -299,15 +298,6 @@ export function ProjectSettingsModal({
                   {getWeeklyPatternLabel(draftCalendarWeeklyPattern)}
                   {draftCalendarDays.length > 0 ? `, исключений: ${draftCalendarDays.length}.` : ', без исключений.'}
                 </p>
-                {calendarPreview.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {calendarPreview.map((day) => (
-                      <span key={day.date} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
-                        {day.date}{' -> '}{formatCalendarDayKind(day.kind)}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
               <div className="sm:w-auto">
                 <button

@@ -1015,10 +1015,31 @@ export function ProjectWorkspace({
 
     return rows;
   }, [baselineItems, selectedBaselineState]);
-  const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
+  const [calendarRenderOverride, setCalendarRenderOverride] = useState<{
+    calendarWeeklyPattern: CalendarWeeklyPattern;
+    calendarDays: CalendarDay[];
+  } | null>(null);
+  const renderCalendarWeeklyPattern = calendarRenderOverride?.calendarWeeklyPattern ?? calendarWeeklyPattern;
+  const renderCalendarDays = calendarRenderOverride?.calendarDays ?? calendarDays;
+
+  useEffect(() => {
+    setCalendarRenderOverride(null);
+  }, [persistedProjectId]);
+
+  useEffect(() => {
+    if (
+      calendarRenderOverride
+      && calendarWeeklyPatternEqual(calendarRenderOverride.calendarWeeklyPattern, calendarWeeklyPattern)
+      && calendarDaysEqual(calendarRenderOverride.calendarDays, calendarDays)
+    ) {
+      setCalendarRenderOverride(null);
+    }
+  }, [calendarDays, calendarRenderOverride, calendarWeeklyPattern]);
+
+  const customDays = useMemo(() => buildCustomDays(renderCalendarDays), [renderCalendarDays]);
   const weekendPredicate = useMemo(
-    () => getProjectWeekendPredicate(calendarWeeklyPattern, calendarDays),
-    [calendarDays, calendarWeeklyPattern],
+    () => getProjectWeekendPredicate(renderCalendarWeeklyPattern, renderCalendarDays),
+    [renderCalendarDays, renderCalendarWeeklyPattern],
   );
 
   useEffect(() => {
@@ -1746,10 +1767,20 @@ export function ProjectWorkspace({
         await onProjectNameChange(settings.projectName.trim());
       }
       if ((calendarWeeklyPatternChanged || calendarDaysChanged) && persistedProjectId && authProject?.id === persistedProjectId) {
-        await useAuthStore.getState().updateProject(persistedProjectId, {
+        setCalendarRenderOverride({
           calendarWeeklyPattern: settings.calendarWeeklyPattern,
           calendarDays: settings.calendarDays,
         });
+        const updatedProject = await useAuthStore.getState().updateProject(persistedProjectId, {
+          calendarWeeklyPattern: settings.calendarWeeklyPattern,
+          calendarDays: settings.calendarDays,
+        });
+        if (
+          !calendarWeeklyPatternEqual(settings.calendarWeeklyPattern, updatedProject.calendarWeeklyPattern ?? DEFAULT_CALENDAR_WEEKLY_PATTERN)
+          || !calendarDaysEqual(settings.calendarDays, updatedProject.calendarDays ?? [])
+        ) {
+          throw new Error('Project calendar update response did not include saved calendar settings.');
+        }
         if (settings.ganttDayMode === 'business' && !dayModeChanged && guardedBatchUpdate) {
           const nextWeekendPredicate = getProjectWeekendPredicate(settings.calendarWeeklyPattern, settings.calendarDays);
           const reflowedTasks = reflowTasksOnModeSwitch(tasks, true, nextWeekendPredicate) as Task[];
@@ -2129,8 +2160,8 @@ export function ProjectWorkspace({
               <ProjectSettingsModal
                 projectName={projectName}
                 ganttDayMode={displayGanttDayMode ?? ganttDayMode}
-                calendarWeeklyPattern={calendarWeeklyPattern}
-                calendarDays={calendarDays}
+                calendarWeeklyPattern={renderCalendarWeeklyPattern}
+                calendarDays={renderCalendarDays}
                 timelineMarkers={timelineMarkers}
                 hiddenTaskListColumnsDefault={hiddenTaskListColumnsDefaultOverride ?? (persistedProjectId && authProject?.id === persistedProjectId ? authProject.hiddenTaskListColumnsDefault ?? null : null)}
                 taskListColumnRows={TASK_LIST_COLUMN_ROWS}

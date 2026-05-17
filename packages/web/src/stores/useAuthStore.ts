@@ -149,6 +149,7 @@ const INITIAL_AUTH_STATE: AuthState = {
 let refreshPromise: Promise<string | null> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let listenersInitialized = false;
+let projectMutationRevision = 0;
 
 function canUseDOM(): boolean {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -940,6 +941,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       throw new Error('Not authenticated');
     }
 
+    projectMutationRevision += 1;
     const previousProject = state.project;
     const previousProjects = state.projects;
     const optimisticProject = state.project?.id === projectId
@@ -1157,8 +1159,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       return;
     }
 
+    const startedAtMutationRevision = projectMutationRevision;
     try {
       const [projects, projectGroups] = await Promise.all([fetchProjects(token), fetchProjectGroups(token)]);
+      if (projectMutationRevision !== startedAtMutationRevision) {
+        return;
+      }
+
       const state = get();
       const nextProjects = projects;
       const nextProject = mergeCurrentProject(nextProjects, state.project, state.accessToken);

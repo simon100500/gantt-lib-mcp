@@ -7,7 +7,7 @@
  */
 
 import { getPrisma } from '../prisma.js';
-import type { User, Project, Session, OtpEntry, ShareLink } from '../types.js';
+import type { CalendarWeeklyPattern, EffectiveCalendarDay, User, Project, Session, OtpEntry, ShareLink } from '../types.js';
 import { projectService, type ArchiveProjectResult, type RestoreProjectResult, type SoftDeleteProjectResult } from './project.service.js';
 import { randomUUID } from 'node:crypto';
 
@@ -339,6 +339,8 @@ export class AuthService {
       name?: string;
       ganttDayMode?: 'business' | 'calendar';
       calendarId?: string | null;
+      calendarWeeklyPattern?: CalendarWeeklyPattern;
+      calendarDays?: EffectiveCalendarDay[];
       groupId?: string;
       timelineMarkers?: Array<{ date: string; color?: string | null; name?: string | null }>;
       hiddenTaskListColumnsDefault?: string[] | null;

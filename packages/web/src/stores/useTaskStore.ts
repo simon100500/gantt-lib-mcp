@@ -295,6 +295,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
   },
   fetchTasks: async (accessToken, refreshAccessToken) => {
     const requestId = ++requestCounter;
+    const authProjectAtRequestStart = useAuthStore.getState().project;
     set({
       activeSource: 'auth',
       authToken: accessToken,
@@ -357,7 +358,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
         planEntries: normalizedPlanEntries,
       });
       const authState = useAuthStore.getState();
-      if (authState.project) {
+      if (authState.project && authState.project === authProjectAtRequestStart) {
         const updatedProject = authState.project.id === project.project.id
           ? { ...authState.project, ...project.project }
           : authState.project;
