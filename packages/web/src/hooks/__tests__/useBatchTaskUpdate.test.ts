@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { __batchTaskUpdateInternals } from '../useBatchTaskUpdate.ts';
 import type { Task } from '../../types.ts';
 
-const { mergeReorderedTasksWithReference, sanitizeHierarchyDependencies } = __batchTaskUpdateInternals;
+const { buildHierarchyOrderedTasks, mergeReorderedTasksWithReference, sanitizeHierarchyDependencies } = __batchTaskUpdateInternals;
 
 describe('useBatchTaskUpdate reorder normalization', () => {
   it('preserves authoritative task fields when gantt reorder payload is partial', () => {
@@ -205,5 +205,48 @@ describe('useBatchTaskUpdate reorder normalization', () => {
       id: 'child-1',
       dependencies: undefined,
     });
+  });
+
+  it('rebuilds dirty legacy hierarchy into the same visual order users see', () => {
+    const legacyTasks: Task[] = [
+      {
+        id: 'child-1',
+        name: 'Child 1',
+        startDate: '2026-05-01',
+        endDate: '2026-05-02',
+        parentId: 'parent',
+        sortOrder: 9,
+      },
+      {
+        id: 'child-2',
+        name: 'Child 2',
+        startDate: '2026-05-03',
+        endDate: '2026-05-04',
+        parentId: 'parent',
+        sortOrder: 10,
+      },
+      {
+        id: 'parent',
+        name: 'Parent',
+        startDate: '2026-05-01',
+        endDate: '2026-05-10',
+        sortOrder: 32,
+      },
+      {
+        id: 'child-3',
+        name: 'Child 3',
+        startDate: '2026-05-05',
+        endDate: '2026-05-06',
+        parentId: 'parent',
+        sortOrder: 34,
+      },
+    ];
+
+    expect(buildHierarchyOrderedTasks(legacyTasks).map((task) => task.id)).toEqual([
+      'parent',
+      'child-1',
+      'child-2',
+      'child-3',
+    ]);
   });
 });

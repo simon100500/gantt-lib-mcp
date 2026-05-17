@@ -40,6 +40,63 @@ function dedupeTasksById(tasks: Task[]): Task[] {
   return Array.from(byId.values());
 }
 
+function buildHierarchyOrderedTasks(tasks: Task[]): Task[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const byParent = new Map<string | undefined, Task[]>();
+  const originalIndexById = new Map(tasks.map((task, index) => [task.id, index]));
+
+  for (const task of tasks) {
+    const normalizedParentId = task.parentId && byId.has(task.parentId)
+      ? task.parentId
+      : undefined;
+    const siblings = byParent.get(normalizedParentId) ?? [];
+    siblings.push(task);
+    byParent.set(normalizedParentId, siblings);
+  }
+
+  for (const siblings of byParent.values()) {
+    siblings.sort((left, right) => {
+      const leftSortOrder = left.sortOrder;
+      const rightSortOrder = right.sortOrder;
+
+      if (leftSortOrder !== undefined || rightSortOrder !== undefined) {
+        const normalizedLeftSortOrder = leftSortOrder ?? Number.MAX_SAFE_INTEGER;
+        const normalizedRightSortOrder = rightSortOrder ?? Number.MAX_SAFE_INTEGER;
+        if (normalizedLeftSortOrder !== normalizedRightSortOrder) {
+          return normalizedLeftSortOrder - normalizedRightSortOrder;
+        }
+      }
+
+      return (originalIndexById.get(left.id) ?? 0) - (originalIndexById.get(right.id) ?? 0);
+    });
+  }
+
+  const result: Task[] = [];
+  const visited = new Set<string>();
+
+  const walk = (parentId?: string) => {
+    const children = byParent.get(parentId) ?? [];
+    for (const task of children) {
+      if (visited.has(task.id)) {
+        continue;
+      }
+      visited.add(task.id);
+      result.push(task);
+      walk(task.id);
+    }
+  };
+
+  walk(undefined);
+
+  for (const task of tasks) {
+    if (!visited.has(task.id)) {
+      result.push(task);
+    }
+  }
+
+  return result;
+}
+
 function mergeReorderedTasksWithReference(
   reorderedTasks: Task[],
   referenceTasks: Task[],
@@ -174,6 +231,7 @@ export interface UseBatchTaskUpdateResult {
 }
 
 export const __batchTaskUpdateInternals = {
+  buildHierarchyOrderedTasks,
   mergeReorderedTasksWithReference,
   resolveBatchHistoryTitle,
   sanitizeHierarchyDependencies,
@@ -956,7 +1014,8 @@ export function useBatchTaskUpdate({
     if (isAuthenticatedMode) {
       try {
         setSavingStateWithReset('saving');
-        const reorderedTasks = insertTaskAfterAnchor(tasks, taskId, newTask).map((task, index) => ({
+        const referenceTasks = buildHierarchyOrderedTasks(getCurrentAuthTasks());
+        const reorderedTasks = insertTaskAfterAnchor(referenceTasks, taskId, newTask).map((task, index) => ({
           ...task,
           sortOrder: index,
         }));
@@ -965,7 +1024,22 @@ export function useBatchTaskUpdate({
           throw new Error(`Inserted task ${newTask.id} not found in reordered task list`);
         }
 
-        await createTask(toCreateTaskInput(insertedTask));
+        await commitAuthCommands([
+          {
+            type: 'create_tasks_batch',
+            tasks: [toCreateTaskInput(insertedTask)],
+          },
+          {
+            type: 'reorder_tasks',
+            updates: reorderedTasks.map((task) => ({
+              taskId: task.id,
+              sortOrder: task.sortOrder ?? 0,
+            })),
+          },
+        ], {
+          includeSnapshot: true,
+          historyTitle: 'Пользователь — Создал задачу',
+        });
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Failed to insert task:', error);
@@ -1004,7 +1078,7 @@ export function useBatchTaskUpdate({
       // Revert optimistic update on error
       setTasks(prev => prev.filter(t => t.id !== newTask.id));
     }
-  }, [createTask, insertTaskAfterAnchor, isAuthenticatedMode, setSavingStateWithReset, tasks, toCreateTaskInput]);
+  }, [commitAuthCommands, getCurrentAuthTasks, insertTaskAfterAnchor, isAuthenticatedMode, setSavingStateWithReset, tasks, toCreateTaskInput]);
 
   const handleReorder = useCallback(async (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => {
     const referenceTasks = isAuthenticatedMode ? getCurrentAuthTasks() : tasks;
