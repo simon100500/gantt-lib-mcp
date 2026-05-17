@@ -87,6 +87,38 @@ export interface ProjectLoadResponse {
   };
 }
 
+export interface GroupGanttSectionOverview {
+  taskId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  progress: number;
+  status?: Task['status'];
+  color?: string | null;
+  children?: GroupGanttSectionOverview[];
+}
+
+export interface GroupGanttProjectOverview {
+  id: string;
+  name: string;
+  status: AuthProject['status'];
+  ganttDayMode: AuthProject['ganttDayMode'];
+  startDate: string | null;
+  endDate: string | null;
+  progress: number;
+  taskCount: number;
+  sectionCount: number;
+  sections: GroupGanttSectionOverview[];
+}
+
+export interface GroupGanttOverviewResponse {
+  group: {
+    id: string;
+    name: string;
+  };
+  projects: GroupGanttProjectOverview[];
+}
+
 export interface HistoryItem {
   id: string;
   actorType: 'user' | 'agent' | 'system' | 'import';

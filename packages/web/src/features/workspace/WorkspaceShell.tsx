@@ -15,6 +15,7 @@ import { ProjectMenu } from '../../components/layout/ProjectMenu.tsx';
 import { DraftWorkspace } from '../../components/workspace/DraftWorkspace.tsx';
 import { GuestWorkspace } from '../../components/workspace/GuestWorkspace.tsx';
 import { ProjectFactWorkspace } from '../../components/workspace/ProjectFactWorkspace.tsx';
+import { GroupGanttWorkspace } from '../../components/workspace/GroupGanttWorkspace.tsx';
 import { ProjectWorkspace } from '../../components/workspace/ProjectWorkspace.tsx';
 import { FinanceWorkspace } from '../../components/workspace/FinanceWorkspace.tsx';
 import { ResourcePlannerWorkspace } from '../../components/workspace/ResourcePlannerWorkspace.tsx';
@@ -652,6 +653,15 @@ export function WorkspaceShell({
     setWorkspace({ kind: 'planner', projectId: auth.project.id });
   }, [auth.project, canViewResources, setWorkspace]);
 
+  const handleOpenGroupGantt = useCallback(async (groupId?: string) => {
+    if (!auth.project?.groupId || !canViewSchedule) {
+      return;
+    }
+
+    setPlannerCorrectionTarget(null);
+    setWorkspace({ kind: 'group-gantt', groupId: groupId ?? auth.project.groupId });
+  }, [auth.project, canViewSchedule, setPlannerCorrectionTarget, setWorkspace]);
+
   const handleOpenFactMode = useCallback(async () => {
     if (!auth.project || !canViewSchedule) {
       return;
@@ -700,6 +710,15 @@ export function WorkspaceShell({
     if (workspace.kind === 'planner' && !canViewResources) {
       if (canViewSchedule) {
         setWorkspace({ kind: 'project', projectId: auth.project.id, chatOpen: readProjectChatOpenState() });
+      } else if (canViewFinance) {
+        setWorkspace({ kind: 'finance', projectId: auth.project.id });
+      }
+      return;
+    }
+
+    if (workspace.kind === 'group-gantt' && !canViewSchedule) {
+      if (canViewResources) {
+        setWorkspace({ kind: 'planner', projectId: auth.project.id });
       } else if (canViewFinance) {
         setWorkspace({ kind: 'finance', projectId: auth.project.id });
       }
@@ -945,6 +964,8 @@ export function WorkspaceShell({
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'template'
       ? (activeTemplate?.metadata.name || 'Шаблон')
+    : workspace.kind === 'group-gantt'
+      ? `Сводный график · ${auth.projectGroups.find((group) => group.id === workspace.groupId)?.name ?? 'Группа проектов'}`
     : auth.isAuthenticated
       ? selectedWorkspaceProject?.name ?? auth.project?.name
       : (localTasks.projectName || 'Мой проект');
@@ -1122,6 +1143,23 @@ export function WorkspaceShell({
             setPlannerCorrectionTarget(target);
             setProjectState(target.projectId, { projectDisplayMode: 'gantt' });
             setWorkspace({ kind: 'project', projectId: target.projectId, chatOpen: readProjectChatOpenState() });
+          }}
+        />
+      )
+    : workspace.kind === 'group-gantt'
+      ? (
+        <GroupGanttWorkspace
+          accessToken={auth.accessToken}
+          groupId={workspace.groupId}
+          onOpenProject={async (projectId, taskId) => {
+            setShowChart(true);
+            setProjectState(projectId, { projectDisplayMode: 'gantt' });
+            await handleSwitchProject(projectId);
+            if (taskId) {
+              window.setTimeout(() => {
+                ganttRef.current?.scrollToRow(taskId, { select: true, clearSelectionAfterMs: 2400 });
+              }, 250);
+            }
           }}
         />
       )
@@ -1428,9 +1466,12 @@ export function WorkspaceShell({
       canViewFactMode={canViewSchedule}
       canViewResourcePool={canViewResources}
       canViewFinance={canViewFinance}
+      canViewGroupGantt={canViewSchedule}
       isFactModeActive={isFactModeActive}
       onOpenResourcePool={handleOpenResourcePool}
       onOpenFinance={handleOpenFinance}
+      onOpenGroupGantt={() => { void handleOpenGroupGantt(); }}
+      onOpenProjectGroupGantt={handleOpenGroupGantt}
       onOpenChartMode={handleOpenChartMode}
       onOpenFactMode={handleOpenFactMode}
       onCreateProjectTemplate={handleCreateCurrentProjectTemplate}

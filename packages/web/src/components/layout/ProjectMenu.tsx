@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChartNoAxesGantt, Check, ChevronDown, Eye, Landmark, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Settings2, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, Check, ChevronDown, Eye, FolderKanban, Landmark, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Settings2, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -54,9 +54,12 @@ interface ProjectMenuProps {
   canViewFactMode?: boolean;
   canViewResourcePool?: boolean;
   canViewFinance?: boolean;
+  canViewGroupGantt?: boolean;
   isFactModeActive?: boolean;
   onOpenResourcePool?: () => void | Promise<void>;
   onOpenFinance?: () => void | Promise<void>;
+  onOpenGroupGantt?: () => void | Promise<void>;
+  onOpenProjectGroupGantt?: (groupId: string) => void | Promise<void>;
   onOpenChartMode?: () => void | Promise<void>;
   onOpenFactMode?: () => void | Promise<void>;
   onCreateProjectTemplate?: () => void | Promise<void>;
@@ -96,9 +99,12 @@ export function ProjectMenu({
   canViewFactMode = true,
   canViewResourcePool = true,
   canViewFinance = true,
+  canViewGroupGantt = true,
   isFactModeActive = false,
   onOpenResourcePool,
   onOpenFinance,
+  onOpenGroupGantt,
+  onOpenProjectGroupGantt,
   onOpenChartMode,
   onOpenFactMode,
   onCreateProjectTemplate,
@@ -429,6 +435,7 @@ export function ProjectMenu({
             onInsertTemplateToProject={onInsertTemplateToProject}
             canInsertTemplateToProject={canInsertTemplateToProject}
             onOpenResourcePool={onOpenResourcePool}
+            onOpenGroupGantt={onOpenProjectGroupGantt}
             adminTemplateLinks={hasAdminAccess ? adminTemplateLinks : []}
             onMenuOpenChange={setProjectActionsMenuOpen}
             onClose={() => setSidebarState('closed')}
@@ -514,7 +521,7 @@ export function ProjectMenu({
 
               <div className="hidden min-w-0 flex-1 self-stretch grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 px-4 lg:grid lg:px-6">
                 <div className="flex self-stretch justify-self-start">
-                  {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewFactMode || canViewResourcePool || canViewFinance) && (
+                  {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewFactMode || canViewResourcePool || canViewFinance || canViewGroupGantt) && (
                     <div
                       className="inline-flex h-full shrink-0 items-stretch gap-4"
                       data-testid="topbar-workspace-mode-switch"
@@ -527,13 +534,13 @@ export function ProjectMenu({
                           onClick={() => { void onOpenChartMode?.(); }}
                           className={cn(
                             'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                            workspace.kind === 'planner' || workspace.kind === 'finance' || isFactModeActive
+                            workspace.kind === 'planner' || workspace.kind === 'finance' || workspace.kind === 'group-gantt' || isFactModeActive
                               ? 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
                               : 'border-primary text-primary',
                           )}
                           data-testid="topbar-mode-chart"
                           role="tab"
-                          aria-selected={workspace.kind !== 'planner' && workspace.kind !== 'finance' && !isFactModeActive}
+                          aria-selected={workspace.kind !== 'planner' && workspace.kind !== 'finance' && workspace.kind !== 'group-gantt' && !isFactModeActive}
                         >
                           <span>График</span>
                         </button>
@@ -544,13 +551,13 @@ export function ProjectMenu({
                           onClick={() => { void onOpenFactMode?.(); }}
                           className={cn(
                             'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                            workspace.kind !== 'planner' && workspace.kind !== 'finance' && isFactModeActive
+                            workspace.kind !== 'planner' && workspace.kind !== 'finance' && workspace.kind !== 'group-gantt' && isFactModeActive
                               ? 'border-primary text-primary'
                               : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
                           )}
                           data-testid="topbar-mode-fact"
                           role="tab"
-                          aria-selected={workspace.kind !== 'planner' && workspace.kind !== 'finance' && isFactModeActive}
+                          aria-selected={workspace.kind !== 'planner' && workspace.kind !== 'finance' && workspace.kind !== 'group-gantt' && isFactModeActive}
                         >
                           <span>Факт</span>
                         </button>
@@ -589,6 +596,23 @@ export function ProjectMenu({
                           <span>Финансы</span>
                         </button>
                       )}
+                      {canViewGroupGantt && (
+                        <button
+                          type="button"
+                          onClick={() => { void onOpenGroupGantt?.(); }}
+                          className={cn(
+                            'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                            workspace.kind === 'group-gantt'
+                              ? 'border-primary text-primary'
+                              : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                          )}
+                          data-testid="topbar-mode-group-gantt"
+                          role="tab"
+                          aria-selected={workspace.kind === 'group-gantt'}
+                        >
+                          <span>Сводный график</span>
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -616,7 +640,7 @@ export function ProjectMenu({
 
           {/* User menu */}
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-            {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewFactMode || canViewResourcePool || canViewFinance) && (
+            {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewFactMode || canViewResourcePool || canViewFinance || canViewGroupGantt) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -627,6 +651,8 @@ export function ProjectMenu({
                   >
                     {workspace.kind === 'planner' ? (
                       <Package className="h-3.5 w-3.5 text-primary" />
+                    ) : workspace.kind === 'group-gantt' ? (
+                      <FolderKanban className="h-3.5 w-3.5 text-primary" />
                     ) : workspace.kind === 'finance' ? (
                       <Landmark className="h-3.5 w-3.5 text-primary" />
                     ) : isFactModeActive ? (
@@ -634,7 +660,7 @@ export function ProjectMenu({
                     ) : (
                       <ChartNoAxesGantt className="h-3.5 w-3.5 text-primary" />
                     )}
-                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'finance' ? 'Финансы' : isFactModeActive ? 'Факт' : 'Гант'}</span>
+                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'group-gantt' ? 'Сводный график' : workspace.kind === 'finance' ? 'Финансы' : isFactModeActive ? 'Факт' : 'Гант'}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -644,7 +670,7 @@ export function ProjectMenu({
                       onClick={() => { void onOpenChartMode?.(); }}
                       className={cn(
                         'gap-2 text-slate-700 focus:text-slate-900',
-                        workspace.kind !== 'planner' && workspace.kind !== 'finance' && !isFactModeActive && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                        workspace.kind !== 'planner' && workspace.kind !== 'finance' && workspace.kind !== 'group-gantt' && !isFactModeActive && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
                       )}
                       data-testid="topbar-mode-chart-mobile"
                     >
@@ -657,7 +683,7 @@ export function ProjectMenu({
                       onClick={() => { void onOpenFactMode?.(); }}
                       className={cn(
                         'gap-2 text-slate-700 focus:text-slate-900',
-                        workspace.kind !== 'planner' && workspace.kind !== 'finance' && isFactModeActive && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                        workspace.kind !== 'planner' && workspace.kind !== 'finance' && workspace.kind !== 'group-gantt' && isFactModeActive && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
                       )}
                       data-testid="topbar-mode-fact-mobile"
                     >
@@ -689,6 +715,19 @@ export function ProjectMenu({
                     >
                       <Landmark className="h-4 w-4" />
                       <span>Финансы</span>
+                    </DropdownMenuItem>
+                  )}
+                  {canViewGroupGantt && (
+                    <DropdownMenuItem
+                      onClick={() => { void onOpenGroupGantt?.(); }}
+                      className={cn(
+                        'gap-2 text-slate-700 focus:text-slate-900',
+                        workspace.kind === 'group-gantt' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                      )}
+                      data-testid="topbar-mode-group-gantt-mobile"
+                    >
+                      <FolderKanban className="h-4 w-4" />
+                      <span>Сводный график</span>
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -804,6 +843,7 @@ export function ProjectMenu({
               onInsertTemplateToProject={onInsertTemplateToProject}
               canInsertTemplateToProject={canInsertTemplateToProject}
               onOpenResourcePool={onOpenResourcePool}
+              onOpenGroupGantt={onOpenProjectGroupGantt}
               adminTemplateLinks={hasAdminAccess ? adminTemplateLinks : []}
               onMenuOpenChange={setProjectActionsMenuOpen}
               footer={billingFooter}

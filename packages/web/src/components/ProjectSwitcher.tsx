@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, ToyBrick, Trash2, TriangleAlert, Users } from 'lucide-react';
+import { Archive, ArrowRightLeft, ChartNoAxesGantt, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, ToyBrick, Trash2, TriangleAlert, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeleteProjectGroupModal } from './DeleteProjectGroupModal.tsx';
 import { EditProjectModal } from './EditProjectModal.tsx';
@@ -79,6 +79,7 @@ interface ProjectSwitcherProps {
   onCreateGroup?: (name: string) => void | Promise<void>;
   onRenameGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteGroup?: (groupId: string) => void | Promise<void>;
+  onOpenGroupGantt?: (groupId: string) => void | Promise<void>;
   createDisabled?: boolean;
   createTitle?: string;
   projectsUsageLabel?: string | null;
@@ -390,13 +391,15 @@ interface ProjectSectionProps {
   onRenameGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteGroup?: (groupId: string) => void | Promise<void>;
   onManageMembers?: (groupId: string) => void;
+  onOpenGroupGantt?: (groupId: string) => void | Promise<void>;
   children: ReactNode;
 }
 
-function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projectCount = 0, onCreateProject, onRenameGroup, onDeleteGroup, onManageMembers, children }: ProjectSectionProps) {
+function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projectCount = 0, onCreateProject, onRenameGroup, onDeleteGroup, onManageMembers, onOpenGroupGantt, children }: ProjectSectionProps) {
   const canEditGroup = group?.accessRole !== 'viewer';
   const canManageGroup = group?.accessRole === undefined || group.accessRole === 'owner';
   const canOpenMembers = Boolean(group && onManageMembers);
+  const canOpenGroupGantt = Boolean(group && onOpenGroupGantt && group.permissions?.schedule !== 'none');
   const canDeleteGroup = Boolean(group && !group.isDefault && onDeleteGroup);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -419,7 +422,7 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
           </span>
         </button>
 
-        {group && ((canEditGroup && onCreateProject) || canOpenMembers || (canManageGroup && onRenameGroup) || canDeleteGroup) ? (
+        {group && ((canEditGroup && onCreateProject) || canOpenMembers || canOpenGroupGantt || (canManageGroup && onRenameGroup) || canDeleteGroup) ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -441,6 +444,12 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
                 <DropdownMenuItem onClick={() => onManageMembers?.(group.id)}>
                   <Users className="h-4 w-4" />
                   <span>Команда</span>
+                </DropdownMenuItem>
+              )}
+              {canOpenGroupGantt && (
+                <DropdownMenuItem onClick={() => { void onOpenGroupGantt?.(group.id); }}>
+                  <ChartNoAxesGantt className="h-4 w-4" />
+                  <span>Сводный график</span>
                 </DropdownMenuItem>
               )}
               {canManageGroup && onRenameGroup && (
@@ -495,6 +504,7 @@ export function ProjectSwitcher({
   onCreateGroup,
   onRenameGroup,
   onDeleteGroup,
+  onOpenGroupGantt,
   createDisabled = false,
   createTitle,
   projectsUsageLabel,
@@ -680,6 +690,7 @@ export function ProjectSwitcher({
                   onRenameGroup={onRenameGroup}
                   onDeleteGroup={onDeleteGroup}
                   onManageMembers={setMembersGroupId}
+                  onOpenGroupGantt={onOpenGroupGantt}
                 >
                   <div className="px-3 py-2 text-xs text-slate-400">Нет проектов</div>
                 </ProjectSection>
@@ -699,6 +710,7 @@ export function ProjectSwitcher({
                 onRenameGroup={onRenameGroup}
                 onDeleteGroup={onDeleteGroup}
                 onManageMembers={setMembersGroupId}
+                onOpenGroupGantt={onOpenGroupGantt}
               >
                 {groupProjects.map((project) => (
                   <ProjectRow key={project.id} project={project} isCurrent={project.id === selectedProjectId} menuActive={openMenuProjectId === project.id} onSwitch={handleSwitch} onRename={onRenameProject} onMove={onMoveProject} projectGroups={effectiveGroups} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} onMenuOpenChange={onMenuOpenChange} setOpenMenuProjectId={setOpenMenuProjectId} />
