@@ -19,7 +19,7 @@ import type { PendingProjectCreation } from './model.ts';
 import { initialProjectLifecycleState, projectLifecycleReducer } from './reducer.ts';
 
 type ProjectUiLookup = {
-  activeWorkspace: 'project' | 'planner' | 'finance';
+  activeWorkspace: 'project' | 'planner' | 'finance' | 'group-gantt';
 } | null;
 
 type WorkspaceSetter = (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
@@ -28,13 +28,15 @@ function isConstraintCode(code: string | undefined): code is ConstraintDenialPay
   return code === 'PROJECT_LIMIT_REACHED' || code === 'RESTORE_PROJECT_LIMIT_REACHED' || code === 'AI_LIMIT_REACHED' || code === 'SUBSCRIPTION_EXPIRED' || code === 'ARCHIVE_FEATURE_LOCKED' || code === 'EXPORT_FEATURE_LOCKED';
 }
 
-function getProjectWorkspaceMode(projectId: string, getProjectState: (projectId: string) => ProjectUiLookup): WorkspaceMode {
+function getProjectWorkspaceMode(projectId: string, getProjectState: (projectId: string) => ProjectUiLookup, groupId?: string | null): WorkspaceMode {
   const activeWorkspace = getProjectState(projectId)?.activeWorkspace ?? 'project';
   return activeWorkspace === 'planner'
     ? { kind: 'planner', projectId }
     : activeWorkspace === 'finance'
       ? { kind: 'finance', projectId }
-      : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
+      : activeWorkspace === 'group-gantt' && groupId
+        ? { kind: 'group-gantt', groupId }
+        : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
 }
 
 export function useProjectLifecycleController(params: {
@@ -256,7 +258,8 @@ export function useProjectLifecycleController(params: {
     useTaskStore.setState({ loading: true, error: null });
     useProjectStore.getState().clearTransientState();
     await auth.switchProject(projectId);
-    setWorkspace(getProjectWorkspaceMode(projectId, getProjectState));
+    const groupId = useAuthStore.getState().project?.groupId;
+    setWorkspace(getProjectWorkspaceMode(projectId, getProjectState, groupId));
   }, [auth, createEmptyChartAfterActivationRef, getProjectState, queuedPromptRef, setWorkspace]);
 
   const handleSwitchTemplate = useCallback(async (templateId: string) => {
@@ -535,9 +538,12 @@ export function useProjectLifecycleController(params: {
       if (current.kind === 'planner' && current.projectId === projectId) {
         return current;
       }
-      return getProjectWorkspaceMode(projectId, getProjectState);
+      if (current.kind === 'group-gantt' && current.groupId === auth.project?.groupId) {
+        return current;
+      }
+      return getProjectWorkspaceMode(projectId, getProjectState, auth.project?.groupId);
     });
-  }, [auth.isAuthenticated, auth.project?.id, forceProjectWorkspaceOnNextSessionRef, getProjectState, hasShareToken, sessionProjectId, setWorkspace]);
+  }, [auth.isAuthenticated, auth.project?.groupId, auth.project?.id, forceProjectWorkspaceOnNextSessionRef, getProjectState, hasShareToken, sessionProjectId, setWorkspace]);
 
   useEffect(() => {
     setActiveEmptyProjectModeProjectId(null);
@@ -722,7 +728,7 @@ export function useProjectLifecycleController(params: {
     }
 
     if (auth.project?.id === projectOpenIntentId) {
-      setWorkspace(getProjectWorkspaceMode(projectOpenIntentId, getProjectState));
+      setWorkspace(getProjectWorkspaceMode(projectOpenIntentId, getProjectState, auth.project.groupId));
       onConsumeProjectOpenIntent();
       return;
     }

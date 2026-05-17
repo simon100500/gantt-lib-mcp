@@ -18,7 +18,7 @@ interface ProjectBaselineSelectionState {
 interface ProjectUIState {
   viewMode: ViewMode;
   projectDisplayMode: 'gantt' | 'fact';
-  activeWorkspace: 'project' | 'planner' | 'finance';
+  activeWorkspace: 'project' | 'planner' | 'finance' | 'group-gantt';
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
   taskDateChangeMode: TaskDateChangeMode;

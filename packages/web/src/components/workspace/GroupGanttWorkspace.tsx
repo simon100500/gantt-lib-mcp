@@ -7,6 +7,7 @@ import { Toolbar } from '../layout/Toolbar.tsx';
 import { Button } from '../ui/button.tsx';
 import type { GroupGanttOverviewResponse, GroupGanttSectionOverview } from '../../lib/apiTypes.ts';
 import { TASK_LIST_COLUMN_ROWS, TASK_LIST_COLUMN_WIDTHS } from '../../lib/taskListColumns.ts';
+import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { cn } from '../../lib/utils.ts';
 import type { Task } from '../../types.ts';
@@ -20,7 +21,10 @@ interface GroupGanttWorkspaceProps {
 type GroupGanttTask = Task & {
   sourceProjectId: string;
   sourceTaskId?: string;
+  overviewDepth: 1 | 2 | 3;
 };
+
+type CollapseLevel = 'project' | 'section' | 'subsection' | 'custom';
 
 type LoadState =
   | { status: 'loading'; data: GroupGanttOverviewResponse | null; error: null }
@@ -68,12 +72,14 @@ function buildTasks(data: GroupGanttOverviewResponse): GroupGanttTask[] {
       accepted: project.progress >= 100,
       locked: true,
       sortOrder: 0,
+      overviewDepth: 1,
     };
 
     const buildSectionTasks = (
       sections: GroupGanttSectionOverview[],
       parentId: string,
       indexPrefix: string,
+      depth: 2 | 3,
     ): GroupGanttTask[] => sections
       .filter((section) => section.startDate && section.endDate)
       .flatMap((section, index): GroupGanttTask[] => {
@@ -92,18 +98,54 @@ function buildTasks(data: GroupGanttOverviewResponse): GroupGanttTask[] {
           accepted: section.progress >= 100,
           locked: true,
           sortOrder: Number(`${indexPrefix}${index + 1}`),
+          overviewDepth: depth,
         };
 
         return [
           sectionTask,
-          ...buildSectionTasks(section.children ?? [], sectionTask.id, `${indexPrefix}${index + 1}`),
+          ...(depth < 3 ? buildSectionTasks(section.children ?? [], sectionTask.id, `${indexPrefix}${index + 1}`, 3) : []),
         ];
       });
 
-    const sectionTasks = buildSectionTasks(project.sections, projectTask.id, '1');
+    const sectionTasks = buildSectionTasks(project.sections, projectTask.id, '1', 2);
 
     return [projectTask, ...sectionTasks];
   });
+}
+
+function getCollapsedIdsForLevel(
+  level: Exclude<CollapseLevel, 'custom'>,
+  tasks: GroupGanttTask[],
+  parentTaskIds: Set<string>,
+): string[] {
+  if (level === 'subsection') {
+    return [];
+  }
+
+  return tasks
+    .filter((task) => {
+      if (!parentTaskIds.has(task.id)) return false;
+      if (level === 'project') return task.overviewDepth >= 1;
+      return task.overviewDepth >= 2;
+    })
+    .map((task) => task.id);
+}
+
+function getCollapseLevelFromIds(
+  collapsedParentIds: Set<string>,
+  tasks: GroupGanttTask[],
+  parentTaskIds: Set<string>,
+): CollapseLevel {
+  const matches = (level: Exclude<CollapseLevel, 'custom'>): boolean => {
+    const expected = getCollapsedIdsForLevel(level, tasks, parentTaskIds);
+    return expected.length === collapsedParentIds.size
+      && expected.every((id) => collapsedParentIds.has(id));
+  };
+
+  if (matches('subsection')) return 'subsection';
+  if (matches('section')) return 'section';
+  if (matches('project')) return 'project';
+  return 'custom';
 }
 
 export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject }: GroupGanttWorkspaceProps) {
@@ -112,8 +154,10 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
   const setViewMode = useUIStore((state) => state.setViewMode);
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
+  const projectStates = useProjectUIStore((state) => state.projectStates);
+  const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const [state, setState] = useState<LoadState>({ status: 'loading', data: null, error: null });
-  const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
+  const groupStateId = useMemo(() => `group:${groupId}`, [groupId]);
 
   const loadOverview = useCallback(async (keepData = false) => {
     if (!accessToken) {
@@ -159,6 +203,32 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
   const sectionCount = data?.projects.reduce((sum, project) => sum + project.sectionCount, 0) ?? 0;
   const sourceTaskCount = data?.projects.reduce((sum, project) => sum + project.taskCount, 0) ?? 0;
   const hasRenderableChart = tasks.length > 0;
+  const parentTaskIds = useMemo(() => new Set(tasks.flatMap((task) => (task.parentId ? [task.parentId] : []))), [tasks]);
+  const collapsedParentIds = useMemo(() => (
+    new Set(projectStates[groupStateId]?.collapsedParentIds ?? [])
+  ), [groupStateId, projectStates]);
+  const collapseLevel = useMemo(
+    () => getCollapseLevelFromIds(collapsedParentIds, tasks, parentTaskIds),
+    [collapsedParentIds, parentTaskIds, tasks],
+  );
+
+  useEffect(() => {
+    if (state.status !== 'ready') {
+      return;
+    }
+
+    const nextCollapsedParentIds = Array.from(collapsedParentIds)
+      .filter((id) => parentTaskIds.has(id));
+    if (nextCollapsedParentIds.length !== collapsedParentIds.size) {
+      setProjectState(groupStateId, { collapsedParentIds: nextCollapsedParentIds });
+    }
+  }, [collapsedParentIds, groupStateId, parentTaskIds, setProjectState, state.status]);
+
+  const applyCollapseLevel = useCallback((level: Exclude<CollapseLevel, 'custom'>) => {
+    setProjectState(groupStateId, {
+      collapsedParentIds: getCollapsedIdsForLevel(level, tasks, parentTaskIds),
+    });
+  }, [groupStateId, parentTaskIds, setProjectState, tasks]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => [
     {
@@ -174,21 +244,21 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
   ], [onOpenProject]);
 
   const handleCollapseAll = useCallback(() => {
-    setCollapsedParentIds(new Set(tasks.filter((task) => !task.parentId).map((task) => task.id)));
-  }, [tasks]);
+    setProjectState(groupStateId, {
+      collapsedParentIds: getCollapsedIdsForLevel('project', tasks, parentTaskIds),
+    });
+  }, [groupStateId, parentTaskIds, setProjectState, tasks]);
 
   const handleExpandAll = useCallback(() => {
-    setCollapsedParentIds(new Set());
-  }, []);
+    setProjectState(groupStateId, { collapsedParentIds: [] });
+  }, [groupStateId, setProjectState]);
 
   const handleToggleCollapse = useCallback((parentId: string) => {
-    setCollapsedParentIds((current) => {
-      const next = new Set(current);
-      if (next.has(parentId)) next.delete(parentId);
-      else next.add(parentId);
-      return next;
-    });
-  }, []);
+    const next = new Set(collapsedParentIds);
+    if (next.has(parentId)) next.delete(parentId);
+    else next.add(parentId);
+    setProjectState(groupStateId, { collapsedParentIds: Array.from(next) });
+  }, [collapsedParentIds, groupStateId, setProjectState]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -203,6 +273,17 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
           readOnly
           taskListColumnRows={TASK_LIST_COLUMN_ROWS}
           hiddenTaskListColumns={HIDDEN_COLUMNS}
+          hierarchyCollapseRows={[
+            { id: 'project', label: 'Проекты' },
+            { id: 'section', label: 'Разделы' },
+            { id: 'subsection', label: 'Подразделы' },
+          ]}
+          hierarchyCollapseValue={collapseLevel === 'custom' ? null : collapseLevel}
+          onHierarchyCollapseChange={(value) => {
+            if (value === 'project' || value === 'section' || value === 'subsection') {
+              applyCollapseLevel(value);
+            }
+          }}
           showStructureControls
           showBaselineControls={false}
           showProjectShiftControl={false}

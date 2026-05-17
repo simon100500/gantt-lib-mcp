@@ -61,6 +61,11 @@ export interface ToolbarTaskListColumnRow {
   label: string;
 }
 
+export interface ToolbarHierarchyCollapseRow {
+  id: string;
+  label: string;
+}
+
 interface ToolbarProps {
   showChatToggle?: boolean;
   isChatOpen?: boolean;
@@ -112,6 +117,9 @@ interface ToolbarProps {
   onRefreshBaselines?: () => void;
   taskListColumnRows?: ToolbarTaskListColumnRow[] | null;
   hiddenTaskListColumns?: string[] | null;
+  hierarchyCollapseRows?: ToolbarHierarchyCollapseRow[] | null;
+  hierarchyCollapseValue?: string | null;
+  onHierarchyCollapseChange?: (value: string) => void;
   onToggleTaskListColumn?: (columnId: string) => void;
   onSetAllTaskListColumnsVisible?: (visible: boolean) => void;
   onResetTaskListColumnOverride?: (() => void) | null;
@@ -397,6 +405,9 @@ export function Toolbar({
   onRefreshBaselines,
   taskListColumnRows = [],
   hiddenTaskListColumns = [],
+  hierarchyCollapseRows = [],
+  hierarchyCollapseValue = null,
+  onHierarchyCollapseChange,
   onToggleTaskListColumn,
   onSetAllTaskListColumnsVisible,
   onResetTaskListColumnOverride,
@@ -489,7 +500,8 @@ export function Toolbar({
     || Boolean(onImportBackup)
   );
   const showClosedTaskStrikeToggle = true;
-  const hasViewMenu = showStructureControls || Boolean(taskListColumnRows?.length) || showExpiredToggle || showClosedTaskStrikeToggle;
+  const hasHierarchyCollapseRows = Boolean(hierarchyCollapseRows?.length && onHierarchyCollapseChange);
+  const hasViewMenu = showStructureControls || hasHierarchyCollapseRows || Boolean(taskListColumnRows?.length) || showExpiredToggle || showClosedTaskStrikeToggle;
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
   const visibleTaskListColumnCount = (taskListColumnRows ?? []).filter((column) => !hiddenTaskListColumnSet.has(column.id)).length;
   const allTaskListColumnsVisible = taskListColumnRows?.length ? visibleTaskListColumnCount === taskListColumnRows.length : true;
@@ -626,7 +638,35 @@ export function Toolbar({
                 </DropdownMenuItem>
               </>
             )}
-            {showStructureControls && taskListColumnRows && taskListColumnRows.length > 0 && (
+            {hasHierarchyCollapseRows && (
+              <>
+                {showStructureControls && (
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                )}
+                <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+                  Свернуть до уровня
+                </DropdownMenuLabel>
+                {hierarchyCollapseRows?.map((row) => (
+                  <DropdownMenuItem
+                    key={row.id}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      onHierarchyCollapseChange?.(row.id);
+                    }}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <input
+                      type="radio"
+                      checked={hierarchyCollapseValue === row.id}
+                      readOnly
+                      className="pointer-events-none h-4 w-4 shrink-0 border-slate-300 accent-primary"
+                    />
+                    <span className="text-sm">{row.label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </>
+            )}
+            {(showStructureControls || hasHierarchyCollapseRows) && taskListColumnRows && taskListColumnRows.length > 0 && (
               <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
             )}
             {taskListColumnRows && taskListColumnRows.length > 0 && (

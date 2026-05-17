@@ -654,12 +654,13 @@ export function WorkspaceShell({
   }, [auth.project, canViewResources, setWorkspace]);
 
   const handleOpenGroupGantt = useCallback(async (groupId?: string) => {
-    if (!auth.project?.groupId || !canViewSchedule) {
+    const targetGroupId = groupId ?? auth.project?.groupId;
+    if (!targetGroupId || !canViewSchedule) {
       return;
     }
 
     setPlannerCorrectionTarget(null);
-    setWorkspace({ kind: 'group-gantt', groupId: groupId ?? auth.project.groupId });
+    setWorkspace({ kind: 'group-gantt', groupId: targetGroupId });
   }, [auth.project, canViewSchedule, setPlannerCorrectionTarget, setWorkspace]);
 
   const handleOpenFactMode = useCallback(async () => {
@@ -741,8 +742,10 @@ export function WorkspaceShell({
       setProjectState(workspace.projectId, { activeWorkspace: 'planner' });
     } else if (workspace.kind === 'finance') {
       setProjectState(workspace.projectId, { activeWorkspace: 'finance' });
+    } else if (workspace.kind === 'group-gantt' && auth.project?.id) {
+      setProjectState(auth.project.id, { activeWorkspace: 'group-gantt' });
     }
-  }, [setProjectState, workspace]);
+  }, [auth.project?.id, setProjectState, workspace]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
     if (!auth.isAuthenticated) {
