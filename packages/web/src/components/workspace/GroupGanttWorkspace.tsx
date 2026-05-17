@@ -188,14 +188,15 @@ function getCollapseLevelFromIds(
 
 export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject }: GroupGanttWorkspaceProps) {
   const ganttRef = useRef<GanttChartRef>(null);
-  const viewMode = useUIStore((state) => state.viewMode);
-  const setViewMode = useUIStore((state) => state.setViewMode);
+  const globalViewMode = useUIStore((state) => state.viewMode);
+  const setGlobalViewMode = useUIStore((state) => state.setViewMode);
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
   const projectStates = useProjectUIStore((state) => state.projectStates);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const [state, setState] = useState<LoadState>({ status: 'loading', data: null, error: null });
   const groupStateId = useMemo(() => `group:${groupId}`, [groupId]);
+  const viewMode = projectStates[groupStateId]?.viewMode ?? globalViewMode;
 
   const loadOverview = useCallback(async (keepData = false) => {
     if (!accessToken) {
@@ -323,6 +324,10 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
       taskListColumnWidths: normalizeTaskListColumnWidthMap(widths),
     });
   }, [groupStateId, setProjectState]);
+  const handleViewModeChange = useCallback((nextViewMode: 'day' | 'week' | 'month') => {
+    setGlobalViewMode(nextViewMode);
+    setProjectState(groupStateId, { viewMode: nextViewMode });
+  }, [groupStateId, setGlobalViewMode, setProjectState]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => [
     {
@@ -362,7 +367,7 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
           onCollapseAll={handleCollapseAll}
           onExpandAll={handleExpandAll}
           viewMode={viewMode}
-          onViewModeChange={setViewMode}
+          onViewModeChange={handleViewModeChange}
           ganttDayMode="calendar"
           readOnly
           taskListColumnRows={GROUP_GANTT_TASK_LIST_COLUMN_ROWS}

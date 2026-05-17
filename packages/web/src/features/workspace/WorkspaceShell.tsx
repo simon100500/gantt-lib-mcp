@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Folder } from 'lucide-react';
 
 import { DeleteProjectModal } from '../../components/DeleteProjectModal.tsx';
 import { CreateProjectModal } from '../../components/CreateProjectModal.tsx';
@@ -968,10 +969,20 @@ export function WorkspaceShell({
     : workspace.kind === 'template'
       ? (activeTemplate?.metadata.name || 'Шаблон')
     : workspace.kind === 'group-gantt'
-      ? `Сводный график · ${auth.projectGroups.find((group) => group.id === workspace.groupId)?.name ?? 'Группа проектов'}`
+      ? (auth.projectGroups.find((group) => group.id === workspace.groupId)?.name ?? 'Группа проектов')
     : auth.isAuthenticated
       ? selectedWorkspaceProject?.name ?? auth.project?.name
       : (localTasks.projectName || 'Мой проект');
+  const currentProjectDisplay = useMemo(() => (
+    workspace.kind === 'group-gantt'
+      ? (
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <Folder className="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+          <span className="truncate">{currentProjectLabel}</span>
+        </span>
+      )
+      : currentProjectLabel
+  ), [currentProjectLabel, workspace.kind]);
   const handleSaveStartScreenProjectSettings = useCallback(async (settings: {
     projectName: string;
     ganttDayMode: 'business' | 'calendar';
@@ -1437,12 +1448,13 @@ export function WorkspaceShell({
         ))}
       </div>
     )}
-    <ProjectMenu
+      <ProjectMenu
       error={error}
       hasShareToken={hasShareToken}
       isArchivedProject={isArchivedProject}
       isReadOnlyProject={isScheduleReadOnlyProject}
-      currentProjectLabel={currentProjectLabel}
+        currentProjectLabel={currentProjectLabel}
+        currentProjectDisplay={currentProjectDisplay}
       onCreateProject={handleCreateProject}
       onSwitchProject={handleSwitchProject}
       onRenameProject={async (projectId, name) => {

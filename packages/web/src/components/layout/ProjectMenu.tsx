@@ -31,6 +31,7 @@ interface ProjectMenuProps {
   isArchivedProject?: boolean;
   isReadOnlyProject?: boolean;
   currentProjectLabel: string | undefined;
+  currentProjectDisplay?: ReactNode;
   onCreateProject: (groupId?: string) => void | Promise<void>;
   createProjectDisabled?: boolean;
   createProjectTitle?: string;
@@ -76,6 +77,7 @@ export function ProjectMenu({
   isArchivedProject = false,
   isReadOnlyProject = false,
   currentProjectLabel,
+  currentProjectDisplay,
   onCreateProject,
   createProjectDisabled = false,
   createProjectTitle,
@@ -495,7 +497,7 @@ export function ProjectMenu({
                       <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="Только чтение" />
                     )}
                     <span className="truncate rounded-md px-1.5 py-1 text-sm font-semibold tracking-tight text-slate-900">
-                      {currentProjectLabel}
+                      {currentProjectDisplay ?? currentProjectLabel}
                     </span>
                     {showProjectSettingsButton && (
                       <button
