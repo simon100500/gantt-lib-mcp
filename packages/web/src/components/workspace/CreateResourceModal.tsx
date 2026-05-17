@@ -20,7 +20,7 @@ const TYPE_OPTIONS: Array<{ value: ResourceType; label: string }> = [
 
 const SCOPE_OPTIONS: Array<{ value: ResourceScope; label: string; description: string }> = [
   { value: 'project', label: 'Проект', description: 'Доступен только в этом проекте' },
-  { value: 'shared', label: 'Общий', description: 'Доступен проектам этой группы' },
+  { value: 'shared', label: 'Общий', description: 'Доступен проектам этого портфеля' },
 ];
 
 export function CreateResourceModal({

@@ -1713,9 +1713,9 @@ export function ResourcePlannerWorkspace({
             <div
               className="ml-2 flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-slate-700"
               data-testid="planner-group-title"
-              title={projectGroupName ? `Ресурсы группы проектов ${projectGroupName}` : 'Ресурсы группы проектов'}
+              title={projectGroupName ? `Ресурсы портфеля проектов ${projectGroupName}` : 'Ресурсы портфеля проектов'}
             >
-              <span className="shrink-0">Ресурсы группы проектов</span>
+              <span className="shrink-0">Ресурсы портфеля проектов</span>
               {projectGroupName ? (
                 <span
                   className="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100/70 px-2 py-0.5 text-[12px] font-semibold text-slate-600"
@@ -1922,10 +1922,10 @@ export function ResourcePlannerWorkspace({
                   <div className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
                     {hasActiveFilters
                       ? plannerScope === 'all-projects'
-                        ? 'По текущим фильтрам ничего не найдено в shared-ресурсах группы.'
+                        ? 'По текущим фильтрам ничего не найдено в shared-ресурсах портфеля.'
                         : 'По текущим фильтрам ничего не найдено. Добавьте новый ресурс и он сразу появится в календаре.'
                       : plannerScope === 'all-projects'
-                        ? 'В группе пока нет назначений на общие ресурсы. Назначьте shared-ресурсы в проектах группы, чтобы увидеть общую загрузку.'
+                        ? 'В портфеле пока нет назначений на общие ресурсы. Назначьте shared-ресурсы в проектах портфеля, чтобы увидеть общую загрузку.'
                         : 'Добавьте первый ресурс в проект, чтобы начать планирование загрузки и назначений.'}
                   </div>
                   {!effectiveReadonly && (
@@ -2024,7 +2024,7 @@ export function ResourcePlannerWorkspace({
                 </span>
 
                 <span className="font-mono text-[11px] text-slate-400">
-                  {plannerScope === 'current-project' ? 'Текущий проект' : 'Группа проектов'}
+                  {plannerScope === 'current-project' ? 'Текущий проект' : 'Портфель проектов'}
                 </span>
 
                 {isBackgroundRefreshing && (

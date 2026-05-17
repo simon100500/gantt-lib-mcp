@@ -329,7 +329,7 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
         <CardHeader className="space-y-2 pb-4">
           <CardTitle className="flex items-center gap-2 text-xl font-semibold">
             <Users className="h-5 w-5" />
-            Команда группы проектов
+            Команда портфеля проектов
           </CardTitle>
           <CardDescription className="pr-10">
             {group.name}. Для каждой вкладки можно отдельно задать просмотр или редактирование.

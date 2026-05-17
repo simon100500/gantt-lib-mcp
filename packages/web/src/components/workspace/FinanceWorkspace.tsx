@@ -1775,7 +1775,7 @@ export function FinanceWorkspace({
                     <div className="mb-3 text-xs font-semibold uppercase tracking-[0.03em] text-slate-500">История поступлений</div>
                     {sortedDrawerEvents.length === 0 ? (
                       <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">
-                        Для выбранной группы пока нет поступлений.
+                        Для выбранного портфеля пока нет поступлений.
                       </div>
                     ) : (
                       <>

@@ -27,7 +27,7 @@ export function ProjectGroupModal({ mode, initialName = '', onSave, onClose }: P
 
     const trimmedName = name.trim();
     if (!trimmedName) {
-      setError('Название группы не может быть пустым');
+      setError('Название портфеля не может быть пустым');
       return;
     }
 
@@ -41,7 +41,7 @@ export function ProjectGroupModal({ mode, initialName = '', onSave, onClose }: P
       await onSave(trimmedName);
       onClose();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить группу');
+      setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить портфель');
     } finally {
       setLoading(false);
     }
@@ -64,18 +64,18 @@ export function ProjectGroupModal({ mode, initialName = '', onSave, onClose }: P
         <CardHeader className="space-y-1 pb-4">
           <CardTitle className="flex items-center gap-2 text-xl font-semibold">
             {isRename ? <Pencil className="h-5 w-5" /> : <Folder className="h-5 w-5" />}
-            {isRename ? 'Переименовать группу проектов' : 'Новая группа проектов'}
+            {isRename ? 'Переименовать портфель проектов' : 'Новый портфель проектов'}
           </CardTitle>
           <CardDescription>
             {isRename
               ? ''
-              : 'Группа задаёт общий контекст для проектов и общих ресурсов.'}
+              : 'Портфель задаёт общий контекст для проектов и общих ресурсов.'}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="project-group-name">Название группы</Label>
+              <Label htmlFor="project-group-name">Название портфеля</Label>
               <Input
                 id="project-group-name"
                 type="text"

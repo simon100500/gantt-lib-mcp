@@ -234,7 +234,7 @@ export function TemplateCreateFromPublicationPage({
       return;
     }
     if (!selectedGroupId) {
-      setSubmitError('Выберите группу проектов.');
+      setSubmitError('Выберите портфель проектов.');
       return;
     }
 
@@ -320,7 +320,7 @@ export function TemplateCreateFromPublicationPage({
             <Card className="rounded-[32px] border-0 shadow-sm">
               <CardHeader>
                 <CardTitle>Параметры проекта</CardTitle>
-                <CardDescription>Шаблон уже выбран. Укажите имя проекта и группу, куда его нужно добавить.</CardDescription>
+                <CardDescription>Шаблон уже выбран. Укажите имя проекта и портфель, куда его нужно добавить.</CardDescription>
               </CardHeader>
               <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4">
@@ -337,7 +337,7 @@ export function TemplateCreateFromPublicationPage({
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
-                      <Label htmlFor="template-project-group">Группа проектов</Label>
+                      <Label htmlFor="template-project-group">Портфель проектов</Label>
                       <Button
                         type="button"
                         variant="ghost"
@@ -347,7 +347,7 @@ export function TemplateCreateFromPublicationPage({
                         className="h-8 px-2 text-xs font-medium text-slate-600 hover:text-slate-900"
                       >
                         <FolderPlus className="h-4 w-4" />
-                        <span>Новая группа</span>
+                        <span>Новый портфель</span>
                       </Button>
                     </div>
                     <select
@@ -364,7 +364,7 @@ export function TemplateCreateFromPublicationPage({
                       ))}
                     </select>
                     {auth.projectGroups.length === 0 ? (
-                      <p className="text-sm text-slate-500">Сначала создайте группу проектов.</p>
+                      <p className="text-sm text-slate-500">Сначала создайте портфель проектов.</p>
                     ) : null}
                   </div>
                   {submitError ? (
@@ -390,7 +390,7 @@ export function TemplateCreateFromPublicationPage({
       {groupModalOpen ? (
         <ProjectGroupModal
           mode="create"
-          initialName="Новая группа"
+          initialName="Новый портфель"
           onSave={async (name) => {
             const createdGroup = await auth.createProjectGroup(name);
             if (createdGroup) {

@@ -176,7 +176,7 @@ export function WorkspaceShell({
         remaining: null,
         plan: ((billingStatus?.plan as PlanId | undefined) ?? 'free'),
         planLabel: billingStatus?.planMeta.label ?? PLAN_LABELS[((billingStatus?.plan as PlanId | undefined) ?? 'free')],
-        upgradeHint: 'Расширьте тариф, чтобы создавать группы проектов.',
+        upgradeHint: 'Расширьте тариф, чтобы создавать портфели проектов.',
       }
     : null;
   const projectsForLimitEvaluation = mergeProjectsForLimitEvaluation(auth.projects, auth.project ?? null);
@@ -969,7 +969,7 @@ export function WorkspaceShell({
     : workspace.kind === 'template'
       ? (activeTemplate?.metadata.name || 'Шаблон')
     : workspace.kind === 'group-gantt'
-      ? (auth.projectGroups.find((group) => group.id === workspace.groupId)?.name ?? 'Группа проектов')
+      ? (auth.projectGroups.find((group) => group.id === workspace.groupId)?.name ?? 'Портфель проектов')
     : auth.isAuthenticated
       ? selectedWorkspaceProject?.name ?? auth.project?.name
       : (localTasks.projectName || 'Мой проект');

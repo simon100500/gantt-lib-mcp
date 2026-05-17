@@ -409,7 +409,7 @@ export function GroupGanttWorkspace({
                   size="sm"
                   variant="ghost"
                   className="hidden h-8 gap-1.5 rounded-md border border-transparent bg-transparent px-2.5 text-xs font-medium text-slate-600 hover:border-primary hover:text-primary sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:bg-transparent data-[state=open]:text-slate-600"
-                  title="Уровень загрузки сводного графика"
+                  title="Уровень загрузки портфеля"
                 >
                   <ListTree className="h-3.5 w-3.5" />
                   <span className="text-xs">{currentLoadDepthLabel}</span>
@@ -457,7 +457,7 @@ export function GroupGanttWorkspace({
           onToggleTaskListColumn={handleToggleTaskListColumn}
           onSetAllTaskListColumnsVisible={handleSetAllTaskListColumnsVisible}
           onResetTaskListColumnOverride={handleResetTaskListColumnOverride}
-          taskListColumnResetLabel="По умолчанию сводного графика"
+          taskListColumnResetLabel="По умолчанию для портфеля"
           hierarchyCollapseRows={[
             { id: 'project', label: 'Проекты' },
             { id: 'section', label: 'Разделы' },
@@ -502,7 +502,7 @@ export function GroupGanttWorkspace({
                 </div>
               ) : !hasRenderableChart ? (
                 <div className="flex flex-1 items-center justify-center bg-white px-6 text-center text-sm text-slate-500">
-                  {projectCount === 0 ? 'В группе пока нет активных проектов.' : 'В проектах группы пока нет задач с датами для портфельного графика.'}
+                  {projectCount === 0 ? 'В портфеле пока нет активных проектов.' : 'В проектах портфеля пока нет задач с датами для портфельного графика.'}
                 </div>
               ) : (
                 <GanttChart
@@ -540,7 +540,7 @@ export function GroupGanttWorkspace({
             {(data || state.status === 'loading') && (
               <footer className="flex h-6 shrink-0 select-none items-center gap-3 border-t border-slate-200 bg-white px-3">
                 <span className="font-mono text-[11px] text-slate-400">
-                  Сводный график
+                  Портфель
                 </span>
                 {data && (
                   <>

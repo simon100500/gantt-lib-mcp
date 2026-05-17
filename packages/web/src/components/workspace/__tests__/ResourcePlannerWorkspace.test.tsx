@@ -409,10 +409,10 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=all-projects', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }));
-    expect(container.querySelector('[data-testid="resource-planner-statusbar"]')?.textContent).toContain('Группа проектов');
+    expect(container.querySelector('[data-testid="resource-planner-statusbar"]')?.textContent).toContain('Портфель проектов');
     expect(container.querySelector('[data-testid="planner-scope-current-project"]')?.textContent).toBe('Проектные');
     expect(container.querySelector('[data-testid="planner-scope-all-projects"]')?.textContent).toBe('Общие');
-    expect(container.querySelector('[data-testid="planner-group-title"]')?.textContent).toContain('Ресурсы группы проектов');
+    expect(container.querySelector('[data-testid="planner-group-title"]')?.textContent).toContain('Ресурсы портфеля проектов');
     expect(container.querySelector('[data-testid="planner-group-name-chip"]')?.textContent).toBe('Стройка 2026');
     expect(container.querySelector('[data-testid="planner-create-resource"]')).not.toBeNull();
     expect(latestGanttProps().readonly).toBe(false);

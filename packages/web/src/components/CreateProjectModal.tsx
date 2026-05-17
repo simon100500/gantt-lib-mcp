@@ -62,7 +62,7 @@ export function CreateProjectModal({
     }
 
     if (projectGroups.length > 0 && !selectedGroupId) {
-      setError('Выберите группу проектов');
+      setError('Выберите портфель проектов');
       return;
     }
 
@@ -125,7 +125,7 @@ export function CreateProjectModal({
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <Label htmlFor="new-project-group">Группа проектов</Label>
+                <Label htmlFor="new-project-group">Портфель проектов</Label>
                 {onCreateGroup ? (
                   <Button
                     type="button"
@@ -136,7 +136,7 @@ export function CreateProjectModal({
                     className="h-8 px-2 text-xs font-medium text-slate-600 hover:text-slate-900"
                   >
                     <FolderPlus className="h-4 w-4" />
-                    <span>Новая группа</span>
+                    <span>Новый портфель</span>
                   </Button>
                 ) : null}
               </div>
@@ -161,7 +161,7 @@ export function CreateProjectModal({
                 </select>
               ) : (
                 <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                  Проект будет создан в основной группе аккаунта.
+                  Проект будет создан в основном портфеле аккаунта.
                 </div>
               )}
             </div>
@@ -199,7 +199,7 @@ export function CreateProjectModal({
       {groupModalOpen && onCreateGroup ? (
         <ProjectGroupModal
           mode="create"
-          initialName="Новая группа"
+          initialName="Новый портфель"
           onSave={async (groupName) => {
             const createdGroup = await onCreateGroup(groupName);
             if (createdGroup) {

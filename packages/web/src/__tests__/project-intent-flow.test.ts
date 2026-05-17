@@ -140,7 +140,7 @@ describe('project groups visibility', () => {
     assert.match(projectSwitcherSource, /projectCount=\{group\.projectCount \?\? groupProjects\.length\}/);
     assert.match(createProjectModalSource, /onCreateGroup\?: \(name: string\) => Promise<ProjectGroup \| null>;/);
     assert.match(createProjectModalSource, /\{onCreateGroup \? \(/);
-    assert.match(deleteProjectGroupModalSource, /Вместе с ней будут удалены все проекты в группе/);
+    assert.match(deleteProjectGroupModalSource, /Вместе с ним будут удалены все проекты в портфеле/);
     assert.match(workspaceSource, /const isProjectGroupsLockedOnCurrentPlan = billingStatus != null/);
     assert.match(workspaceSource, /&& billingStatus\.plan === 'free'/);
     assert.match(workspaceSource, /&& billingStatus\.billingState !== 'trial_active'/);

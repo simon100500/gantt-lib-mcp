@@ -583,10 +583,10 @@ export function useProjectLifecycleController(params: {
         title: publication?.title ? `Новый проект из шаблона «${publication.title}»` : 'Новый проект из шаблона',
         description: publication
           ? [
-              publication.summary?.trim() || 'Шаблон уже выбран. Укажите название проекта и группу, где он будет создан.',
+              publication.summary?.trim() || 'Шаблон уже выбран. Укажите название проекта и портфель, где он будет создан.',
               briefParts.length > 0 ? briefParts.join(' • ') : null,
             ].filter(Boolean).join(' ')
-          : 'Шаблон уже выбран. Укажите название проекта и группу, где он будет создан.',
+          : 'Шаблон уже выбран. Укажите название проекта и портфель, где он будет создан.',
       });
       onConsumeTemplateCreateIntent();
     };

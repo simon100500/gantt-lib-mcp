@@ -428,7 +428,7 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
               <button
                 type="button"
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-slate-400 opacity-0 transition-all hover:bg-white hover:text-slate-700 group-hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Действия группы"
+                aria-label="Действия портфеля"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
@@ -449,7 +449,7 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
               {canOpenGroupGantt && (
                 <DropdownMenuItem onClick={() => { void onOpenGroupGantt?.(group.id); }}>
                   <ChartNoAxesGantt className="h-4 w-4" />
-                  <span>Сводный график</span>
+                  <span>Портфель</span>
                 </DropdownMenuItem>
               )}
               {canManageGroup && onRenameGroup && (
@@ -727,7 +727,7 @@ export function ProjectSwitcher({
                 className="group inline-flex items-center gap-2 text-slate-700 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <Plus className="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-primary" />
-                <span className="text-sm font-medium sm:text-xs">Группа проектов</span>
+                <span className="text-sm font-medium sm:text-xs">Портфель проектов</span>
               </button>
             </div>
           ) : null}
@@ -779,7 +779,7 @@ export function ProjectSwitcher({
       {createGroupModalOpen && onCreateGroup ? (
         <ProjectGroupModal
           mode="create"
-          initialName="Новая группа"
+          initialName="Новый портфель"
           onSave={async (name) => {
             await onCreateGroup(name);
           }}

@@ -34,7 +34,7 @@ export function DeleteProjectGroupModal({ groupName, projectCount, onDelete, onC
       await onDelete();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось удалить группу проектов');
+      setError(err instanceof Error ? err.message : 'Не удалось удалить портфель проектов');
     } finally {
       setLoading(false);
     }
@@ -55,17 +55,17 @@ export function DeleteProjectGroupModal({ groupName, projectCount, onDelete, onC
           </svg>
         </button>
         <CardHeader className="space-y-1 pb-4">
-          <CardTitle className="text-xl font-semibold">Удалить группу проектов</CardTitle>
+          <CardTitle className="text-xl font-semibold">Удалить портфель проектов</CardTitle>
           <CardDescription>{groupName}</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             <div className="space-y-3 text-sm text-slate-600">
               <p>
-                Будет удалена группа <span className="font-medium text-slate-900">{groupName}</span>.
+                Будет удалён портфель <span className="font-medium text-slate-900">{groupName}</span>.
               </p>
               <p>
-                Вместе с ней будут удалены все проекты в группе: {projectCount} проект{projectCount === 1 ? '' : projectCount < 5 ? 'а' : 'ов'}.
+                Вместе с ним будут удалены все проекты в портфеле: {projectCount} проект{projectCount === 1 ? '' : projectCount < 5 ? 'а' : 'ов'}.
               </p>
               <p className="font-medium text-red-600">Это действие необратимо.</p>
             </div>

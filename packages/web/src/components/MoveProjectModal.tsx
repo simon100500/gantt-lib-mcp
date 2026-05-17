@@ -31,7 +31,7 @@ export function MoveProjectModal({ projectName, currentGroupId, projectGroups, o
     setError(null);
 
     if (!selectedGroupId) {
-      setError('Выберите группу проектов');
+      setError('Выберите портфель проектов');
       return;
     }
 
@@ -75,7 +75,7 @@ export function MoveProjectModal({ projectName, currentGroupId, projectGroups, o
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="move-project-group">Группа проектов</Label>
+              <Label htmlFor="move-project-group">Портфель проектов</Label>
               <select
                 id="move-project-group"
                 value={selectedGroupId}

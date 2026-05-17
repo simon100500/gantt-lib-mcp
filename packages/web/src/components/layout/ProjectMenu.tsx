@@ -612,7 +612,7 @@ export function ProjectMenu({
                           role="tab"
                           aria-selected={workspace.kind === 'group-gantt'}
                         >
-                          <span>Сводный график</span>
+                          <span>Портфель</span>
                         </button>
                       )}
                     </div>
@@ -662,7 +662,7 @@ export function ProjectMenu({
                     ) : (
                       <ChartNoAxesGantt className="h-3.5 w-3.5 text-primary" />
                     )}
-                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'group-gantt' ? 'Сводный график' : workspace.kind === 'finance' ? 'Финансы' : isFactModeActive ? 'Факт' : 'Гант'}</span>
+                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'group-gantt' ? 'Портфель' : workspace.kind === 'finance' ? 'Финансы' : isFactModeActive ? 'Факт' : 'Гант'}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -729,7 +729,7 @@ export function ProjectMenu({
                       data-testid="topbar-mode-group-gantt-mobile"
                     >
                       <FolderKanban className="h-4 w-4" />
-                      <span>Сводный график</span>
+                      <span>Портфель</span>
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
