@@ -58,6 +58,8 @@ const TASK_LIST_COLUMN_WIDTHS_OVERVIEW: TaskListColumnWidthMap = {
   progress: 74,
 };
 
+const SECOND_LEVEL_PARENT_TASK_COLOR = '#6B778C';
+
 function normalizeGroupGanttHiddenColumns(value: readonly string[] | null | undefined): TaskListColumnId[] {
   if (!Array.isArray(value)) {
     return [];
@@ -93,7 +95,7 @@ function formatTaskCount(count: number): string {
   return `${count} задач`;
 }
 
-function buildTasks(data: GroupGanttOverviewResponse): GroupGanttTask[] {
+export function buildTasks(data: GroupGanttOverviewResponse): GroupGanttTask[] {
   return data.projects.flatMap((project): GroupGanttTask[] => {
     if (!project.startDate || !project.endDate) {
       return [];
@@ -146,8 +148,14 @@ function buildTasks(data: GroupGanttOverviewResponse): GroupGanttTask[] {
       });
 
     const sectionTasks = buildSectionTasks(project.sections, projectTask.id, '1', 2);
+    const projectTasks = [projectTask, ...sectionTasks];
+    const parentTaskIds = new Set(projectTasks.flatMap((task) => (task.parentId ? [task.parentId] : [])));
 
-    return [projectTask, ...sectionTasks];
+    return projectTasks.map((task) => (
+      task.overviewDepth === 2 && parentTaskIds.has(task.id)
+        ? { ...task, color: SECOND_LEVEL_PARENT_TASK_COLOR }
+        : task
+    ));
   });
 }
 
