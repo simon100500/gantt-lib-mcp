@@ -84,21 +84,6 @@ function createDraft(task: FactTask): Draft {
   };
 }
 
-function buildDepthMap(tasks: FactTask[]): Map<string, number> {
-  const byId = new Map(tasks.map((task) => [task.id, task]));
-  const depthById = new Map<string, number>();
-  for (const task of tasks) {
-    let depth = 0;
-    let current = task.parentId ? byId.get(task.parentId) : undefined;
-    while (current) {
-      depth += 1;
-      current = current.parentId ? byId.get(current.parentId) : undefined;
-    }
-    depthById.set(task.id, depth);
-  }
-  return depthById;
-}
-
 function getSectionTitle(task: FactTask, tasks: FactTask[]): string | null {
   if (!task.parentId) {
     return null;
@@ -184,7 +169,6 @@ export function App() {
     };
   }, [sheetMode]);
 
-  const depthById = useMemo(() => buildDepthMap(session?.tasks ?? []), [session?.tasks]);
   const writableTasks = session?.tasks.filter((task) => task.writable) ?? [];
   const activeTask = activeTaskId ? writableTasks.find((task) => task.id === activeTaskId) ?? null : null;
   const activeDraft = activeTask ? drafts[activeTask.id] ?? createDraft(activeTask) : null;
@@ -443,32 +427,42 @@ export function App() {
 
           {activeTab === 'object' && (
             <>
-              <Container className="section-header" fullWidth>
-                <Typography.Label variant="small-caps">Структура объекта</Typography.Label>
-                <Counter value={writableTasks.length} rounded appearance="neutral" />
-              </Container>
-              <CellList mode="island" header={<CellHeader titleStyle="normal">{session?.project.name ?? 'Объект'}</CellHeader>}>
-                {session?.tasks.map((task) => {
-                  const depth = depthById.get(task.id) ?? 0;
+              <CellList mode="island" filled>
+                <CellSimple
+                  height="compact"
+                  title={session?.project.name ?? 'Объект'}
+                  after={<Counter value={writableTasks.length} appearance="themed" mode="filled" />}
+                />
+              </CellList>
+
+              <Flex direction="column" gap={10}>
+                {taskSections.length === 0 && (
+                  <Container className="state-box state-box--compact">
+                    <Typography.Body variant="medium">Работы объекта появятся после синхронизации.</Typography.Body>
+                  </Container>
+                )}
+                {taskSections.map((section, sectionIndex) => {
                   return (
-                    <CellSimple
-                      key={task.id}
-                      height="normal"
-                      title={task.name}
-                      subtitle={task.writable ? `План: ${formatAmount(task.dayPlan, task.workUnit)}` : 'Раздел работ'}
-                      after={<Counter value={task.writable ? 1 : writableTasks.filter((item) => item.parentId === task.id).length} rounded appearance="neutral" />}
-                      className="tree-cell"
-                      style={{ paddingLeft: depth * 12 }}
-                    />
+                    <Fragment key={`object-${section.title ?? 'root'}-${sectionIndex}`}>
+                      {section.title && (
+                        <TypographyHeadline variant="small-strong" className="task-section-title" asChild>
+                          <h2>{section.title}</h2>
+                        </TypographyHeadline>
+                      )}
+                      <CellList mode="island" filled className="work-list">
+                        {section.tasks.map((task) => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            draft={drafts[task.id] ?? createDraft(task)}
+                            onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
+                          />
+                        ))}
+                      </CellList>
+                    </Fragment>
                   );
                 })}
-              </CellList>
-              <CellList mode="island" header={<CellHeader titleStyle="normal">Завтра по плану</CellHeader>}>
-                {(writableTasks.slice(0, 3).length ? writableTasks.slice(0, 3) : []).map((task) => (
-                  <CellSimple key={task.id} height="compact" title={task.name} subtitle="Работа по плану" />
-                ))}
-                {writableTasks.length === 0 && <CellSimple height="compact" title="План на завтра появится после синхронизации" />}
-              </CellList>
+              </Flex>
             </>
           )}
 

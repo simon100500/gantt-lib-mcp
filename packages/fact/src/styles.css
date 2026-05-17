@@ -311,18 +311,20 @@ textarea {
   position: fixed;
   inset: 0;
   z-index: 40;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  display: block;
   background: var(--background-overlay);
 }
 
 .modal-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
   width: 100%;
   max-width: 480px;
   max-height: min(92vh, 760px);
   max-height: min(92dvh, 760px);
   overflow-y: auto;
+  transform: translateX(-50%);
   border-radius: 24px 24px 0 0;
   background: var(--background-surface-primary);
   box-shadow: 0 -8px 24px var(--shadow-elevation-4-primary);
@@ -359,10 +361,6 @@ textarea {
   resize: vertical;
 }
 
-.tree-cell {
-  transition: padding-left 0.16s ease;
-}
-
 @media (min-width: 481px) {
   .app-frame,
   .bottom-nav,
@@ -374,10 +372,10 @@ textarea {
 
 @keyframes slideUp {
   from {
-    transform: translateY(100%);
+    transform: translate(-50%, 100%);
   }
   to {
-    transform: translateY(0);
+    transform: translate(-50%, 0);
   }
 }
 
