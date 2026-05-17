@@ -681,18 +681,6 @@ export function App() {
                           />
                         )}
                       />
-                      <CellSimple
-                        as="label"
-                        height="normal"
-                        title="Есть проблема"
-                        subtitle="Нужна причина или комментарий к отклонению"
-                        after={(
-                          <Switch
-                            checked={activeDraft.state === 'problem'}
-                            onChange={(event) => setActiveState(event.target.checked ? 'problem' : 'fact')}
-                          />
-                        )}
-                      />
                     </CellList>
 
                     {(activeDraft.state === 'fact' || activeDraft.state === 'done') && (
@@ -765,6 +753,21 @@ export function App() {
                         />
                       </CellList>
                     )}
+
+                    <CellList mode="island" filled>
+                      <CellSimple
+                        as="label"
+                        height="normal"
+                        title="Есть проблема"
+                        subtitle="Нужна причина или комментарий к отклонению"
+                        after={(
+                          <Switch
+                            checked={activeDraft.state === 'problem'}
+                            onChange={(event) => setActiveState(event.target.checked ? 'problem' : 'fact')}
+                          />
+                        )}
+                      />
+                    </CellList>
 
                     {(activeDraft.state === 'not_worked' || activeDraft.state === 'problem') && (
                       <CellList mode="island" header={<CellHeader titleStyle="normal">Причина</CellHeader>}>
