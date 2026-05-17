@@ -184,12 +184,6 @@ function collectAncestorIds(tasks: Array<{ id: string; parentId: string | null }
   return ancestors;
 }
 
-function isTaskAvailableOnDate(task: { startDate: Date; endDate: Date }, dateKey: string): boolean {
-  const startKey = toDateKey(task.startDate);
-  const endKey = toDateKey(task.endDate);
-  return startKey <= dateKey && dateKey <= endKey;
-}
-
 function isTaskOverdueUnfinished(
   task: { endDate: Date; progress: number | null; status: string | null },
   dateKey: string,
