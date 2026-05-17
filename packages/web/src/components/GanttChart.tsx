@@ -77,6 +77,7 @@ export interface GanttChartProps {
   taskDateChangeMode?: TaskDateChangeMode;
   onTaskDateChangeModeChange?: (mode: TaskDateChangeMode) => void;
   getTaskListRowClassName?: (task: Task) => string | undefined;
+  getTaskListNamePrefixIcon?: (task: Task) => React.ReactNode;
   mode?: 'gantt' | 'plan-fact';
   onPlanFactCellCommit?: (context: PlanFactCellCommitContext<Task>) => void;
 }
@@ -143,6 +144,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   taskDateChangeMode,
   onTaskDateChangeModeChange,
   getTaskListRowClassName,
+  getTaskListNamePrefixIcon,
   mode,
   onPlanFactCellCommit,
 }, ref) => {
@@ -217,6 +219,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       taskDateChangeMode={taskDateChangeMode}
       onTaskDateChangeModeChange={onTaskDateChangeModeChange}
       getTaskListRowClassName={getTaskListRowClassName}
+      getTaskListNamePrefixIcon={getTaskListNamePrefixIcon}
       mode={mode ?? 'gantt'}
       onPlanFactCellCommit={onPlanFactCellCommit}
     />

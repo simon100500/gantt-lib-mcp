@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, RefreshCw } from 'lucide-react';
+import { ExternalLink, Home, RefreshCw } from 'lucide-react';
 import type { TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand } from 'gantt-lib';
 
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
@@ -423,6 +423,9 @@ export function GroupGanttWorkspace({ accessToken = null, groupId, onOpenProject
                   tasks={tasks}
                   mode="gantt"
                   taskListMenuCommands={taskListMenuCommands}
+                  getTaskListNamePrefixIcon={(task) => (
+                    !task.parentId ? <Home className="h-4 w-4" /> : undefined
+                  )}
                   hiddenTaskListColumns={effectiveHiddenTaskListColumns}
                   taskListColumnWidths={taskListColumnWidths}
                   onTaskListColumnWidthsChange={handleTaskListColumnWidthsChange}
