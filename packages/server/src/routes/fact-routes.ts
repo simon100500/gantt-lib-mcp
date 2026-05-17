@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
 import { getPrisma } from '@gantt/runtime-core/prisma';
-import { normalizeStoredTaskStatus, synchronizeTaskStatus } from '@gantt/runtime-core/services/task-status';
+import { clampTaskProgress, normalizeStoredTaskStatus, synchronizeTaskStatus } from '@gantt/runtime-core/services/task-status';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { resolveProjectAccess } from '../access-control.js';
 
@@ -255,21 +255,34 @@ async function applyFactMark(input: {
 }): Promise<void> {
   const entryDate = parseIsoDateOnly(input.mark.date)!;
   const workVolume = input.task.workVolume ?? null;
-  let amount = input.mark.value ?? 0;
+  const rawValue = roundFactAmount(Math.max(0, input.mark.value ?? 0));
+  const inputMode = input.mark.inputMode ?? 'volume';
+  let amount = rawValue;
+  let percentWithoutVolume: number | null = null;
 
   if (input.mark.state === 'done') {
-    amount = workVolume && workVolume > 0 ? workVolume : amount;
-  } else if (input.mark.state === 'not_worked') {
-    amount = 0;
-  } else if (input.mark.inputMode === 'percent') {
-    if (!workVolume || workVolume <= 0) {
-      throw new Error('Set total volume before entering percent fact');
+    if (workVolume && workVolume > 0) {
+      amount = workVolume;
+    } else {
+      percentWithoutVolume = 100;
+      amount = 0;
     }
-    amount = workVolume * (amount / 100);
+  } else if (input.mark.state === 'not_worked') {
+    if (!workVolume || workVolume <= 0) {
+      percentWithoutVolume = 0;
+    }
+    amount = 0;
+  } else if (inputMode === 'percent') {
+    if (workVolume && workVolume > 0) {
+      amount = workVolume * (amount / 100);
+    } else {
+      percentWithoutVolume = clampTaskProgress(amount);
+      amount = 0;
+    }
   }
   amount = roundFactAmount(Math.max(0, amount));
 
-  if (amount > FACT_EPSILON) {
+  if (percentWithoutVolume === null && amount > FACT_EPSILON) {
     await input.tx.taskProgressEntry.upsert({
       where: {
         taskId_entryDate: {
@@ -285,7 +298,7 @@ async function applyFactMark(input: {
         amount,
       },
     });
-  } else {
+  } else if (percentWithoutVolume === null || input.mark.state === 'not_worked') {
     await input.tx.taskProgressEntry.deleteMany({
       where: {
         projectId: input.projectId,
@@ -305,6 +318,8 @@ async function applyFactMark(input: {
     },
     update: {
       state: input.mark.state,
+      inputMode,
+      value: rawValue,
       reason: input.mark.reason ?? null,
       comment: input.mark.comment ?? null,
     },
@@ -313,13 +328,35 @@ async function applyFactMark(input: {
       taskId: input.task.id,
       date: entryDate,
       state: input.mark.state,
+      inputMode,
+      value: rawValue,
       reason: input.mark.reason ?? null,
       comment: input.mark.comment ?? null,
       tokenId: input.tokenId,
     },
   });
 
-  await recomputeTaskProgress(input.tx, input.projectId, input.task.id, workVolume);
+  if (percentWithoutVolume !== null) {
+    const task = await input.tx.task.findUnique({
+      where: { id: input.task.id },
+      select: { status: true, completedVolume: true },
+    });
+    const synced = synchronizeTaskStatus({
+      currentStatus: task?.status,
+      currentCompletedVolume: task?.completedVolume,
+      nextProgress: percentWithoutVolume,
+    });
+    await input.tx.task.update({
+      where: { id: input.task.id },
+      data: {
+        progress: synced.progress,
+        status: synced.status,
+        completedVolume: synced.completedVolume,
+      },
+    });
+  } else {
+    await recomputeTaskProgress(input.tx, input.projectId, input.task.id, workVolume);
+  }
 }
 
 export async function registerFactRoutes(fastify: FastifyInstance): Promise<void> {
@@ -509,7 +546,7 @@ export async function registerFactRoutes(fastify: FastifyInstance): Promise<void
       }),
       prisma.factDayCloseEntry.findMany({
         where: { projectId: token.projectId, tokenId: token.id, date },
-        select: { taskId: true, state: true, reason: true, comment: true, createdAt: true, updatedAt: true },
+        select: { taskId: true, state: true, inputMode: true, value: true, reason: true, comment: true, createdAt: true, updatedAt: true },
       }),
     ]);
 
@@ -577,6 +614,8 @@ export async function registerFactRoutes(fastify: FastifyInstance): Promise<void
             dayFact: factEntry?.amount ?? 0,
             dayFactUpdatedAt: factEntry?.updatedAt.toISOString() ?? null,
             closeState: closeEntry?.state ?? null,
+            closeInputMode: closeEntry?.inputMode ?? null,
+            closeValue: closeEntry?.value ?? null,
             closeReason: closeEntry?.reason ?? null,
             closeComment: closeEntry?.comment ?? null,
           };

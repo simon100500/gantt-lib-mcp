@@ -17,6 +17,8 @@ export type FactTask = {
   dayFact: number;
   dayFactUpdatedAt: string | null;
   closeState: FactMarkState | null;
+  closeInputMode: 'volume' | 'percent' | null;
+  closeValue: number | null;
   closeReason: string | null;
   closeComment: string | null;
 };

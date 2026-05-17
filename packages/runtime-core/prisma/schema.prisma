@@ -217,6 +217,11 @@ enum FactDayCloseState {
   problem
 }
 
+enum FactInputMode {
+  volume
+  percent
+}
+
 // Users table
 model User {
   id        String   @id @default(uuid())
@@ -632,6 +637,8 @@ model FactDayCloseEntry {
   taskId    String            @map("task_id")
   date      DateTime
   state     FactDayCloseState
+  inputMode FactInputMode      @default(volume) @map("input_mode")
+  value     Float?
   reason    String?
   comment   String?
   tokenId   String            @map("token_id")

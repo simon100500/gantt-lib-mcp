@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Container, Flex, Panel, Spinner, Typography } from '@maxhub/max-ui';
+import { Button, CellHeader, CellInput, CellList, Container, Counter, Flex, Panel, Spinner, Typography } from '@maxhub/max-ui';
 import { closeFactDay, loadFactSession, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
 import { readLaunchToken, todayKey } from './session/token';
 import { TaskCard } from './components/ui/TaskCard';
 
 type Draft = {
   state: FactMarkState;
+  inputMode: 'volume' | 'percent';
   value: string;
   reason: string;
   comment: string;
 };
 
 function createDraft(task: FactTask): Draft {
+  const inputMode = task.closeInputMode ?? (task.workVolume && task.workVolume > 0 ? 'volume' : 'percent');
+  const value = task.closeValue ?? (inputMode === 'volume' ? task.dayFact : task.progress);
   return {
     state: task.closeState ?? (task.dayFact > 0 ? 'fact' : 'fact'),
-    value: task.dayFact ? String(task.dayFact) : '',
+    inputMode,
+    value: value ? String(value) : '',
     reason: task.closeReason ?? '',
     comment: task.closeComment ?? '',
   };
@@ -98,7 +102,7 @@ export function App() {
         taskId: task.id,
         state: draft.state,
         value: Number.isFinite(parsedValue) ? parsedValue : 0,
-        inputMode: 'volume',
+        inputMode: draft.inputMode,
         reason: draft.reason,
         comment: draft.comment,
       };
@@ -124,7 +128,7 @@ export function App() {
       <Panel mode="secondary" className="app-shell">
         <Container className="state-box">
           <Spinner />
-          <Typography.Body>Загружаем работы</Typography.Body>
+          <Typography.Body variant="medium">Загружаем работы</Typography.Body>
         </Container>
       </Panel>
     );
@@ -135,7 +139,7 @@ export function App() {
       <Panel mode="secondary" className="app-shell">
         <Container className="state-box">
           <Typography.Title>Закрытие дня</Typography.Title>
-          <Typography.Body>{error}</Typography.Body>
+          <Typography.Body variant="medium">{error}</Typography.Body>
         </Container>
       </Panel>
     );
@@ -143,22 +147,42 @@ export function App() {
 
   return (
     <Panel mode="secondary" className="app-shell">
-      <Container className="page">
-        <header className="page-header">
-          <div>
-            <Typography.Title>Закрытие дня</Typography.Title>
-            <Typography.Body>{session?.project.name}</Typography.Body>
-          </div>
-          <input className="date-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-        </header>
+      <Container className="page" fullWidth>
+        <Flex direction="column" gap={18}>
+          <Container className="hero" fullWidth>
+            <Flex direction="column" gap={8}>
+              <Typography.Headline variant="large-strong" className="hero__title">
+                Закрытие дня
+              </Typography.Headline>
+              <Typography.Body variant="small" className="hero__project">
+                {session?.project.name}
+              </Typography.Body>
+              <Flex align="center" justify="space-between" gap={12} className="hero__summary">
+                <Typography.Body variant="small">
+                  {markedCount} из {writableTasks.length} работ отмечено
+                </Typography.Body>
+                <Counter value={writableTasks.length} rounded appearance="neutral-themed" />
+              </Flex>
+            </Flex>
+          </Container>
+
+          <CellList mode="island" header={<CellHeader titleStyle="normal">Дата закрытия</CellHeader>}>
+            <CellInput
+              height="compact"
+              before="День"
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+            />
+          </CellList>
 
         {error && <div className="notice notice--error">{error}</div>}
         {saved && <div className="notice">День сохранен.</div>}
 
-        <Flex direction="column" gap={10}>
+        <Flex direction="column" gap={12}>
           {session?.tasks.length === 0 && (
             <Container className="state-box">
-              <Typography.Body>Нет доступных работ на выбранный день.</Typography.Body>
+              <Typography.Body variant="medium">Нет доступных работ на выбранный день.</Typography.Body>
             </Container>
           )}
           {session?.tasks.map((task) => (
@@ -174,17 +198,18 @@ export function App() {
             />
           ))}
         </Flex>
+        </Flex>
       </Container>
 
-      <div className="bottom-sheet">
-        <div>
-          <div className="bottom-sheet__count">{markedCount} из {writableTasks.length}</div>
-          <div className="bottom-sheet__label">работ отмечено</div>
-        </div>
+      <Container className="bottom-sheet" fullWidth>
+        <Flex direction="column" gap={2}>
+          <Typography.Label variant="large-strong">{markedCount} из {writableTasks.length}</Typography.Label>
+          <Typography.Body variant="small" className="bottom-sheet__label">работ отмечено</Typography.Body>
+        </Flex>
         <Button mode="primary" disabled={submitting || writableTasks.length === 0} onClick={submit}>
           {submitting ? 'Отправляем' : 'Закрыть день'}
         </Button>
-      </div>
+      </Container>
     </Panel>
   );
 }

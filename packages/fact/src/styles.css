@@ -1,7 +1,7 @@
 :root {
-  color: #15171a;
-  background: #f3f5f7;
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #17191f;
+  background: #eef3f4;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * {
@@ -12,7 +12,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #f3f5f7;
+  background: #eef3f4;
 }
 
 button,
@@ -23,31 +23,34 @@ textarea {
 
 .app-shell {
   min-height: 100vh;
-  padding: 14px 12px 104px;
+  padding: 12px 10px 104px;
 }
 
 .page {
-  width: min(720px, 100%);
+  width: min(680px, 100%);
   margin: 0 auto;
-  padding: 0;
 }
 
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 8px 2px 16px;
+.hero {
+  padding: 18px 16px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbfa 100%);
+  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.04), 0 12px 28px rgba(28, 43, 55, 0.06);
 }
 
-.date-input {
-  min-width: 132px;
-  height: 40px;
-  border: 1px solid #d8dde3;
-  border-radius: 8px;
-  padding: 0 10px;
-  background: #fff;
-  color: #15171a;
+.hero__title {
+  display: block;
+  color: #12141a;
+}
+
+.hero__project {
+  display: block;
+  color: #657283;
+}
+
+.hero__summary {
+  margin-top: 4px;
+  color: #657283;
 }
 
 .state-box {
@@ -58,102 +61,92 @@ textarea {
   justify-content: center;
   gap: 12px;
   text-align: center;
+  color: #657283;
 }
 
 .notice {
-  margin-bottom: 12px;
-  border: 1px solid #c7e2d5;
-  border-radius: 8px;
-  background: #ebf8f1;
-  color: #126237;
-  padding: 10px 12px;
+  border-radius: 16px;
+  background: #e7f6ed;
+  color: #17633d;
+  padding: 12px 14px;
   font-size: 14px;
 }
 
 .notice--error {
-  border-color: #f0c6c6;
   background: #fff0f0;
   color: #a52222;
 }
 
-.task-group {
-  padding: 10px 2px 4px;
-  color: #67717e;
+.section-list {
+  opacity: 0.82;
 }
 
-.task-card {
-  display: grid;
-  gap: 12px;
-  border: 1px solid #dfe4ea;
-  border-radius: 8px;
-  background: #fff;
-  padding: 14px;
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+.work-list {
+  overflow: hidden;
 }
 
-.task-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.task-card__meta {
-  margin-top: 4px;
-  color: #67717e;
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.task-card__actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.task-card__notes {
-  display: grid;
-  gap: 8px;
-}
-
-.fact-input {
-  display: grid;
-  gap: 6px;
-}
-
-.fact-input__label {
-  color: #4d5967;
-  font-size: 13px;
-}
-
-.status-chip {
-  flex: 0 0 auto;
+.state-label,
+.progress-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
-  padding: 5px 9px;
-  font-size: 12px;
-  line-height: 1;
-  background: #edf1f5;
-  color: #46515f;
+  white-space: nowrap;
 }
 
-.status-chip--done {
-  background: #dcf5e7;
-  color: #106338;
+.state-label--fact {
+  background: #e9f1ff;
+  color: #0b63d8;
 }
 
-.status-chip--not_worked {
-  background: #eef0f3;
-  color: #5e6875;
+.state-label--done {
+  background: #ddf5e8;
+  color: #147243;
 }
 
-.status-chip--problem {
-  background: #fff0d8;
-  color: #8a4b00;
+.state-label--not_worked {
+  background: #edf0f3;
+  color: #5f6876;
 }
 
-.status-chip--fact {
-  background: #e7f0ff;
-  color: #1959b8;
+.state-label--problem {
+  background: #fff0d6;
+  color: #885100;
+}
+
+.progress-label {
+  background: #edf0f3;
+  color: #5f6876;
+}
+
+.state-grid,
+.input-mode-grid {
+  padding: 6px 12px 10px;
+}
+
+.input-mode-grid {
+  padding-top: 0;
+}
+
+.state-grid [role="button"],
+.state-grid button,
+.input-mode-grid [role="button"],
+.input-mode-grid button {
+  justify-content: center;
+  border-radius: 14px;
+  background: #f2f4f6;
+}
+
+.notes-stack {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.notes-stack textarea {
+  width: 100%;
+  resize: vertical;
 }
 
 .bottom-sheet {
@@ -167,31 +160,26 @@ textarea {
   justify-content: space-between;
   gap: 12px;
   padding: 12px max(14px, env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-right));
-  border-top: 1px solid #dfe4ea;
+  border-top: 1px solid rgba(188, 198, 209, 0.72);
   background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(12px);
-}
-
-.bottom-sheet__count {
-  font-weight: 700;
+  backdrop-filter: blur(16px);
 }
 
 .bottom-sheet__label {
-  color: #67717e;
-  font-size: 13px;
+  color: #657283;
 }
 
 @media (min-width: 640px) {
   .app-shell {
-    padding-top: 24px;
+    padding-top: 20px;
   }
 
   .bottom-sheet {
     left: 50%;
-    width: min(720px, calc(100% - 24px));
+    width: min(680px, calc(100% - 24px));
     transform: translateX(-50%);
-    border: 1px solid #dfe4ea;
+    border: 1px solid rgba(188, 198, 209, 0.72);
     border-bottom: 0;
-    border-radius: 12px 12px 0 0;
+    border-radius: 20px 20px 0 0;
   }
 }
