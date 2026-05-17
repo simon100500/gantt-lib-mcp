@@ -159,6 +159,10 @@ textarea {
   width: 100%;
 }
 
+.work-list {
+  width: 100%;
+}
+
 .work-card:active {
   transform: scale(0.995);
 }
@@ -195,6 +199,14 @@ textarea {
 
 .text-pill--negative {
   color: var(--text-negative);
+}
+
+.percent-counter {
+  flex: 0 0 auto;
+}
+
+.percent-counter::after {
+  content: "%";
 }
 
 .progress-block {

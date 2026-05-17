@@ -197,6 +197,24 @@ export function App() {
     const draft = drafts[task.id];
     return !draft || !(draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || draft.value.trim());
   });
+  const taskSections = useMemo(() => {
+    const sections: Array<{ title: string | null; tasks: FactTask[] }> = [];
+    const allTasks = session?.tasks ?? [];
+
+    for (const task of allTasks) {
+      if (!task.writable) continue;
+
+      const title = getSectionTitle(task, allTasks);
+      const lastSection = sections[sections.length - 1];
+      if (lastSection && lastSection.title === title) {
+        lastSection.tasks.push(task);
+      } else {
+        sections.push({ title, tasks: [task] });
+      }
+    }
+
+    return sections;
+  }, [session?.tasks]);
 
   const updateDraft = (taskId: string, nextDraft: Draft) => {
     setSaved(false);
@@ -398,29 +416,24 @@ export function App() {
                     <Typography.Body variant="medium">Нет доступных работ на выбранный день.</Typography.Body>
                   </Container>
                 )}
-                {session?.tasks.map((task, index, allTasks) => {
-                  if (!task.writable) {
-                    return null;
-                  }
-                  const sectionTitle = getSectionTitle(task, allTasks);
-                  const previousWritableTask = allTasks.slice(0, index).reverse().find((item) => item.writable);
-                  const previousSectionTitle = previousWritableTask ? getSectionTitle(previousWritableTask, allTasks) : null;
-
+                {taskSections.map((section, sectionIndex) => {
                   return (
-                    <Fragment key={task.id}>
-                      {sectionTitle && sectionTitle !== previousSectionTitle && (
+                    <Fragment key={`${section.title ?? 'root'}-${sectionIndex}`}>
+                      {section.title && (
                         <TypographyHeadline variant="small-strong" className="task-section-title" asChild>
-                          <h2>{sectionTitle}</h2>
+                          <h2>{section.title}</h2>
                         </TypographyHeadline>
                       )}
-                      <TaskCard
-                        task={task}
-                        draft={drafts[task.id] ?? createDraft(task)}
-                        onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
-                        onOpenProblem={(nextTask) => openTaskSheet(nextTask, 'problem')}
-                        onOpenPhoto={(nextTask) => openTaskSheet(nextTask, 'photo')}
-                        onMarkNotWorked={markNotWorked}
-                      />
+                      <CellList mode="island" filled className="work-list">
+                        {section.tasks.map((task) => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            draft={drafts[task.id] ?? createDraft(task)}
+                            onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
+                          />
+                        ))}
+                      </CellList>
                     </Fragment>
                   );
                 })}
