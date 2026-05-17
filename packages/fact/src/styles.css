@@ -382,7 +382,6 @@ textarea {
   padding: 16px 0 0;
 }
 
-.status-selector,
 .input-mode-grid,
 .fact-value-input,
 .fact-progress-control,
@@ -413,10 +412,26 @@ textarea {
 .fact-progress-input {
   flex: 1 1 auto;
   min-width: 0;
+  position: relative;
 }
 
-.fact-progress-input input {
+.fact-progress-input-body {
+  width: 100%;
+}
+
+.fact-progress-input-control {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0 36px !important;
   text-align: center;
+}
+
+.fact-progress-clear {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  margin-left: 0 !important;
+  transform: translateY(-50%);
 }
 
 .fact-progress-sign {
@@ -438,8 +453,8 @@ textarea {
   border-radius: 999px;
   background: linear-gradient(
     90deg,
-    var(--background-accent-themed) 0 var(--fact-progress-value),
-    var(--background-accent-neutral-fade) var(--fact-progress-value) 100%
+    var(--background-accent-themed) 0 var(--fact-progress-fill),
+    var(--background-accent-neutral-fade) var(--fact-progress-fill) 100%
   );
 }
 

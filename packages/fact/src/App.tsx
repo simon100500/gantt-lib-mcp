@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   Button,
-  CellAction,
   CellHeader,
   CellList,
   CellSimple,
@@ -126,6 +125,16 @@ function getWorkListTitle(preset: DayPreset, dateKey: string): string {
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getProgressRangeStyle(value: string): CSSProperties {
+  const percent = clampPercent(Number(value || 0));
+  const offset = 17 - percent * 0.34;
+  const offsetSign = offset >= 0 ? '+' : '-';
+
+  return {
+    '--fact-progress-fill': `calc(${percent}% ${offsetSign} ${Math.abs(offset).toFixed(2)}px)`,
+  } as CSSProperties;
 }
 
 export function App() {
@@ -701,11 +710,6 @@ export function App() {
               <Flex direction="column" gap={16} className="modal-body">
                 {sheetMode !== 'photo' && (
                   <>
-                    <Grid cols={2} gap={8} className="status-selector">
-                      <CellAction height="normal" mode={activeDraft.state === 'fact' ? 'primary' : 'custom'} onClick={() => setActiveState('fact')}>Выполнялась</CellAction>
-                      <CellAction height="normal" mode={activeDraft.state === 'done' ? 'primary' : 'custom'} onClick={() => setActiveState('done')}>Завершена</CellAction>
-                    </Grid>
-
                     <CellList mode="island" filled>
                       <CellSimple
                         as="label"
@@ -737,12 +741,18 @@ export function App() {
                             <Input
                               mode="secondary"
                               className="fact-progress-input"
+                              innerClassNames={{
+                                body: 'fact-progress-input-body',
+                                input: 'fact-progress-input-control',
+                                clearButton: 'fact-progress-clear',
+                              }}
                               placeholder="0"
                               name="fact-value"
                               aria-label="Значение факта в процентах"
                               autoComplete="off"
                               inputMode="decimal"
                               type="number"
+                              withClearButton
                               min="0"
                               max={100}
                               step={1}
@@ -769,7 +779,7 @@ export function App() {
                             step="5"
                             value={clampPercent(Number(activeDraft.value || 0))}
                             onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: event.target.value })}
-                            style={{ '--fact-progress-value': `${clampPercent(Number(activeDraft.value || 0))}%` } as CSSProperties}
+                            style={getProgressRangeStyle(activeDraft.value)}
                           />
                           <Flex justify="space-between" className="fact-progress-marks">
                             {[0, 25, 50, 75, 100].map((value) => (
