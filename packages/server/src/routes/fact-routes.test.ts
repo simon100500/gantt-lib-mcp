@@ -1,0 +1,49 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, it } from 'vitest';
+
+const factRoutesSource = readFileSync(resolve(process.cwd(), 'packages/server/src/routes/fact-routes.ts'), 'utf8');
+const indexSource = readFileSync(resolve(process.cwd(), 'packages/server/src/index.ts'), 'utf8');
+const schemaSource = readFileSync(resolve(process.cwd(), 'packages/runtime-core/prisma/schema.prisma'), 'utf8');
+
+describe('fact routes', () => {
+  it('registers dedicated fact API routes in server startup', () => {
+    assert.match(indexSource, /import \{ registerFactRoutes \} from '\.\/routes\/fact-routes\.js';/);
+    assert.match(indexSource, /await registerFactRoutes\(fastify\);/);
+  });
+
+  it('uses a write-scoped token model instead of ShareLink for fact access', () => {
+    assert.match(schemaSource, /model FactAccessToken \{/);
+    assert.match(schemaSource, /slug\s+String\s+@unique/);
+    assert.match(schemaSource, /includedTaskIds String\[\]\s+@default\(\[\]\)/);
+    assert.match(schemaSource, /revokedAt\s+DateTime\?/);
+    assert.match(schemaSource, /expiresAt\s+DateTime\?/);
+    assert.match(schemaSource, /lastUsedAt\s+DateTime\?/);
+    assert.match(factRoutesSource, /prisma\.factAccessToken\.findUnique/);
+    assert.doesNotMatch(factRoutesSource, /shareLink/i);
+  });
+
+  it('replaces a task date fact amount instead of incrementing it', () => {
+    assert.match(factRoutesSource, /taskProgressEntry\.upsert/);
+    assert.match(factRoutesSource, /update: \{ amount \}/);
+    assert.match(factRoutesSource, /deleteMany\(\{[\s\S]*entryDate,[\s\S]*\}\)/);
+    assert.doesNotMatch(factRoutesSource, /increment:/);
+  });
+
+  it('blocks parent tasks and tasks outside the token inclusion set', () => {
+    assert.match(factRoutesSource, /Fact can only be entered for leaf tasks/);
+    assert.match(factRoutesSource, /token\.includedTaskIds\.length > 0 && !token\.includedTaskIds\.includes/);
+    assert.match(factRoutesSource, /Task is not available for this token/);
+  });
+
+  it('persists the minimal day-close journal with task, date, state, reason, comment, token, and created time', () => {
+    assert.match(schemaSource, /model FactDayCloseEntry \{/);
+    assert.match(schemaSource, /state\s+FactDayCloseState/);
+    assert.match(schemaSource, /reason\s+String\?/);
+    assert.match(schemaSource, /comment\s+String\?/);
+    assert.match(schemaSource, /tokenId\s+String/);
+    assert.match(schemaSource, /createdAt DateTime\s+@default\(now\(\)\)/);
+    assert.match(factRoutesSource, /factDayCloseEntry\.upsert/);
+  });
+});

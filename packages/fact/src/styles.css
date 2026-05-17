@@ -1,0 +1,197 @@
+:root {
+  color: #15171a;
+  background: #f3f5f7;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #f3f5f7;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 14px 12px 104px;
+}
+
+.page {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: 0;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 2px 16px;
+}
+
+.date-input {
+  min-width: 132px;
+  height: 40px;
+  border: 1px solid #d8dde3;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fff;
+  color: #15171a;
+}
+
+.state-box {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.notice {
+  margin-bottom: 12px;
+  border: 1px solid #c7e2d5;
+  border-radius: 8px;
+  background: #ebf8f1;
+  color: #126237;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.notice--error {
+  border-color: #f0c6c6;
+  background: #fff0f0;
+  color: #a52222;
+}
+
+.task-group {
+  padding: 10px 2px 4px;
+  color: #67717e;
+}
+
+.task-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dfe4ea;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+}
+
+.task-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-card__meta {
+  margin-top: 4px;
+  color: #67717e;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.task-card__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.task-card__notes {
+  display: grid;
+  gap: 8px;
+}
+
+.fact-input {
+  display: grid;
+  gap: 6px;
+}
+
+.fact-input__label {
+  color: #4d5967;
+  font-size: 13px;
+}
+
+.status-chip {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  line-height: 1;
+  background: #edf1f5;
+  color: #46515f;
+}
+
+.status-chip--done {
+  background: #dcf5e7;
+  color: #106338;
+}
+
+.status-chip--not_worked {
+  background: #eef0f3;
+  color: #5e6875;
+}
+
+.status-chip--problem {
+  background: #fff0d8;
+  color: #8a4b00;
+}
+
+.status-chip--fact {
+  background: #e7f0ff;
+  color: #1959b8;
+}
+
+.bottom-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px max(14px, env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-right));
+  border-top: 1px solid #dfe4ea;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.bottom-sheet__count {
+  font-weight: 700;
+}
+
+.bottom-sheet__label {
+  color: #67717e;
+  font-size: 13px;
+}
+
+@media (min-width: 640px) {
+  .app-shell {
+    padding-top: 24px;
+  }
+
+  .bottom-sheet {
+    left: 50%;
+    width: min(720px, calc(100% - 24px));
+    transform: translateX(-50%);
+    border: 1px solid #dfe4ea;
+    border-bottom: 0;
+    border-radius: 12px 12px 0 0;
+  }
+}

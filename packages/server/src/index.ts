@@ -46,6 +46,7 @@ import { registerExcelImportRoutes } from './routes/excel-import-routes.js';
 import { registerExcelExportRoutes } from './routes/excel-export-routes.js';
 import { registerFeedbackRoutes } from './routes/feedback-routes.js';
 import { registerFinanceRoutes } from './routes/finance-routes.js';
+import { registerFactRoutes } from './routes/fact-routes.js';
 import { registerGrandSmetaImportRoutes } from './routes/grand-smeta-import-routes.js';
 import { registerGroupGanttRoutes } from './routes/group-gantt-routes.js';
 import { registerHistoryRoutes } from './routes/history-routes.js';
@@ -77,11 +78,29 @@ import {
 } from './generation-job-control.js';
 
 const fastify = Fastify({ logger: true });
+const factCorsOrigins = new Set(
+  (process.env.FACT_CORS_ORIGINS ?? 'https://fact.getgantt.ru')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
 const requireAiQueryLimit = requireTrackedLimit('ai_queries', {
   code: 'AI_LIMIT_REACHED',
   upgradeHint: 'Upgrade your plan to continue AI-assisted changes.',
 });
 await fastify.register(websocket);
+fastify.addHook('onRequest', async (req, reply) => {
+  const origin = req.headers.origin;
+  if (origin && factCorsOrigins.has(origin)) {
+    reply.header('Access-Control-Allow-Origin', origin);
+    reply.header('Vary', 'Origin');
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (req.method === 'OPTIONS') {
+    return reply.status(204).send();
+  }
+});
 await registerAuthRoutes(fastify);
 await registerAdminRoutes(fastify);
 await registerAdminApiRoutes(fastify);
@@ -93,6 +112,7 @@ await registerExcelImportRoutes(fastify);
 await registerExcelExportRoutes(fastify);
 await registerFeedbackRoutes(fastify);
 await registerFinanceRoutes(fastify);
+await registerFactRoutes(fastify);
 await registerGrandSmetaImportRoutes(fastify);
 await registerGroupGanttRoutes(fastify);
 await registerHistoryRoutes(fastify);

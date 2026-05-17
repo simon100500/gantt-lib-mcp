@@ -210,6 +210,13 @@ enum ProjectGroupInviteStatus {
   expired
 }
 
+enum FactDayCloseState {
+  fact
+  done
+  not_worked
+  problem
+}
+
 // Users table
 model User {
   id        String   @id @default(uuid())
@@ -235,6 +242,7 @@ model User {
   invitedGroupMembers ProjectGroupMember[] @relation("ProjectGroupMemberInviter")
   sentGroupInvites ProjectGroupInvite[] @relation("ProjectGroupInviteInviter")
   projectViewPreferences ProjectViewPreference[]
+  createdFactAccessTokens FactAccessToken[] @relation("FactAccessTokenCreatedByUser")
 
   @@map("users")
 }
@@ -343,6 +351,8 @@ model Project {
   fundingEvents   TaskFundingEvent[]
   progressEntries TaskProgressEntry[]
   planEntries     TaskPlanEntry[]
+  factAccessTokens FactAccessToken[]
+  factDayCloseEntries FactDayCloseEntry[]
   viewPreferences ProjectViewPreference[]
 
   @@map("projects")
@@ -551,6 +561,7 @@ model Task {
   fundingEvents  TaskFundingEvent[]
   progressEntries TaskProgressEntry[]
   planEntries     TaskPlanEntry[]
+  factDayCloseEntries FactDayCloseEntry[]
 
   @@map("tasks")
   @@index([projectId])
@@ -591,6 +602,50 @@ model TaskPlanEntry {
   @@unique([taskId, entryDate])
   @@index([projectId, taskId])
   @@index([projectId, entryDate])
+}
+
+model FactAccessToken {
+  id              String    @id @default(uuid())
+  slug            String    @unique
+  projectId       String    @map("project_id")
+  includedTaskIds String[]  @default([]) @map("included_task_ids")
+  label           String    @default("")
+  revokedAt       DateTime? @map("revoked_at")
+  expiresAt       DateTime? @map("expires_at")
+  createdByUserId String    @map("created_by_user_id")
+  lastUsedAt      DateTime? @map("last_used_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdByUser User    @relation("FactAccessTokenCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  dayCloseEntries FactDayCloseEntry[]
+
+  @@map("fact_access_tokens")
+  @@index([projectId])
+  @@index([projectId, revokedAt])
+  @@index([expiresAt])
+}
+
+model FactDayCloseEntry {
+  id        String            @id @default(uuid())
+  projectId String            @map("project_id")
+  taskId    String            @map("task_id")
+  date      DateTime
+  state     FactDayCloseState
+  reason    String?
+  comment   String?
+  tokenId   String            @map("token_id")
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  token   FactAccessToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@map("fact_day_close_entries")
+  @@unique([taskId, date, tokenId])
+  @@index([projectId, date])
+  @@index([tokenId])
 }
 
 model TaskFinanceSetting {
