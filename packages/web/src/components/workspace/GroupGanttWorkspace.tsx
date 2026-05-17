@@ -116,7 +116,6 @@ export function buildTasks(
       type: 'task',
       progress: project.progress,
       accepted: project.progress >= 100,
-      locked: true,
       sortOrder: 0,
       overviewDepth: 1,
     };
@@ -142,7 +141,6 @@ export function buildTasks(
           status: section.status,
           progress: section.progress,
           accepted: section.progress >= 100,
-          locked: true,
           sortOrder: Number(`${indexPrefix}${index + 1}`),
           overviewDepth: depth,
         };
