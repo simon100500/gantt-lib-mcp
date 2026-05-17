@@ -67,11 +67,19 @@ function toDateKey(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
+function currentDateKey(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeTodayKey(value?: unknown): string {
   if (typeof value === 'string' && parseIsoDateOnly(value)) {
     return value;
   }
-  return new Date().toISOString().slice(0, 10);
+  return currentDateKey();
 }
 
 function roundFactAmount(value: number): number {
@@ -180,6 +188,15 @@ function isTaskAvailableOnDate(task: { startDate: Date; endDate: Date }, dateKey
   const startKey = toDateKey(task.startDate);
   const endKey = toDateKey(task.endDate);
   return startKey <= dateKey && dateKey <= endKey;
+}
+
+function isTaskOverdueUnfinished(
+  task: { endDate: Date; progress: number | null; status: string | null },
+  dateKey: string,
+): boolean {
+  const endKey = toDateKey(task.endDate);
+  const status = normalizeStoredTaskStatus(task.status);
+  return endKey < dateKey && status !== 'done' && status !== 'closed' && (task.progress ?? 0) < 100;
 }
 
 async function recomputeTaskProgress(
@@ -566,8 +583,8 @@ export async function registerFactRoutes(fastify: FastifyInstance): Promise<void
         .filter((task) => (
           accessibleTaskIds.has(task.id)
           && (
-            isTaskAvailableOnDate(task, dateKey)
-            || planByTaskId.has(task.id)
+            planByTaskId.has(task.id)
+            || isTaskOverdueUnfinished(task, dateKey)
             || factByTaskId.has(task.id)
             || closeByTaskId.has(task.id)
           )

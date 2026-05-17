@@ -60,4 +60,16 @@ describe('fact routes', () => {
     assert.match(schemaSource, /createdAt DateTime\s+@default\(now\(\)\)/);
     assert.match(factRoutesSource, /factDayCloseEntry\.upsert/);
   });
+
+  it('builds the fact worklist from daily plan entries and overdue unfinished tasks, not every spanning gantt bar', () => {
+    assert.match(factRoutesSource, /planByTaskId\.has\(task\.id\)/);
+    assert.match(factRoutesSource, /isTaskOverdueUnfinished\(task, dateKey\)/);
+    assert.doesNotMatch(factRoutesSource, /isTaskAvailableOnDate\(task, dateKey\)/);
+  });
+
+  it('uses local current date for default fact date instead of UTC ISO day', () => {
+    assert.match(factRoutesSource, /function currentDateKey\(\): string \{/);
+    assert.match(factRoutesSource, /now\.getFullYear\(\)/);
+    assert.doesNotMatch(factRoutesSource, /return new Date\(\)\.toISOString\(\)\.slice\(0, 10\);/);
+  });
 });

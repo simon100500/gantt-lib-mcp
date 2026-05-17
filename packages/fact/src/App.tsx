@@ -3,7 +3,6 @@ import {
   Button,
   CellAction,
   CellHeader,
-  CellInput,
   CellList,
   CellSimple,
   Container,
@@ -11,9 +10,9 @@ import {
   Flex,
   Grid,
   IconButton,
+  Input,
   Panel,
   Spinner,
-  Switch,
   Textarea,
   ToolButton,
   Typography,
@@ -631,20 +630,23 @@ export function App() {
                             Процент
                           </CellAction>
                         </Grid>
-                        <CellInput
-                          height="compact"
-                          before={activeDraft.inputMode === 'percent' ? 'Значение, %' : activeTask.workUnit ? `Значение, ${activeTask.workUnit}` : 'Значение'}
-                          name="fact-value"
-                          aria-label={activeDraft.inputMode === 'percent' ? 'Значение факта в процентах' : 'Значение факта за день'}
-                          autoComplete="off"
-                          inputMode="decimal"
-                          type="number"
-                          min="0"
-                          max={activeDraft.inputMode === 'percent' ? 100 : undefined}
-                          step={activeDraft.inputMode === 'percent' ? 1 : 0.01}
-                          value={activeDraft.value}
-                          onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, value: event.target.value })}
-                        />
+                        <Container className="fact-value-input" fullWidth>
+                          <Input
+                            mode="secondary"
+                            placeholder={activeDraft.inputMode === 'percent' ? 'Значение, %' : activeTask.workUnit ? `Значение, ${activeTask.workUnit}` : 'Значение'}
+                            withClearButton
+                            name="fact-value"
+                            aria-label={activeDraft.inputMode === 'percent' ? 'Значение факта в процентах' : 'Значение факта за день'}
+                            autoComplete="off"
+                            inputMode="decimal"
+                            type="number"
+                            min="0"
+                            max={activeDraft.inputMode === 'percent' ? 100 : undefined}
+                            step={activeDraft.inputMode === 'percent' ? 1 : 0.01}
+                            value={activeDraft.value}
+                            onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, value: event.target.value })}
+                          />
+                        </Container>
                         <Flex wrap="wrap" gap={8} className="quick-progress">
                           {[0, 25, 50, 75, 100].map((value) => (
                             <Button
@@ -665,16 +667,6 @@ export function App() {
                         />
                       </CellList>
                     )}
-
-                    <CellList mode="island" header={<CellHeader titleStyle="normal">Ресурсы</CellHeader>}>
-                      <CellSimple
-                        height="normal"
-                        title={activeDraft.worked ? 'Работали' : 'Не работали'}
-                        subtitle={activeDraft.workTitle}
-                        after={<Switch checked={activeDraft.worked} onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, worked: event.target.checked, state: event.target.checked ? 'fact' : 'not_worked', value: event.target.checked ? activeDraft.value : '0' })} />}
-                      />
-                      <CellSimple height="compact" title="Работа" subtitle={activeDraft.workTitle} />
-                    </CellList>
 
                     {(activeDraft.state === 'not_worked' || activeDraft.state === 'problem') && (
                       <CellList mode="island" header={<CellHeader titleStyle="normal">Причина</CellHeader>}>
