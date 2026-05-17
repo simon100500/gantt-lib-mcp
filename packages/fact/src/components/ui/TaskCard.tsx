@@ -9,14 +9,13 @@ type Draft = {
   comment: string;
   worked: boolean;
   people: string;
-  team: string;
+  workTitle: string;
 };
 
 type TaskCardProps = {
   task: FactTask;
   draft: Draft;
-  location: string;
-  team: string;
+  summary: string;
   onOpenFact: (task: FactTask) => void;
   onOpenProblem: (task: FactTask) => void;
   onOpenPhoto: (task: FactTask) => void;
@@ -54,21 +53,14 @@ function formatDateRange(task: FactTask): string {
 export function TaskCard({
   task,
   draft,
-  location,
-  team,
+  summary,
   onOpenFact,
   onOpenProblem,
   onOpenPhoto,
   onMarkNotWorked,
 }: TaskCardProps) {
   if (!task.writable) {
-    return (
-      <CellList
-        mode="island"
-        className="section-list"
-        header={<CellHeader titleStyle="normal">{task.name}</CellHeader>}
-      />
-    );
+    return null;
   }
 
   const progress = Math.max(0, Math.min(100, Math.round(task.progress || 0)));
@@ -95,9 +87,9 @@ export function TaskCard({
       )}
     >
       <CellSimple
-        height="normal"
-        title={location}
-        subtitle={`${team} · ${formatDateRange(task)}`}
+        height="compact"
+        title={summary}
+        subtitle={formatDateRange(task)}
         after={(
           <Typography.Label variant="small-strong" className="progress-label">
             {progress}%

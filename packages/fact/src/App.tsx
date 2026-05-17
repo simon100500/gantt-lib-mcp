@@ -11,7 +11,6 @@ import {
   Flex,
   Grid,
   IconButton,
-  Input,
   Panel,
   Spinner,
   Switch,
@@ -30,12 +29,11 @@ type Draft = {
   comment: string;
   worked: boolean;
   people: string;
-  team: string;
+  workTitle: string;
 };
 
 type FreeProblem = {
   id: string;
-  location: string;
   reason: string;
   comment: string;
   status: 'open' | 'waiting' | 'resolved';
@@ -68,18 +66,6 @@ function formatShortRuDate(key: string): string {
   return shortDateFormatter.format(new Date(`${key}T00:00:00.000Z`));
 }
 
-function taskLocation(task: FactTask, depth: number): string {
-  if (!task.writable) {
-    return 'Объект';
-  }
-  const building = depth > 0 ? depth : 1;
-  return `Корпус ${building} · Секция ${Math.max(1, depth)} · Этаж уточняется`;
-}
-
-function taskTeam(task: FactTask): string {
-  return task.writable ? 'Бригада по плану' : 'Ответственные уточняются';
-}
-
 function createDraft(task: FactTask): Draft {
   const inputMode = task.closeInputMode ?? (task.workVolume && task.workVolume > 0 ? 'volume' : 'percent');
   const value = task.closeValue ?? (inputMode === 'volume' ? task.dayFact : task.progress);
@@ -91,7 +77,7 @@ function createDraft(task: FactTask): Draft {
     comment: task.closeComment ?? '',
     worked: task.closeState !== 'not_worked',
     people: '',
-    team: taskTeam(task),
+    workTitle: task.name,
   };
 }
 
@@ -110,8 +96,15 @@ function buildDepthMap(tasks: FactTask[]): Map<string, number> {
   return depthById;
 }
 
+function getSectionTitle(task: FactTask, tasks: FactTask[]): string | null {
+  if (!task.parentId) {
+    return null;
+  }
+  return tasks.find((item) => item.id === task.parentId)?.name ?? null;
+}
+
 function buildDayOptions(date: string) {
-  return [-3, -2, -1, 0, 1, 2, 3].map((offset) => {
+  return [-1, 0, 1].map((offset) => {
     const itemDate = new Date(`${date}T00:00:00.000Z`);
     itemDate.setUTCDate(itemDate.getUTCDate() + offset);
     const key = itemDate.toISOString().slice(0, 10);
@@ -131,7 +124,7 @@ export function App() {
   const [session, setSession] = useState<FactSession | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [freeProblems, setFreeProblems] = useState<FreeProblem[]>([]);
-  const [freeProblemDraft, setFreeProblemDraft] = useState({ location: '', reason: '', comment: '' });
+  const [freeProblemDraft, setFreeProblemDraft] = useState({ reason: '', comment: '' });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -210,7 +203,7 @@ export function App() {
 
   const openFreeProblem = () => {
     setActiveTaskId(null);
-    setFreeProblemDraft({ location: '', reason: '', comment: '' });
+    setFreeProblemDraft({ reason: '', comment: '' });
     setSheetMode('problem');
   };
 
@@ -286,7 +279,6 @@ export function App() {
     setFreeProblems((current) => [
       {
         id: `${Date.now()}`,
-        location: freeProblemDraft.location || 'Локация уточняется',
         reason: freeProblemDraft.reason || 'Другое',
         comment: freeProblemDraft.comment || 'Описание будет добавлено позже',
         status: 'open',
@@ -344,12 +336,24 @@ export function App() {
                     key={item.key}
                     mode={item.offset === 0 ? 'primary' : 'secondary'}
                     appearance={item.offset === 0 ? 'themed' : 'neutral'}
-                    size="small"
+                    size="medium"
                     onClick={() => setDate(item.key)}
                   >
                     {item.label} · {item.day}
                   </Button>
                 ))}
+                <Button mode="secondary" appearance="neutral" size="medium" className="date-picker-button" asChild>
+                  <label>
+                    Дата
+                    <input
+                      aria-label="Выбрать произвольную дату"
+                      name="custom-date"
+                      type="date"
+                      value={date}
+                      onChange={(event) => setDate(event.target.value)}
+                    />
+                  </label>
+                </Button>
               </Flex>
 
               <CellList mode="island" header={<CellHeader titleStyle="normal">Закрытие дня</CellHeader>}>
@@ -372,19 +376,33 @@ export function App() {
                     <Typography.Body variant="medium">Нет доступных работ на выбранный день.</Typography.Body>
                   </Container>
                 )}
-                {session?.tasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    location={taskLocation(task, depthById.get(task.id) ?? 0)}
-                    team={taskTeam(task)}
-                    draft={drafts[task.id] ?? createDraft(task)}
-                    onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
-                    onOpenProblem={(nextTask) => openTaskSheet(nextTask, 'problem')}
-                    onOpenPhoto={(nextTask) => openTaskSheet(nextTask, 'photo')}
-                    onMarkNotWorked={markNotWorked}
-                  />
-                ))}
+                {session?.tasks.map((task, index, allTasks) => {
+                  if (!task.writable) {
+                    return null;
+                  }
+                  const sectionTitle = getSectionTitle(task, allTasks);
+                  const previousWritableTask = allTasks.slice(0, index).reverse().find((item) => item.writable);
+                  const previousSectionTitle = previousWritableTask ? getSectionTitle(previousWritableTask, allTasks) : null;
+
+                  return (
+                    <Flex key={task.id} direction="column" gap={8}>
+                      {sectionTitle && sectionTitle !== previousSectionTitle && (
+                        <Typography.Headline variant="small-strong" className="task-section-title" asChild>
+                          <h2>{sectionTitle}</h2>
+                        </Typography.Headline>
+                      )}
+                      <TaskCard
+                        task={task}
+                        summary={task.name}
+                        draft={drafts[task.id] ?? createDraft(task)}
+                        onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
+                        onOpenProblem={(nextTask) => openTaskSheet(nextTask, 'problem')}
+                        onOpenPhoto={(nextTask) => openTaskSheet(nextTask, 'photo')}
+                        onMarkNotWorked={markNotWorked}
+                      />
+                    </Flex>
+                  );
+                })}
               </Flex>
             </>
           )}
@@ -403,7 +421,7 @@ export function App() {
                       key={task.id}
                       height="normal"
                       title={task.name}
-                      subtitle={task.writable ? `${taskLocation(task, depth)} · ${formatAmount(task.dayPlan, task.workUnit)}` : 'Раздел работ'}
+                      subtitle={task.writable ? `План: ${formatAmount(task.dayPlan, task.workUnit)}` : 'Раздел работ'}
                       after={<Counter value={task.writable ? 1 : writableTasks.filter((item) => item.parentId === task.id).length} rounded appearance="neutral" />}
                       className="tree-cell"
                       style={{ paddingLeft: depth * 12 }}
@@ -413,7 +431,7 @@ export function App() {
               </CellList>
               <CellList mode="island" header={<CellHeader titleStyle="normal">Завтра по плану</CellHeader>}>
                 {(writableTasks.slice(0, 3).length ? writableTasks.slice(0, 3) : []).map((task) => (
-                  <CellSimple key={task.id} height="compact" title={task.name} subtitle={taskLocation(task, depthById.get(task.id) ?? 0)} />
+                  <CellSimple key={task.id} height="compact" title={task.name} subtitle="Работа по плану" />
                 ))}
                 {writableTasks.length === 0 && <CellSimple height="compact" title="План на завтра появится после синхронизации" />}
               </CellList>
@@ -434,7 +452,7 @@ export function App() {
                       key={task.id}
                       height="normal"
                       title={task.name}
-                      subtitle={`${taskLocation(task, depthById.get(task.id) ?? 0)} · ${draft.reason || 'Причина не выбрана'}`}
+                      subtitle={draft.reason || 'Причина не выбрана'}
                       after={<Button mode="secondary" appearance="neutral" size="small" onClick={() => openTaskSheet(task, 'problem')}>Открыть</Button>}
                     />
                   );
@@ -444,7 +462,7 @@ export function App() {
                     key={problem.id}
                     height="normal"
                     title={problem.reason}
-                    subtitle={`${problem.location} · ${problem.comment}`}
+                    subtitle={problem.comment}
                     after={<Typography.Label variant="small-strong" className="text-pill">{problem.status === 'resolved' ? 'решено' : 'открыта'}</Typography.Label>}
                   />
                 ))}
@@ -469,7 +487,7 @@ export function App() {
                       key={task.id}
                       height="normal"
                       title={task.name}
-                      subtitle={`${draft.inputMode === 'percent' ? `${draft.value || 0}%` : `${draft.value || 0}${task.workUnit ? ` ${task.workUnit}` : ''}`} · ${draft.team} · Отправлено`}
+                      subtitle={`${draft.inputMode === 'percent' ? `${draft.value || 0}%` : `${draft.value || 0}${task.workUnit ? ` ${task.workUnit}` : ''}`} · ${draft.workTitle} · Отправлено`}
                       after={<Typography.Label variant="small-strong" className={draft.state === 'problem' ? 'text-pill text-pill--negative' : 'text-pill'}>{draft.state === 'problem' ? 'проблема' : 'факт'}</Typography.Label>}
                     />
                   );
@@ -517,7 +535,7 @@ export function App() {
                   <CellSimple
                     height="compact"
                     title={activeTask.name}
-                    subtitle={`${taskLocation(activeTask, depthById.get(activeTask.id) ?? 0)} · План ${formatAmount(activeTask.dayPlan, activeTask.workUnit)}`}
+                    subtitle={`План ${formatAmount(activeTask.dayPlan, activeTask.workUnit)}`}
                   />
                 </CellList>
 
@@ -588,7 +606,7 @@ export function App() {
                       <CellSimple
                         height="normal"
                         title={activeDraft.worked ? 'Работали' : 'Не работали'}
-                        subtitle={activeDraft.team}
+                        subtitle={activeDraft.workTitle}
                         after={<Switch checked={activeDraft.worked} onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, worked: event.target.checked, state: event.target.checked ? 'fact' : 'not_worked', value: event.target.checked ? activeDraft.value : '0' })} />}
                       />
                       <CellInput
@@ -604,7 +622,7 @@ export function App() {
                         placeholder="0"
                         onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, people: event.target.value })}
                       />
-                      <CellSimple height="compact" title="Фактическая бригада" subtitle={activeDraft.team} />
+                      <CellSimple height="compact" title="Работа" subtitle={activeDraft.workTitle} />
                     </CellList>
 
                     {(activeDraft.state === 'not_worked' || activeDraft.state === 'problem') && (
@@ -652,16 +670,6 @@ export function App() {
             {!activeTask && sheetMode === 'problem' && (
               <Flex direction="column" gap={16} className="modal-body">
                 <CellList mode="island" header={<CellHeader titleStyle="normal">Проблема без привязки</CellHeader>}>
-                  <Container className="input-wrap" fullWidth>
-                    <Input
-                      value={freeProblemDraft.location}
-                      placeholder="Локация…"
-                      aria-label="Локация проблемы"
-                      name="problem-location"
-                      autoComplete="off"
-                      onChange={(event) => setFreeProblemDraft((current) => ({ ...current, location: event.target.value }))}
-                    />
-                  </Container>
                   <Flex wrap="wrap" gap={8} className="reason-tags">
                     {reasonTags.map((reason) => (
                       <Button

@@ -24,6 +24,10 @@ textarea {
   font: inherit;
 }
 
+.app-shell button {
+  min-height: 44px;
+}
+
 .app-shell {
   width: 100%;
   height: 100vh;
@@ -80,9 +84,30 @@ textarea {
 }
 
 .day-switcher {
-  overflow-x: auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: visible;
   padding: 4px 16px 12px;
-  -webkit-overflow-scrolling: touch;
+}
+
+.day-switcher > * {
+  min-width: 0;
+}
+
+.date-picker-button {
+  position: relative;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
+.date-picker-button input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .section-header {
@@ -118,6 +143,11 @@ textarea {
 
 .section-list {
   opacity: 0.82;
+}
+
+.task-section-title {
+  margin: 8px 16px 0;
+  color: var(--text-secondary);
 }
 
 .work-card {
@@ -206,6 +236,10 @@ textarea {
   overflow: hidden;
 }
 
+.modal-header button {
+  min-width: 44px;
+}
+
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -245,6 +279,10 @@ textarea {
   gap: 2px;
   font-weight: 600;
   font-size: 12px;
+}
+
+.app-shell .nav-button {
+  min-height: 48px;
 }
 
 .nav-button--active {
