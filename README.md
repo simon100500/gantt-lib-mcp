@@ -56,7 +56,7 @@ Build and deploy the fact frontend to the `gantt-fact` CapRover app:
 npm run deploy:fact-caprover
 ```
 
-This command reads fact-specific deployment values from `packages/fact/.env`, not from the root `.env`. Start from `packages/fact/.env.example`.
+This command reads deployment values from the root `.env` and the fact frontend build value from `packages/fact/.env`. Start the fact app env from `packages/fact/.env.example`.
 
 By default it pushes:
 - `reg.volobuev.keenetic.pro/getgantt:latest`

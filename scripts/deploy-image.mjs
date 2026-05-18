@@ -9,7 +9,10 @@ const deployToCapRover = args.has('--deploy-caprover');
 const target = getArgValue(argv, '--target') || 'default';
 
 const targetConfig = getTargetConfig(target);
-loadDotEnv(targetConfig.envPath);
+loadDotEnv('.env');
+for (const envPath of targetConfig.extraEnvPaths) {
+  loadDotEnv(envPath);
+}
 
 const registry = getFirstEnv(targetConfig.registryEnvNames) || 'reg.volobuev.keenetic.pro';
 const imageName = getFirstEnv(targetConfig.imageEnvNames) || targetConfig.defaultImageName;
@@ -24,7 +27,6 @@ const shaTag = `${registry}/${imageName}:sha-${shortSha}`;
 
 console.log(`Building image ${latestTag}`);
 console.log(`Commit SHA: ${fullSha}`);
-console.log(`Environment file: ${targetConfig.envPath}`);
 
 for (const envName of targetConfig.requiredEnvNames) {
   requireEnv(envName, process.env[envName]);
@@ -163,7 +165,7 @@ function getTargetConfig(target) {
   if (target === 'fact') {
     return {
       dockerfilePath: 'Dockerfile.fact',
-      envPath: 'packages/fact/.env',
+      extraEnvPaths: ['packages/fact/.env'],
       defaultImageName: 'gantt-fact',
       imageEnvNames: ['FACT_DEPLOY_IMAGE', 'DEPLOY_IMAGE'],
       registryEnvNames: ['FACT_DEPLOY_REGISTRY', 'DEPLOY_REGISTRY'],
@@ -177,7 +179,7 @@ function getTargetConfig(target) {
 
   return {
     dockerfilePath: 'Dockerfile',
-    envPath: '.env',
+    extraEnvPaths: [],
     defaultImageName: 'getgantt',
     imageEnvNames: ['DEPLOY_IMAGE'],
     registryEnvNames: ['DEPLOY_REGISTRY'],

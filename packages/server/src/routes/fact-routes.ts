@@ -184,13 +184,26 @@ function collectAncestorIds(tasks: Array<{ id: string; parentId: string | null }
   return ancestors;
 }
 
+function isTaskUnfinished(task: { progress: number | null; status: string | null }): boolean {
+  const status = normalizeStoredTaskStatus(task.status);
+  return status !== 'done' && status !== 'closed' && (task.progress ?? 0) < 100;
+}
+
+function isTaskScheduledOnDate(
+  task: { startDate: Date; endDate: Date; progress: number | null; status: string | null },
+  dateKey: string,
+): boolean {
+  const startKey = toDateKey(task.startDate);
+  const endKey = toDateKey(task.endDate);
+  return startKey <= dateKey && dateKey <= endKey && isTaskUnfinished(task);
+}
+
 function isTaskOverdueUnfinished(
   task: { endDate: Date; progress: number | null; status: string | null },
   dateKey: string,
 ): boolean {
   const endKey = toDateKey(task.endDate);
-  const status = normalizeStoredTaskStatus(task.status);
-  return endKey < dateKey && status !== 'done' && status !== 'closed' && (task.progress ?? 0) < 100;
+  return endKey < dateKey && isTaskUnfinished(task);
 }
 
 async function recomputeTaskProgress(
@@ -578,6 +591,7 @@ export async function registerFactRoutes(fastify: FastifyInstance): Promise<void
           accessibleTaskIds.has(task.id)
           && (
             planByTaskId.has(task.id)
+            || isTaskScheduledOnDate(task, dateKey)
             || isTaskOverdueUnfinished(task, dateKey)
             || factByTaskId.has(task.id)
             || closeByTaskId.has(task.id)

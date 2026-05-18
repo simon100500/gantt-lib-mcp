@@ -61,10 +61,10 @@ describe('fact routes', () => {
     assert.match(factRoutesSource, /factDayCloseEntry\.upsert/);
   });
 
-  it('builds the fact worklist from daily plan entries and overdue unfinished tasks, not every spanning gantt bar', () => {
+  it('builds the fact worklist from daily plan entries, current schedule spans, and overdue unfinished tasks', () => {
     assert.match(factRoutesSource, /planByTaskId\.has\(task\.id\)/);
+    assert.match(factRoutesSource, /isTaskScheduledOnDate\(task, dateKey\)/);
     assert.match(factRoutesSource, /isTaskOverdueUnfinished\(task, dateKey\)/);
-    assert.doesNotMatch(factRoutesSource, /isTaskAvailableOnDate\(task, dateKey\)/);
   });
 
   it('uses local current date for default fact date instead of UTC ISO day', () => {
