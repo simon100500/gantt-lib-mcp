@@ -89,14 +89,15 @@ function getPlannedProgressByDate(task: FactTask, dateKey: string): number {
   return Math.max(0, Math.min(100, Math.round((elapsedDays / totalDays) * 100)));
 }
 
-function formatPlanSubtitle(task: FactTask, dateKey: string) {
+function formatPlanSubtitle(task: FactTask, dateKey: string, allowOverdueHighlight: boolean) {
   const plannedProgress = getPlannedProgressByDate(task, dateKey);
   const deadline = task.endDate ? formatDeadlineLabel(task.endDate) : { text: 'дата не задана', isOverdue: false };
+  const highlightDeadline = allowOverdueHighlight && deadline.isOverdue;
 
   return (
     <Fragment>
       <span>{`План ${plannedProgress}% · `}</span>
-      <span className={deadline.isOverdue ? 'task-card-deadline task-card-deadline--overdue' : 'task-card-deadline'}>{`⚑ ${deadline.text}`}</span>
+      <span className={highlightDeadline ? 'task-card-deadline task-card-deadline--overdue' : 'task-card-deadline'}>{`⚑ ${deadline.text}`}</span>
     </Fragment>
   );
 }
@@ -127,8 +128,12 @@ export function TaskCard({
   const hasProblemText = Boolean(draft.reason.trim() || draft.comment.trim());
   const isMarked = draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || Boolean(draft.value.trim());
   const isProblem = draft.state === 'problem' || draft.state === 'not_worked' || hasProblemText;
-  const subtitle = isProblem ? formatProblemSubtitle(draft, formatPlanSubtitle(task, dateKey)) : formatPlanSubtitle(task, dateKey);
-  const counterStyle = isProblem ? problemCounterStyle : isMarked ? markedCounterStyle : undefined;
+  const draftProgress = Math.max(0, Math.min(100, Math.round(Number(draft.value || 0) || 0)));
+  const isCompleted = !isProblem && isMarked && (draft.state === 'done' || draftProgress >= 100 || progress >= 100);
+  const subtitle = isProblem
+    ? formatProblemSubtitle(draft, formatPlanSubtitle(task, dateKey, false))
+    : formatPlanSubtitle(task, dateKey, !isCompleted);
+  const counterStyle = isProblem ? problemCounterStyle : isCompleted ? markedCounterStyle : undefined;
 
   return (
     <CellSimple
@@ -138,7 +143,7 @@ export function TaskCard({
       after={
         <Counter
           value={progress}
-          appearance={isProblem || isMarked ? (isProblem ? 'negative' : 'themed') : 'neutral'}
+          appearance={isProblem ? 'negative' : isMarked ? 'themed' : 'neutral'}
           mode={isProblem || isMarked ? 'filled' : 'inverse'}
           muted={!isProblem && !isMarked}
           className="percent-counter"
