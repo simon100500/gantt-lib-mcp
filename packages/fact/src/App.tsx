@@ -17,7 +17,7 @@ import {
   ToolButton,
   Typography,
 } from '@maxhub/max-ui';
-import { Calendar, Folder, Handshake, House } from 'lucide-react';
+import { ArrowDownToDot, Calendar, Check, Folder, Handshake, House } from 'lucide-react';
 import { closeFactDay, loadFactSession, resetFactTaskMark, saveFactTaskMark, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
 import { readLaunchToken, todayKey } from './session/token';
 import { TaskCard } from './components/ui/TaskCard';
@@ -475,6 +475,8 @@ export function App() {
   const activeProgressStep = activeDraft?.inputMode === 'volume'
     ? getVolumeStep(activeTaskTotalVolume)
     : 5;
+  const activePlannedProgress = activeTask ? getPlannedProgressByDate(activeTask, date) : 0;
+  const isActiveDraftAtPlannedProgress = activeDraftPercent >= activePlannedProgress;
   const activeProgressMarks = activeDraft?.inputMode === 'volume' && activeTaskTotalVolume
     ? [0, 25, 50, 75, 100].map((value) => ({
       value: getVolumeFromPercent(value, activeTaskTotalVolume),
@@ -1290,7 +1292,7 @@ export function App() {
                               mode="secondary"
                               appearance="neutral"
                               size="medium"
-                              stretched
+                              className="fact-progress-step-button"
                               onClick={() => (
                                 activeDraft.inputMode === 'volume'
                                   ? updateVolumeDraft(activeTask, activeDraft, activeDraftVolume - activeProgressStep, true)
@@ -1305,6 +1307,23 @@ export function App() {
                               appearance="neutral"
                               size="medium"
                               stretched
+                              onClick={() => updatePercentDraft(activeTask.id, activeDraft, activePlannedProgress, true)}
+                              aria-label={`Установить плановый процент ${activePlannedProgress}`}
+                            >
+                              <span className="fact-progress-plan-button-content">
+                                {isActiveDraftAtPlannedProgress ? (
+                                  <Check className="fact-progress-plan-icon fact-progress-plan-icon--done" size={18} strokeWidth={2.4} aria-hidden="true" />
+                                ) : (
+                                  <ArrowDownToDot className="fact-progress-plan-icon" size={18} strokeWidth={2} aria-hidden="true" />
+                                )}
+                                <span>{`${activePlannedProgress}%`}</span>
+                              </span>
+                            </Button>
+                            <Button
+                              mode="secondary"
+                              appearance="neutral"
+                              size="medium"
+                              className="fact-progress-step-button"
                               onClick={() => (
                                 activeDraft.inputMode === 'volume'
                                   ? updateVolumeDraft(activeTask, activeDraft, activeDraftVolume + activeProgressStep, true)

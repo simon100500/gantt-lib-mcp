@@ -625,6 +625,23 @@ textarea {
   min-width: 0;
 }
 
+.fact-progress-step-button {
+  flex: 0 0 72px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.fact-progress-plan-button-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transform: translateY(1px);
+}
+
+.fact-progress-plan-icon--done {
+  color: var(--text-positive);
+}
+
 .fact-progress-input {
   flex: 1 1 auto;
   min-width: 0;
