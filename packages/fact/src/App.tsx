@@ -477,15 +477,16 @@ export function App() {
     : 5;
   const activePlannedProgress = activeTask ? getPlannedProgressByDate(activeTask, date) : 0;
   const isActiveDraftAtPlannedProgress = activeDraftPercent >= activePlannedProgress;
-  const activeProgressMarks = activeDraft?.inputMode === 'volume' && activeTaskTotalVolume
+  const percentProgressMarks = [0, 25, 50, 75, 100].map((value) => ({
+    value,
+    label: value === 0 ? '0%' : `${value}`,
+  }));
+  const volumeProgressMarks = activeTaskTotalVolume
     ? [0, 25, 50, 75, 100].map((value) => ({
       value: getVolumeFromPercent(value, activeTaskTotalVolume),
       label: value === 0 ? `0 ${activeTask?.workUnit ?? ''}`.trim() : formatVolumeValue(getVolumeFromPercent(value, activeTaskTotalVolume)),
     }))
-    : [0, 25, 50, 75, 100].map((value) => ({
-      value,
-      label: value === 0 ? '0%' : `${value}`,
-    }));
+    : [];
 
   const renderTaskSections = (sections: TaskHierarchySection[], options: { keyPrefix: string; hideOnPlanSwipe: boolean }) => {
     let previousSectionTitle: string | null = null;
@@ -1256,6 +1257,20 @@ export function App() {
                               )}
                             />
                           </Grid>
+                          {volumeProgressMarks.length > 0 && (
+                            <Flex justify="space-between" className="fact-progress-marks fact-progress-marks--top">
+                              {volumeProgressMarks.map((mark) => (
+                                <button
+                                  key={`volume-${mark.value}`}
+                                  className="fact-progress-mark"
+                                  type="button"
+                                  onClick={() => updateVolumeDraft(activeTask, activeDraft, mark.value, true)}
+                                >
+                                  {mark.label}
+                                </button>
+                              ))}
+                            </Flex>
+                          )}
                           <input
                             className="fact-progress-range"
                             aria-label={activeDraft.inputMode === 'volume' ? 'Объем выполнения работы' : 'Процент выполнения работы'}
@@ -1272,16 +1287,12 @@ export function App() {
                             style={getProgressRangeStyle(String(activeDraftPercent))}
                           />
                           <Flex justify="space-between" className="fact-progress-marks">
-                            {activeProgressMarks.map((mark) => (
+                            {percentProgressMarks.map((mark) => (
                               <button
-                                key={`${activeDraft.inputMode}-${mark.value}`}
+                                key={`percent-${mark.value}`}
                                 className="fact-progress-mark"
                                 type="button"
-                                onClick={() => (
-                                  activeDraft.inputMode === 'volume'
-                                    ? updateVolumeDraft(activeTask, activeDraft, mark.value, true)
-                                    : updatePercentDraft(activeTask.id, activeDraft, mark.value, true)
-                                )}
+                                onClick={() => updatePercentDraft(activeTask.id, activeDraft, mark.value, true)}
                               >
                                 {mark.label}
                               </button>

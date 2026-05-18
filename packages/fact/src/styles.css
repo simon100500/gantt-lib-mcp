@@ -605,6 +605,10 @@ textarea {
   margin-bottom: 2px;
 }
 
+.fact-progress-input-grid:not(.fact-progress-input-grid--labels) {
+  margin-bottom: 14px;
+}
+
 .fact-progress-row {
   width: 100%;
 }
@@ -722,6 +726,13 @@ textarea {
 .fact-progress-marks {
   width: 100%;
   color: var(--text-secondary);
+  margin-top: 6px;
+  gap: 0;
+}
+
+.fact-progress-marks--top {
+  margin-bottom: -12px;
+  margin-top: 0;
 }
 
 .fact-progress-mark {
@@ -733,10 +744,20 @@ textarea {
   font-size: 16px;
   line-height: 22px;
   padding: 0;
+  flex: 1 1 0;
+  text-align: center;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+.fact-progress-mark:first-child {
+  text-align: left;
+}
+
+.fact-progress-mark:last-child {
+  text-align: right;
 }
 
 .modal-actions {
