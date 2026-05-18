@@ -17,6 +17,7 @@ import {
   ToolButton,
   Typography,
 } from '@maxhub/max-ui';
+import { Calendar } from 'lucide-react';
 import { closeFactDay, loadFactSession, saveFactTaskMark, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
 import { readLaunchToken, todayKey } from './session/token';
 import { TaskCard } from './components/ui/TaskCard';
@@ -87,6 +88,13 @@ function formatHeaderDate(key: string, preset: DayPreset): string {
   return base;
 }
 
+function getDateButtonIcon(dateKey: string, preset: DayPreset) {
+  if (preset !== 'custom') {
+    return <Calendar size={16} strokeWidth={2} aria-hidden="true" />;
+  }
+  return <span className="date-tool-icon">{formatWeekdayRuDate(dateKey)}</span>;
+}
+
 function createDraft(task: FactTask): Draft {
   const inputMode = task.closeInputMode ?? (task.workVolume && task.workVolume > 0 ? 'volume' : 'percent');
   const value = task.closeValue ?? (inputMode === 'volume' ? task.dayFact : task.progress);
@@ -128,6 +136,25 @@ function getPresetDateKey(preset: Exclude<DayPreset, 'custom'>, baseDate: string
   const itemDate = new Date(`${baseDate}T00:00:00.000Z`);
   itemDate.setUTCDate(itemDate.getUTCDate() + offsetByPreset[preset]);
   return itemDate.toISOString().slice(0, 10);
+}
+
+function getRelativeDayLabel(dateKey: string, baseDate: string): string {
+  const diffDays = Math.round(
+    (new Date(`${dateKey}T00:00:00.000Z`).getTime() - new Date(`${baseDate}T00:00:00.000Z`).getTime()) / 86_400_000,
+  );
+
+  if (diffDays === 0) {
+    return '0 дней';
+  }
+
+  const absDays = Math.abs(diffDays);
+  const suffix = absDays % 10 === 1 && absDays % 100 !== 11
+    ? 'день'
+    : absDays % 10 >= 2 && absDays % 10 <= 4 && (absDays % 100 < 12 || absDays % 100 > 14)
+      ? 'дня'
+      : 'дней';
+
+  return `${diffDays > 0 ? '+' : '-'}${absDays} ${suffix}`;
 }
 
 function clampPercent(value: number): number {
@@ -457,7 +484,7 @@ export function App() {
             <Flex direction="column" className="header-title">
               <Typography.Label variant="large-strong">{session?.project.name ?? 'Объект'}</Typography.Label>
             </Flex>
-            <Typography.Label variant="small-strong" className="date-pill">{formatHeaderDate(date, activeDayPreset)}</Typography.Label>
+            <Typography.Label variant="small-strong" className="header-date-text">{formatHeaderDate(date, activeDayPreset)}</Typography.Label>
           </Flex>
         </Container>
 
@@ -482,8 +509,9 @@ export function App() {
                 ))}
                 <ToolButton
                   appearance={activeDayPreset === 'custom' ? 'default' : 'secondary'}
-                  className="date-picker-button"
-                  icon={<span className="date-tool-icon">{formatWeekdayRuDate(date)}</span>}
+                  className={`date-picker-button ${activeDayPreset === 'custom' ? '' : 'date-picker-button--icon-only'}`.trim()}
+                  icon={getDateButtonIcon(date, activeDayPreset)}
+                  aria-label="Выбрать произвольную дату"
                   onClick={() => {
                     if (typeof dateInputRef.current?.showPicker === 'function') {
                       dateInputRef.current.showPicker();
@@ -492,7 +520,7 @@ export function App() {
                     }
                   }}
                 >
-                  Дата
+                  {activeDayPreset === 'custom' ? getRelativeDayLabel(date, baseToday) : undefined}
                 </ToolButton>
                 <input
                   ref={dateInputRef}
@@ -502,7 +530,13 @@ export function App() {
                   type="date"
                   value={date}
                   onChange={(event) => {
-                    setDate(event.target.value);
+                    const nextDate = event.target.value;
+                    if (!nextDate) {
+                      setDate(baseToday);
+                      setActiveDayPreset('today');
+                      return;
+                    }
+                    setDate(nextDate);
                     setActiveDayPreset('custom');
                   }}
                 />
