@@ -156,6 +156,37 @@ textarea {
   min-height: 180px;
 }
 
+.empty-state {
+  width: 100%;
+  min-height: 320px;
+  padding: 44px 20px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--icon-tertiary, var(--text-secondary));
+}
+
+.empty-state-lucide-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--icon-tertiary, var(--text-secondary));
+}
+
+.empty-state-icon :where(path, polyline) {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-miterlimit: 10;
+}
+
 .brand-lockup {
   color: var(--text-primary);
 }

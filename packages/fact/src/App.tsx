@@ -17,7 +17,7 @@ import {
   ToolButton,
   Typography,
 } from '@maxhub/max-ui';
-import { Calendar, House } from 'lucide-react';
+import { Calendar, Handshake, House } from 'lucide-react';
 import { closeFactDay, loadFactSession, resetFactTaskMark, saveFactTaskMark, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
 import { readLaunchToken, todayKey } from './session/token';
 import { TaskCard } from './components/ui/TaskCard';
@@ -95,6 +95,19 @@ function getDateButtonIcon(dateKey: string, preset: DayPreset) {
     return <Calendar size={16} strokeWidth={2} aria-hidden="true" />;
   }
   return <span className="date-tool-icon">{formatWeekdayRuDate(dateKey)}</span>;
+}
+
+function NoWorkIcon() {
+  return (
+    <svg className="empty-state-icon" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M8.4 17c0.7 0.6 1.6 1 2.6 1s1.9-0.4 2.6-1" />
+      <path d="M18.4 17c0.7 0.6 1.6 1 2.6 1s1.9-0.4 2.6-1" />
+      <path d="M16 20c-1.7 0-3 1.3-3 3h6c0-1.7-1.3-3-3-3z" />
+      <path d="M21 4c-1.5-0.6-3.2-1-5-1C8.8 3 3 8.8 3 16s5.8 13 13 13 13-5.8 13-13c0-1.4-0.2-2.7-0.6-4" />
+      <polyline points="20 9 23 9 20 12 23 12" />
+      <polyline points="25 4 28.8 4 25.2 8 29 8" />
+    </svg>
+  );
 }
 
 function createDraft(task: FactTask): Draft {
@@ -493,18 +506,18 @@ export function App() {
     setDrafts((current) => ({ ...current, [task.id]: resetDraft }));
     setSession((current) => current
       ? {
-          ...current,
-          tasks: current.tasks.map((item) => item.id === task.id
-            ? {
-                ...item,
-                closeState: null,
-                closeInputMode: null,
-                closeValue: null,
-                closeReason: null,
-                closeComment: null,
-              }
-            : item),
-        }
+        ...current,
+        tasks: current.tasks.map((item) => item.id === task.id
+          ? {
+            ...item,
+            closeState: null,
+            closeInputMode: null,
+            closeValue: null,
+            closeReason: null,
+            closeComment: null,
+          }
+          : item),
+      }
       : current);
     setTaskPending(task.id, true);
     setError(null);
@@ -569,19 +582,19 @@ export function App() {
     setDrafts((current) => ({ ...current, [task.id]: optimisticDraft }));
     setSession((current) => current
       ? {
-          ...current,
-          tasks: current.tasks.map((item) => item.id === task.id
-            ? {
-                ...item,
-                closeState: plannedState,
-                closeInputMode: 'percent',
-                closeValue: plannedProgress,
-                closeReason: null,
-                closeComment: null,
-                dayFactUpdatedAt: new Date().toISOString(),
-              }
-            : item),
-        }
+        ...current,
+        tasks: current.tasks.map((item) => item.id === task.id
+          ? {
+            ...item,
+            closeState: plannedState,
+            closeInputMode: 'percent',
+            closeValue: plannedProgress,
+            closeReason: null,
+            closeComment: null,
+            dayFactUpdatedAt: new Date().toISOString(),
+          }
+          : item),
+      }
       : current);
     setTaskPending(task.id, true);
     setError(null);
@@ -636,22 +649,22 @@ export function App() {
     }));
     setSession((current) => current
       ? {
-          ...current,
-          tasks: current.tasks.map((item) => {
-            const mark = marks.find((nextMark) => nextMark.task.id === item.id);
-            return mark
-              ? {
-                  ...item,
-                  closeState: mark.plannedState,
-                  closeInputMode: 'percent',
-                  closeValue: mark.plannedProgress,
-                  closeReason: null,
-                  closeComment: null,
-                  dayFactUpdatedAt: new Date().toISOString(),
-                }
-              : item;
-          }),
-        }
+        ...current,
+        tasks: current.tasks.map((item) => {
+          const mark = marks.find((nextMark) => nextMark.task.id === item.id);
+          return mark
+            ? {
+              ...item,
+              closeState: mark.plannedState,
+              closeInputMode: 'percent',
+              closeValue: mark.plannedProgress,
+              closeReason: null,
+              closeComment: null,
+              dayFactUpdatedAt: new Date().toISOString(),
+            }
+            : item;
+        }),
+      }
       : current);
     setPendingTaskIds((current) => {
       const next = new Set(current);
@@ -821,13 +834,15 @@ export function App() {
 
               <Flex direction="column" gap={10}>
                 {session?.tasks.length === 0 && (
-                  <Container className="state-box state-box--compact">
-                    <Typography.Body variant="medium">Нет доступных работ на выбранный день.</Typography.Body>
+                  <Container className="state-box state-box--compact empty-state">
+                    <NoWorkIcon />
+                    <Typography.Headline variant="small-strong">Работ в этот день нет</Typography.Headline>
                   </Container>
                 )}
                 {session?.tasks.length !== 0 && visibleTaskSections.length === 0 && (
-                  <Container className="state-box state-box--compact">
-                    <Typography.Body variant="medium">Все работы уже отмечены.</Typography.Body>
+                  <Container className="state-box state-box--compact empty-state">
+                    <Handshake className="empty-state-lucide-icon" size={56} strokeWidth={1.8} aria-hidden="true" />
+                    <Typography.Headline variant="small-strong">Все работы отмечены</Typography.Headline>
                   </Container>
                 )}
                 {visibleTaskSections.map((section, sectionIndex) => {
@@ -1202,7 +1217,7 @@ export function App() {
                       </Button>
                     )}
                     <Button mode="primary" size="large" stretched loading={submitting} disabled={submitting} onClick={saveActiveTaskMark}>
-                    Сохранить отметку
+                      Сохранить отметку
                     </Button>
                   </Flex>
                 </Container>
