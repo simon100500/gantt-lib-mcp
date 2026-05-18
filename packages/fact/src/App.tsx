@@ -57,6 +57,8 @@ const navItems: Array<{ id: Tab; label: string }> = [
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const shortDateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' });
+const weekdayDateFormatter = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit' });
+const weekdayFormatter = new Intl.DateTimeFormat('ru-RU', { weekday: 'short' });
 const TypographyHeadline = Typography.Headline;
 
 function formatRuDate(key: string): string {
@@ -65,6 +67,24 @@ function formatRuDate(key: string): string {
 
 function formatShortRuDate(key: string): string {
   return shortDateFormatter.format(new Date(`${key}T00:00:00.000Z`));
+}
+
+function formatWeekdayRu(key: string): string {
+  const formatted = weekdayFormatter.format(new Date(`${key}T00:00:00.000Z`));
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+function formatWeekdayRuDate(key: string): string {
+  const formatted = weekdayDateFormatter.format(new Date(`${key}T00:00:00.000Z`));
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+function formatHeaderDate(key: string, preset: DayPreset): string {
+  const base = `${formatShortRuDate(key)}, ${formatWeekdayRu(key)}`;
+  if (preset === 'today') return `Сегодня, ${base}`;
+  if (preset === 'yesterday') return `Вчера, ${base}`;
+  if (preset === 'tomorrow') return `Завтра, ${base}`;
+  return base;
 }
 
 function createDraft(task: FactTask): Draft {
@@ -96,7 +116,7 @@ const dayOptions: Array<{ key: Exclude<DayPreset, 'custom'>; label: string }> = 
 ];
 
 function getPresetDateLabel(preset: Exclude<DayPreset, 'custom'>, baseDate: string): string {
-  return formatShortRuDate(getPresetDateKey(preset, baseDate));
+  return formatWeekdayRuDate(getPresetDateKey(preset, baseDate));
 }
 
 function getPresetDateKey(preset: Exclude<DayPreset, 'custom'>, baseDate: string): string {
@@ -437,7 +457,7 @@ export function App() {
             <Flex direction="column" className="header-title">
               <Typography.Label variant="large-strong">{session?.project.name ?? 'Объект'}</Typography.Label>
             </Flex>
-            <Typography.Label variant="small-strong" className="date-pill">{formatRuDate(date)}</Typography.Label>
+            <Typography.Label variant="small-strong" className="date-pill">{formatHeaderDate(date, activeDayPreset)}</Typography.Label>
           </Flex>
         </Container>
 
@@ -463,7 +483,7 @@ export function App() {
                 <ToolButton
                   appearance={activeDayPreset === 'custom' ? 'default' : 'secondary'}
                   className="date-picker-button"
-                  icon={<span className="date-tool-icon">{formatShortRuDate(date)}</span>}
+                  icon={<span className="date-tool-icon">{formatWeekdayRuDate(date)}</span>}
                   onClick={() => {
                     if (typeof dateInputRef.current?.showPicker === 'function') {
                       dateInputRef.current.showPicker();
