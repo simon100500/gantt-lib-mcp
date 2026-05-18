@@ -50,6 +50,12 @@ Build, push, and immediately deploy to CapRover using values from `.env`:
 npm run deploy:caprover
 ```
 
+Build and deploy the fact frontend to the `gantt-fact` CapRover app:
+
+```bash
+npm run deploy:fact-caprover
+```
+
 By default it pushes:
 - `reg.volobuev.keenetic.pro/getgantt:latest`
 - `reg.volobuev.keenetic.pro/getgantt:sha-<git-sha>`
@@ -59,6 +65,14 @@ You can override the target with environment variables:
 ```bash
 DEPLOY_REGISTRY=reg.example.com DEPLOY_IMAGE=myapp npm run deploy:image
 ```
+
+For the fact frontend, the script also supports:
+
+```bash
+FACT_DEPLOY_REGISTRY=reg.example.com FACT_DEPLOY_IMAGE=gantt-fact FACT_CAPROVER_APP_NAME=gantt-fact npm run deploy:fact-caprover
+```
+
+For `deploy:fact-caprover`, `FACT_CAPROVER_APP_NAME` and `FACT_CAPROVER_APP_TOKEN` are required explicitly. There is no fallback to `CAPROVER_APP_NAME` or `CAPROVER_APP_TOKEN`.
 
 PowerShell wrapper:
 
