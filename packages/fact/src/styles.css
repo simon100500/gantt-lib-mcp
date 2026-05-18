@@ -210,6 +210,11 @@ textarea {
   -webkit-tap-highlight-color: transparent;
 }
 
+.task-card-swipe--dismissing {
+  pointer-events: none;
+  animation: taskCardDismiss 260ms ease forwards;
+}
+
 .task-card-swipe-action {
   position: absolute;
   inset: 0;
@@ -298,6 +303,21 @@ textarea {
 
 .percent-counter::after {
   content: "%";
+}
+
+.percent-counter-skeleton {
+  flex: 0 0 auto;
+  width: 54px;
+  height: 22px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--background-accent-neutral-fade) 0%,
+    color-mix(in srgb, var(--background-accent-neutral-fade) 55%, var(--background-surface-card)) 46%,
+    var(--background-accent-neutral-fade) 100%
+  );
+  background-size: 220% 100%;
+  animation: percentCounterSkeleton 1s ease-in-out infinite;
 }
 
 .task-card-subtitle--problem {
@@ -677,6 +697,28 @@ textarea {
   }
   to {
     opacity: 0;
+  }
+}
+
+@keyframes taskCardDismiss {
+  from {
+    max-height: 96px;
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes percentCounterSkeleton {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
   }
 }
 

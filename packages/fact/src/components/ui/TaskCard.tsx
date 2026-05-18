@@ -1,5 +1,5 @@
 import { CellSimple, Counter } from '@maxhub/max-ui';
-import { Fragment, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { FactMarkState, FactTask } from '../../api/factApi';
 import { getPlannedProgressByDate } from '../../utils/plannedProgress';
 
@@ -19,9 +19,11 @@ type TaskCardProps = {
   task: FactTask;
   draft: Draft;
   dateKey: string;
+  hideOnPlanSwipe: boolean;
+  swipeDisabled: boolean;
   onOpenFact: (task: FactTask) => void;
-  onSwipePlan: (task: FactTask) => void | Promise<void>;
-  onSwipeReset: (task: FactTask) => void | Promise<void>;
+  onSwipePlan: (task: FactTask) => boolean | Promise<boolean>;
+  onSwipeReset: (task: FactTask) => boolean | Promise<boolean>;
 };
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -34,6 +36,7 @@ const problemCounterStyle: CSSProperties = {
   color: 'var(--text-contrast-static)',
   backgroundColor: '#b4232f',
 };
+const DISMISS_ANIMATION_MS = 260;
 
 function getDateKeyIndex(dateKey: string): number {
   return Math.floor(new Date(`${dateKey}T00:00:00.000Z`).getTime() / 86_400_000);
@@ -60,7 +63,7 @@ function formatDeadlineLabel(dateKey: string): { text: string; isOverdue: boolea
 
   if (overdueDays > 0) {
     return {
-      text: `${baseDate} (-${overdueDays} д.)`,
+      text: `${baseDate} (+${overdueDays} д.)`,
       isOverdue: true,
     };
   }
@@ -100,6 +103,8 @@ export function TaskCard({
   task,
   draft,
   dateKey,
+  hideOnPlanSwipe,
+  swipeDisabled,
   onOpenFact,
   onSwipePlan,
   onSwipeReset,
@@ -109,6 +114,7 @@ export function TaskCard({
   const swipeOffsetRef = useRef(0);
   const suppressClickRef = useRef(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isDismissing, setIsDismissing] = useState(false);
 
   if (!task.writable) {
     return null;
@@ -126,6 +132,10 @@ export function TaskCard({
     : formatPlanSubtitle(task, dateKey, !isCompleted);
   const counterStyle = isProblem ? problemCounterStyle : isCompleted ? markedCounterStyle : undefined;
 
+  useEffect(() => {
+    setIsDismissing(false);
+  }, [hasExplicitMark]);
+
   const resetSwipe = () => {
     pointerStartRef.current = null;
     swipeModeRef.current = null;
@@ -139,6 +149,7 @@ export function TaskCard({
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (swipeDisabled || isDismissing) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     pointerStartRef.current = { x: event.clientX, y: event.clientY };
     swipeModeRef.current = 'pending';
@@ -178,14 +189,24 @@ export function TaskCard({
     if (swipeModeRef.current === 'horizontal' && hasExplicitMark && swipeOffsetRef.current >= 72) {
       suppressClickRef.current = true;
       resetSwipe();
-      await onSwipeReset(task);
+      const didReset = await onSwipeReset(task);
+      if (!didReset) {
+        setIsDismissing(false);
+      }
       return;
     }
 
     if (swipeModeRef.current === 'horizontal' && !hasExplicitMark && swipeOffsetRef.current <= -72) {
       suppressClickRef.current = true;
       resetSwipe();
-      await onSwipePlan(task);
+      if (hideOnPlanSwipe) {
+        setIsDismissing(true);
+        await new Promise((resolve) => window.setTimeout(resolve, DISMISS_ANIMATION_MS));
+      }
+      const didMark = await onSwipePlan(task);
+      if (!didMark) {
+        setIsDismissing(false);
+      }
       return;
     }
 
@@ -194,7 +215,7 @@ export function TaskCard({
 
   return (
     <div
-      className="task-card-swipe"
+      className={`task-card-swipe ${isDismissing ? 'task-card-swipe--dismissing' : ''}`.trim()}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={(event) => { void handlePointerEnd(event); }}
@@ -230,14 +251,18 @@ export function TaskCard({
           title={task.name}
           subtitle={subtitle}
           after={
-            <Counter
-              value={markedProgress}
-              appearance={isProblem ? 'negative' : hasExplicitMark ? 'themed' : 'neutral'}
-              mode={isProblem || hasExplicitMark ? 'filled' : 'inverse'}
-              muted={!isProblem && !hasExplicitMark}
-              className="percent-counter"
-              style={counterStyle}
-            />
+            swipeDisabled
+              ? <span className="percent-counter-skeleton" aria-label="Сохраняем отметку" />
+              : (
+                <Counter
+                  value={markedProgress}
+                  appearance={isProblem ? 'negative' : hasExplicitMark ? 'themed' : 'neutral'}
+                  mode={isProblem || hasExplicitMark ? 'filled' : 'inverse'}
+                  muted={!isProblem && !hasExplicitMark}
+                  className="percent-counter"
+                  style={counterStyle}
+                />
+              )
           }
           innerClassNames={isProblem ? { subtitle: 'task-card-subtitle--problem' } : undefined}
           showChevron

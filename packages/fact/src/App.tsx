@@ -213,6 +213,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [dayRefreshing, setDayRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [pendingTaskIds, setPendingTaskIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
@@ -335,6 +336,18 @@ export function App() {
     setDrafts((current) => ({ ...current, [taskId]: nextDraft }));
   };
 
+  const setTaskPending = (taskId: string, pending: boolean) => {
+    setPendingTaskIds((current) => {
+      const next = new Set(current);
+      if (pending) {
+        next.add(taskId);
+      } else {
+        next.delete(taskId);
+      }
+      return next;
+    });
+  };
+
   const updatePercentDraft = (taskId: string, draft: Draft, nextValue: number | string, withHaptic = false) => {
     const nextPercent = clampPercent(Number(nextValue || 0));
     const currentPercent = clampPercent(Number(draft.value || 0));
@@ -447,8 +460,8 @@ export function App() {
     }
   };
 
-  const resetTaskMark = async (task: FactTask, options: { closeDrawer?: boolean } = {}) => {
-    if (!token || submitting) return;
+  const resetTaskMark = async (task: FactTask, options: { closeDrawer?: boolean } = {}): Promise<boolean> => {
+    if (!token || pendingTaskIds.has(task.id)) return false;
 
     const previousDrafts = drafts;
     const previousSession = session;
@@ -481,7 +494,7 @@ export function App() {
             : item),
         }
       : current);
-    setSubmitting(true);
+    setTaskPending(task.id, true);
     setError(null);
     try {
       await resetFactTaskMark({
@@ -498,9 +511,11 @@ export function App() {
       setDrafts(previousDrafts);
       setSession(previousSession);
       setError(err instanceof Error ? err.message : 'Не удалось сбросить отметку.');
+      return false;
     } finally {
-      setSubmitting(false);
+      setTaskPending(task.id, false);
     }
+    return true;
   };
 
   const resetActiveTaskMark = async () => {
@@ -521,8 +536,8 @@ export function App() {
     });
   };
 
-  const markTaskAsPlanned = async (task: FactTask) => {
-    if (!token || submitting) return;
+  const markTaskAsPlanned = async (task: FactTask): Promise<boolean> => {
+    if (!token || pendingTaskIds.has(task.id)) return false;
 
     const plannedProgress = getPlannedProgressByDate(task, date);
     const plannedState: FactMarkState = plannedProgress >= 100 ? 'done' : 'fact';
@@ -556,7 +571,7 @@ export function App() {
             : item),
         }
       : current);
-    setSubmitting(true);
+    setTaskPending(task.id, true);
     setError(null);
     try {
       triggerMediumHaptic();
@@ -568,16 +583,15 @@ export function App() {
         value: plannedProgress,
         inputMode: 'percent',
       });
-      const refreshed = await loadFactSession({ token, date });
-      setSession(refreshed);
-      setDrafts(Object.fromEntries(refreshed.tasks.filter((item) => item.writable).map((item) => [item.id, createDraft(item)])));
     } catch (err) {
       setDrafts(previousDrafts);
       setSession(previousSession);
       setError(err instanceof Error ? err.message : 'Не удалось отметить работу по плану.');
+      return false;
     } finally {
-      setSubmitting(false);
+      setTaskPending(task.id, false);
     }
+    return true;
   };
 
   const toggleReason = (reason: string) => {
@@ -743,6 +757,8 @@ export function App() {
                             task={task}
                             draft={drafts[task.id] ?? createDraft(task)}
                             dateKey={date}
+                            hideOnPlanSwipe={hideMarkedTasks}
+                            swipeDisabled={pendingTaskIds.has(task.id)}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                             onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
                             onSwipeReset={(nextTask) => resetTaskMark(nextTask)}
@@ -787,6 +803,8 @@ export function App() {
                             task={task}
                             draft={drafts[task.id] ?? createDraft(task)}
                             dateKey={date}
+                            hideOnPlanSwipe={false}
+                            swipeDisabled={pendingTaskIds.has(task.id)}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                             onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
                             onSwipeReset={(nextTask) => resetTaskMark(nextTask)}
@@ -864,6 +882,8 @@ export function App() {
                             task={task}
                             draft={drafts[task.id] ?? createDraft(task)}
                             dateKey={date}
+                            hideOnPlanSwipe={false}
+                            swipeDisabled={pendingTaskIds.has(task.id)}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                             onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
                             onSwipeReset={(nextTask) => resetTaskMark(nextTask)}
@@ -1070,7 +1090,7 @@ export function App() {
                 <Container className="modal-actions">
                   <Flex align="center" gap={8} className="modal-actions-row">
                     {activeTaskHasSavedMark && (
-                      <Button className="modal-reset-button" mode="secondary" appearance="neutral" size="large" loading={submitting} disabled={submitting} onClick={resetActiveTaskMark}>
+                      <Button className="modal-reset-button" mode="secondary" appearance="neutral" size="large" loading={activeTask ? pendingTaskIds.has(activeTask.id) : false} disabled={activeTask ? pendingTaskIds.has(activeTask.id) : false} onClick={resetActiveTaskMark}>
                         Сбросить
                       </Button>
                     )}

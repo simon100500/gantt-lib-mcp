@@ -186,7 +186,7 @@ function collectAncestorIds(tasks: Array<{ id: string; parentId: string | null }
 
 function isTaskUnfinished(task: { progress: number | null; status: string | null }): boolean {
   const status = normalizeStoredTaskStatus(task.status);
-  return status !== 'done' && status !== 'closed' && (task.progress ?? 0) < 100;
+  return status !== 'done' && status !== 'closed' && Math.round(task.progress ?? 0) < 100;
 }
 
 function isTaskScheduledOnDate(
@@ -586,12 +586,12 @@ export async function registerFactRoutes(fastify: FastifyInstance): Promise<void
     const dayTaskIds = new Set(
       tasks
         .filter((task) => (
-          accessibleTaskIds.has(task.id)
-          && (
-            planByTaskId.has(task.id)
+            accessibleTaskIds.has(task.id)
+            && (
+            (planByTaskId.has(task.id) && isTaskUnfinished(task))
             || isTaskScheduledOnDate(task, dateKey)
             || isTaskOverdueUnfinished(task, dateKey)
-            || factByTaskId.has(task.id)
+            || (factByTaskId.has(task.id) && isTaskUnfinished(task))
             || closeByTaskId.has(task.id)
           )
         ))
