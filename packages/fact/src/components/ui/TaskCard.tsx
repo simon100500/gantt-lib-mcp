@@ -74,14 +74,32 @@ function formatDeadlineLabel(dateKey: string): { text: string; isOverdue: boolea
   };
 }
 
+function formatVolumeValue(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/\.?0+$/, '');
+}
+
+function getPlannedVolume(task: FactTask, plannedProgress: number): number | null {
+  if (!task.workVolume || task.workVolume <= 0) {
+    return null;
+  }
+
+  return (task.workVolume * plannedProgress) / 100;
+}
+
 function formatPlanSubtitle(task: FactTask, dateKey: string, allowOverdueHighlight: boolean) {
   const plannedProgress = getPlannedProgressByDate(task, dateKey);
+  const plannedVolume = getPlannedVolume(task, plannedProgress);
   const deadline = task.endDate ? formatDeadlineLabel(task.endDate) : { text: 'дата не задана', isOverdue: false };
   const highlightDeadline = allowOverdueHighlight && deadline.isOverdue;
+  const hasPlannedVolume = Boolean(plannedVolume !== null && task.workUnit);
+  const subtitlePrefix = hasPlannedVolume
+    ? `План +${formatVolumeValue(plannedVolume!)} ${task.workUnit} · `
+    : `План ${plannedProgress}% · `;
 
   return (
     <Fragment>
-      <span>{`План ${plannedProgress}% · `}</span>
+      <span>{subtitlePrefix}</span>
       <span className={highlightDeadline ? 'task-card-deadline task-card-deadline--overdue' : 'task-card-deadline'}>{`⚑ ${deadline.text}`}</span>
     </Fragment>
   );
@@ -122,6 +140,7 @@ export function TaskCard({
 
   const progress = Math.max(0, Math.min(100, Math.round(task.progress || 0)));
   const plannedProgress = getPlannedProgressByDate(task, dateKey);
+  const plannedVolume = getPlannedVolume(task, plannedProgress);
   const hasProblemText = Boolean(draft.reason.trim() || draft.comment.trim());
   const hasExplicitMark = draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || (draft.explicitValue && Boolean(draft.value.trim()));
   const isProblem = draft.state === 'problem' || draft.state === 'not_worked' || hasProblemText;
@@ -235,7 +254,7 @@ export function TaskCard({
         {hasExplicitMark ? 'Вернуть' : (
           <>
             <span>По плану</span>
-            <span>{`${plannedProgress}%`}</span>
+            <span>{plannedVolume !== null && task.workUnit ? `+${formatVolumeValue(plannedVolume)} ${task.workUnit}` : `${plannedProgress}%`}</span>
           </>
         )}
       </div>
