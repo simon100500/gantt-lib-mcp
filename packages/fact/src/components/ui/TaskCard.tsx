@@ -96,6 +96,10 @@ function formatPlanSubtitle(task: FactTask, dateKey: string, allowOverdueHighlig
   const highlightDeadline = allowOverdueHighlight && deadline.isOverdue;
   const highlightPlan = plannedProgress > actualProgress;
   const hasPlannedVolume = Boolean(plannedVolume !== null && task.workUnit);
+  const startDateText = task.startDate ? formatDeadlineDate(task.startDate) : null;
+  const deadlineText = startDateText && startDateText !== deadline.text
+    ? `${startDateText}-${deadline.text}`
+    : deadline.text;
   const subtitlePrefix = hasPlannedVolume
     ? `План +${formatVolumeValue(plannedVolume!)} ${task.workUnit} · `
     : `План ${plannedProgress}% · `;
@@ -103,7 +107,7 @@ function formatPlanSubtitle(task: FactTask, dateKey: string, allowOverdueHighlig
   return (
     <Fragment>
       <span className={highlightPlan ? 'task-card-plan task-card-plan--behind-fact' : 'task-card-plan'}>{subtitlePrefix}</span>
-      <span className={highlightDeadline ? 'task-card-deadline task-card-deadline--overdue' : 'task-card-deadline'}>{`⚑ ${deadline.text}`}</span>
+      <span className={highlightDeadline ? 'task-card-deadline task-card-deadline--overdue' : 'task-card-deadline'}>{`⚑ ${deadlineText}`}</span>
     </Fragment>
   );
 }
