@@ -21,6 +21,7 @@ type TaskCardProps = {
   dateKey: string;
   onOpenFact: (task: FactTask) => void;
   onSwipePlan: (task: FactTask) => void | Promise<void>;
+  onSwipeReset: (task: FactTask) => void | Promise<void>;
 };
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -101,6 +102,7 @@ export function TaskCard({
   dateKey,
   onOpenFact,
   onSwipePlan,
+  onSwipeReset,
 }: TaskCardProps) {
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const swipeModeRef = useRef<'pending' | 'horizontal' | 'vertical' | null>(null);
@@ -113,6 +115,7 @@ export function TaskCard({
   }
 
   const progress = Math.max(0, Math.min(100, Math.round(task.progress || 0)));
+  const plannedProgress = getPlannedProgressByDate(task, dateKey);
   const hasProblemText = Boolean(draft.reason.trim() || draft.comment.trim());
   const hasExplicitMark = draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || (draft.explicitValue && Boolean(draft.value.trim()));
   const isProblem = draft.state === 'problem' || draft.state === 'not_worked' || hasProblemText;
@@ -153,7 +156,8 @@ export function TaskCard({
 
     if (swipeModeRef.current === 'pending') {
       if (Math.abs(deltaX) < 8 && Math.abs(deltaY) < 8) return;
-      swipeModeRef.current = Math.abs(deltaX) > Math.abs(deltaY) && deltaX < 0 ? 'horizontal' : 'vertical';
+      const isAllowedDirection = hasExplicitMark ? deltaX > 0 : deltaX < 0;
+      swipeModeRef.current = Math.abs(deltaX) > Math.abs(deltaY) && isAllowedDirection ? 'horizontal' : 'vertical';
     }
 
     if (swipeModeRef.current !== 'horizontal') {
@@ -161,7 +165,9 @@ export function TaskCard({
     }
 
     event.preventDefault();
-    updateSwipeOffset(Math.max(-104, Math.min(0, deltaX)));
+    updateSwipeOffset(hasExplicitMark
+      ? Math.min(104, Math.max(0, deltaX))
+      : Math.max(-104, Math.min(0, deltaX)));
   };
 
   const handlePointerEnd = async (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -169,7 +175,14 @@ export function TaskCard({
       event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
 
-    if (swipeModeRef.current === 'horizontal' && swipeOffsetRef.current <= -72) {
+    if (swipeModeRef.current === 'horizontal' && hasExplicitMark && swipeOffsetRef.current >= 72) {
+      suppressClickRef.current = true;
+      resetSwipe();
+      await onSwipeReset(task);
+      return;
+    }
+
+    if (swipeModeRef.current === 'horizontal' && !hasExplicitMark && swipeOffsetRef.current <= -72) {
       suppressClickRef.current = true;
       resetSwipe();
       await onSwipePlan(task);
@@ -194,12 +207,22 @@ export function TaskCard({
         onOpenFact(task);
       }}
     >
-      <div className={`task-card-swipe-action ${swipeOffset < 0 ? 'task-card-swipe-action--visible' : ''}`.trim()} aria-hidden="true">По плану</div>
+      <div
+        className={`task-card-swipe-action ${hasExplicitMark ? 'task-card-swipe-action--reset' : ''} ${swipeOffset !== 0 ? 'task-card-swipe-action--visible' : ''}`.trim()}
+        aria-hidden="true"
+      >
+        {hasExplicitMark ? 'Вернуть' : (
+          <>
+            <span>По плану</span>
+            <span>{`${plannedProgress}%`}</span>
+          </>
+        )}
+      </div>
       <div
         className="task-card-swipe-content"
         style={{
           transform: `translateX(${swipeOffset}px)`,
-          transition: swipeOffset < 0 ? 'none' : undefined,
+          transition: swipeOffset !== 0 ? 'none' : undefined,
         }}
       >
         <CellSimple

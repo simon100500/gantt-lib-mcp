@@ -214,17 +214,28 @@ textarea {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
   padding: 0 18px;
   background: color-mix(in srgb, var(--background-accent-themed) 16%, var(--background-surface-card));
   color: var(--text-themed);
   font-size: var(--size-label-medium);
   line-height: var(--height-label-medium);
   font-weight: 600;
+  text-align: right;
   pointer-events: none;
   opacity: 0;
   transition: opacity 120ms ease;
+}
+
+.task-card-swipe-action--reset {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  background: color-mix(in srgb, var(--background-accent-neutral) 12%, var(--background-surface-card));
+  color: var(--text-secondary);
+  text-align: left;
 }
 
 .task-card-swipe-action--visible {

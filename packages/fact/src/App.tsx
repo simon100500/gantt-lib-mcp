@@ -115,7 +115,7 @@ function createDraft(task: FactTask): Draft {
 
 function getSectionTitle(task: FactTask, tasks: FactTask[]): string | null {
   if (!task.parentId) {
-    return null;
+    return 'Без категории';
   }
   return tasks.find((item) => item.id === task.parentId)?.name ?? null;
 }
@@ -433,15 +433,15 @@ export function App() {
     }
   };
 
-  const resetActiveTaskMark = async () => {
-    if (!token || !activeTask || submitting) return;
+  const resetTaskMark = async (task: FactTask, options: { closeDrawer?: boolean } = {}) => {
+    if (!token || submitting) return;
 
     const previousDrafts = drafts;
     const previousSession = session;
-    const resetInputMode = activeTask.workVolume && activeTask.workVolume > 0 ? 'volume' : 'percent';
-    const resetValue = resetInputMode === 'volume' ? activeTask.dayFact : activeTask.progress;
+    const resetInputMode = task.workVolume && task.workVolume > 0 ? 'volume' : 'percent';
+    const resetValue = resetInputMode === 'volume' ? task.dayFact : task.progress;
     const resetDraft: Draft = {
-      ...(drafts[activeTask.id] ?? createDraft(activeTask)),
+      ...(drafts[task.id] ?? createDraft(task)),
       state: 'fact',
       inputMode: resetInputMode,
       value: resetValue ? String(resetValue) : '',
@@ -451,11 +451,11 @@ export function App() {
       worked: true,
     };
 
-    setDrafts((current) => ({ ...current, [activeTask.id]: resetDraft }));
+    setDrafts((current) => ({ ...current, [task.id]: resetDraft }));
     setSession((current) => current
       ? {
           ...current,
-          tasks: current.tasks.map((item) => item.id === activeTask.id
+          tasks: current.tasks.map((item) => item.id === task.id
             ? {
                 ...item,
                 closeState: null,
@@ -472,15 +472,14 @@ export function App() {
     try {
       await resetFactTaskMark({
         token,
-        taskId: activeTask.id,
+        taskId: task.id,
         date,
       });
-      setSheetMode(null);
-      setActiveTaskId(null);
-      setSheetClosing(false);
-      const refreshed = await loadFactSession({ token, date });
-      setSession(refreshed);
-      setDrafts(Object.fromEntries(refreshed.tasks.filter((task) => task.writable).map((task) => [task.id, createDraft(task)])));
+      if (options.closeDrawer) {
+        setSheetMode(null);
+        setActiveTaskId(null);
+        setSheetClosing(false);
+      }
     } catch (err) {
       setDrafts(previousDrafts);
       setSession(previousSession);
@@ -488,6 +487,11 @@ export function App() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const resetActiveTaskMark = async () => {
+    if (!activeTask) return;
+    await resetTaskMark(activeTask, { closeDrawer: true });
   };
 
   const setActiveState = (state: FactMarkState) => {
@@ -727,6 +731,7 @@ export function App() {
                             dateKey={date}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                             onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
+                            onSwipeReset={(nextTask) => resetTaskMark(nextTask)}
                           />
                         ))}
                       </CellList>
@@ -770,6 +775,7 @@ export function App() {
                             dateKey={date}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                             onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
+                            onSwipeReset={(nextTask) => resetTaskMark(nextTask)}
                           />
                         ))}
                       </CellList>
@@ -846,6 +852,7 @@ export function App() {
                             dateKey={date}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                             onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
+                            onSwipeReset={(nextTask) => resetTaskMark(nextTask)}
                           />
                         ))}
                       </CellList>
