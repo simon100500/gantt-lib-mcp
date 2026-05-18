@@ -10,6 +10,12 @@ interface ImportMeta {
 
 interface Window {
   readonly WebApp?: {
+    readonly HapticFeedback?: {
+      readonly impactOccurred?: (
+        impactStyle: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft',
+        disableVibrationFallback?: boolean,
+      ) => Promise<{ status: 'impactOccured' }>;
+    };
     readonly initData?: string;
     readonly initDataUnsafe?: {
       readonly start_param?: unknown;

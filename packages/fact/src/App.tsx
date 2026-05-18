@@ -132,6 +132,10 @@ function getProgressRangeStyle(value: string): CSSProperties {
   } as CSSProperties;
 }
 
+function triggerLightHaptic(): void {
+  void window.WebApp?.HapticFeedback?.impactOccurred?.('light').catch(() => undefined);
+}
+
 export function App() {
   const [token] = useState(() => readLaunchToken());
   const dateInputRef = useRef<HTMLInputElement | null>(null);
@@ -251,6 +255,15 @@ export function App() {
 
   const updateDraft = (taskId: string, nextDraft: Draft) => {
     setDrafts((current) => ({ ...current, [taskId]: nextDraft }));
+  };
+
+  const updatePercentDraft = (taskId: string, draft: Draft, nextValue: number | string, withHaptic = false) => {
+    const nextPercent = clampPercent(Number(nextValue || 0));
+    const currentPercent = clampPercent(Number(draft.value || 0));
+    if (withHaptic && nextPercent !== currentPercent) {
+      triggerLightHaptic();
+    }
+    updateDraft(taskId, { ...draft, inputMode: 'percent', value: String(nextPercent) });
   };
 
   const openTaskSheet = (task: FactTask, mode: Exclude<SheetMode, 'close-day' | null>) => {
@@ -711,7 +724,7 @@ export function App() {
                               mode="secondary"
                               appearance="neutral"
                               size="medium"
-                              onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: String(clampPercent(Number(activeDraft.value || 0) - 5)) })}
+                              onClick={() => updatePercentDraft(activeTask.id, activeDraft, Number(activeDraft.value || 0) - 5, true)}
                               aria-label="Уменьшить процент выполнения"
                             >
                               -
@@ -742,7 +755,7 @@ export function App() {
                               mode="secondary"
                               appearance="neutral"
                               size="medium"
-                              onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: String(clampPercent(Number(activeDraft.value || 0) + 5)) })}
+                              onClick={() => updatePercentDraft(activeTask.id, activeDraft, Number(activeDraft.value || 0) + 5, true)}
                               aria-label="Увеличить процент выполнения"
                             >
                               +
@@ -756,7 +769,7 @@ export function App() {
                             max="100"
                             step="5"
                             value={clampPercent(Number(activeDraft.value || 0))}
-                            onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: event.target.value })}
+                            onChange={(event) => updatePercentDraft(activeTask.id, activeDraft, event.target.value, true)}
                             style={getProgressRangeStyle(activeDraft.value)}
                           />
                           <Flex justify="space-between" className="fact-progress-marks">
@@ -765,7 +778,7 @@ export function App() {
                                 key={value}
                                 className="fact-progress-mark"
                                 type="button"
-                                onClick={() => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: String(value) })}
+                                onClick={() => updatePercentDraft(activeTask.id, activeDraft, value, true)}
                               >
                                 {value === 0 ? '0%' : value}
                               </button>
