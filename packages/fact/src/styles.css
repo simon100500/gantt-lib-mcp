@@ -227,6 +227,28 @@ textarea {
   color: var(--text-primary);
 }
 
+.task-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-section-icon {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.task-subsection-title {
+  margin: 8px 16px 2px;
+  color: var(--text-primary);
+  opacity: 0.92;
+}
+
+.task-section-breadcrumbs {
+  margin: 0 16px 8px;
+  color: var(--text-secondary);
+}
+
 .work-card {
   overflow: hidden;
   width: 100%;
@@ -573,13 +595,27 @@ textarea {
   gap: 4px;
 }
 
+.fact-progress-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
 .fact-progress-row {
   width: 100%;
 }
 
-.fact-progress-row button {
-  flex: 0 0 44px;
-  min-width: 44px;
+.fact-progress-row--meta {
+  margin-top: 6px;
+  color: var(--text-secondary);
+}
+
+.fact-progress-row--actions {
+  margin-top: 8px;
+}
+
+.fact-progress-row--actions button {
+  min-width: 0;
 }
 
 .fact-progress-input {
@@ -595,21 +631,12 @@ textarea {
 .fact-progress-input-control {
   box-sizing: border-box;
   width: 100%;
-  padding: 0 36px !important;
+  padding: 0 14px !important;
   text-align: center;
 }
 
-.fact-progress-clear {
-  position: absolute;
-  top: 50%;
-  right: 16px;
-  margin-left: 0 !important;
-  transform: translateY(-50%);
-}
-
-.fact-progress-sign {
-  flex: 0 0 auto;
-  color: var(--text-secondary);
+.fact-progress-clear-hidden {
+  display: none !important;
 }
 
 .fact-progress-range {

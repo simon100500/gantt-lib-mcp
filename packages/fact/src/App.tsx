@@ -17,7 +17,7 @@ import {
   ToolButton,
   Typography,
 } from '@maxhub/max-ui';
-import { Calendar, Handshake, House } from 'lucide-react';
+import { Calendar, Folder, Handshake, House } from 'lucide-react';
 import { closeFactDay, loadFactSession, resetFactTaskMark, saveFactTaskMark, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
 import { readLaunchToken, todayKey } from './session/token';
 import { TaskCard } from './components/ui/TaskCard';
@@ -49,6 +49,12 @@ type FreeProblem = {
 type SheetMode = 'fact' | 'problem' | 'photo' | 'close-day' | 'bulk-plan' | null;
 type Tab = 'today' | 'object' | 'problems' | 'journal';
 type DayPreset = 'yesterday' | 'today' | 'tomorrow' | 'custom';
+type TaskHierarchySection = {
+  sectionTitle: string;
+  subsectionTitle: string | null;
+  breadcrumbTitle: string | null;
+  tasks: FactTask[];
+};
 
 const reasonTags = ['Нет материала', 'Нет людей', 'Не готов фронт', 'Ждем смежников', 'Изменение проекта', 'Погода', 'Техника', 'Другое'];
 const navItems: Array<{ id: Tab; label: string }> = [
@@ -126,12 +132,7 @@ function createDraft(task: FactTask): Draft {
   };
 }
 
-function getSectionTitle(task: FactTask, tasks: FactTask[]): string | null {
-  if (!task.parentId) {
-    return 'Без категории';
-  }
-
-  const tasksById = new Map(tasks.map((item) => [item.id, item]));
+function getTaskAncestorNames(task: FactTask, tasksById: Map<string, FactTask>): string[] {
   const ancestors: string[] = [];
   const visitedIds = new Set<string>();
   let parentId: string | null = task.parentId;
@@ -144,7 +145,20 @@ function getSectionTitle(task: FactTask, tasks: FactTask[]): string | null {
     parentId = parent.parentId;
   }
 
-  return ancestors.length > 0 ? ancestors.join(' › ') : null;
+  return ancestors;
+}
+
+function getTaskHierarchySection(task: FactTask, tasksById: Map<string, FactTask>): Omit<TaskHierarchySection, 'tasks'> {
+  const ancestors = getTaskAncestorNames(task, tasksById);
+  const sectionTitle = ancestors[0] ?? 'Без категории';
+  const subsectionTitle = ancestors[1] ?? null;
+  const breadcrumbTitle = ancestors.length > 2 ? ancestors.slice(2).join(' › ') : null;
+
+  return {
+    sectionTitle,
+    subsectionTitle,
+    breadcrumbTitle,
+  };
 }
 
 const dayOptions: Array<{ key: Exclude<DayPreset, 'custom'>; label: string }> = [
@@ -200,6 +214,45 @@ function formatWorkCount(count: number): string {
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function parseNumericInput(value: string): number {
+  return Number(value.replace(',', '.'));
+}
+
+function getTaskTotalVolume(task: FactTask): number | null {
+  return task.workVolume && task.workVolume > 0 ? task.workVolume : null;
+}
+
+function clampVolume(value: number, totalVolume: number | null): number {
+  if (!Number.isFinite(value)) return 0;
+  if (totalVolume === null) return Math.max(0, value);
+  return Math.max(0, Math.min(totalVolume, value));
+}
+
+function roundVolumeValue(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value * 100) / 100;
+}
+
+function formatVolumeValue(value: number): string {
+  const rounded = roundVolumeValue(value);
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/\.?0+$/, '');
+}
+
+function getPercentFromVolume(volume: number, totalVolume: number | null): number {
+  if (totalVolume === null || totalVolume <= 0) return 0;
+  return clampPercent((volume / totalVolume) * 100);
+}
+
+function getVolumeFromPercent(percent: number, totalVolume: number | null): number {
+  if (totalVolume === null || totalVolume <= 0) return 0;
+  return roundVolumeValue((clampPercent(percent) / 100) * totalVolume);
+}
+
+function getVolumeStep(totalVolume: number | null): number {
+  if (totalVolume === null || totalVolume <= 0) return 1;
+  return Math.max(0.01, roundVolumeValue(totalVolume / 20));
 }
 
 function getProgressRangeStyle(value: string): CSSProperties {
@@ -305,18 +358,24 @@ export function App() {
   const problemTasks = writableTasks.filter((task) => drafts[task.id]?.state === 'problem');
   const unmarkedTasks = writableTasks.filter((task) => !isDraftMarked(drafts[task.id]));
   const taskSections = useMemo(() => {
-    const sections: Array<{ title: string | null; tasks: FactTask[] }> = [];
+    const sections: TaskHierarchySection[] = [];
     const allTasks = session?.tasks ?? [];
+    const tasksById = new Map(allTasks.map((item) => [item.id, item]));
 
     for (const task of allTasks) {
       if (!task.writable) continue;
 
-      const title = getSectionTitle(task, allTasks);
+      const hierarchy = getTaskHierarchySection(task, tasksById);
       const lastSection = sections[sections.length - 1];
-      if (lastSection && lastSection.title === title) {
+      if (
+        lastSection
+        && lastSection.sectionTitle === hierarchy.sectionTitle
+        && lastSection.subsectionTitle === hierarchy.subsectionTitle
+        && lastSection.breadcrumbTitle === hierarchy.breadcrumbTitle
+      ) {
         lastSection.tasks.push(task);
       } else {
-        sections.push({ title, tasks: [task] });
+        sections.push({ ...hierarchy, tasks: [task] });
       }
     }
 
@@ -380,7 +439,102 @@ export function App() {
     updateDraft(taskId, { ...draft, inputMode: 'percent', value: String(nextPercent), explicitValue: true });
   };
 
+  const updateVolumeDraft = (task: FactTask, draft: Draft, nextValue: number | string, withHaptic = false) => {
+    const totalVolume = getTaskTotalVolume(task);
+    if (totalVolume === null) {
+      return;
+    }
+
+    const parsedValue = typeof nextValue === 'number' ? nextValue : Number(nextValue || 0);
+    const nextVolume = clampVolume(parsedValue, totalVolume);
+    const currentVolume = clampVolume(parseNumericInput(draft.value || '0'), totalVolume);
+    if (withHaptic && nextVolume !== currentVolume) {
+      triggerLightHaptic();
+    }
+
+    updateDraft(task.id, {
+      ...draft,
+      inputMode: 'volume',
+      value: formatVolumeValue(nextVolume),
+      explicitValue: true,
+    });
+  };
+
   const visibleUnmarkedTasks = visibleTaskSections.flatMap((section) => section.tasks).filter((task) => !isDraftMarked(drafts[task.id]));
+  const activeTaskTotalVolume = activeTask ? getTaskTotalVolume(activeTask) : null;
+  const activeDraftPercent = activeTask && activeDraft
+    ? activeDraft.inputMode === 'volume'
+      ? getPercentFromVolume(parseNumericInput(activeDraft.value || '0'), activeTaskTotalVolume)
+      : clampPercent(parseNumericInput(activeDraft.value || '0'))
+    : 0;
+  const activeDraftVolume = activeTask && activeDraft
+    ? activeDraft.inputMode === 'volume'
+      ? clampVolume(parseNumericInput(activeDraft.value || '0'), activeTaskTotalVolume)
+      : getVolumeFromPercent(parseNumericInput(activeDraft.value || '0'), activeTaskTotalVolume)
+    : 0;
+  const activeProgressStep = activeDraft?.inputMode === 'volume'
+    ? getVolumeStep(activeTaskTotalVolume)
+    : 5;
+  const activeProgressMarks = activeDraft?.inputMode === 'volume' && activeTaskTotalVolume
+    ? [0, 25, 50, 75, 100].map((value) => ({
+      value: getVolumeFromPercent(value, activeTaskTotalVolume),
+      label: value === 0 ? `0 ${activeTask?.workUnit ?? ''}`.trim() : formatVolumeValue(getVolumeFromPercent(value, activeTaskTotalVolume)),
+    }))
+    : [0, 25, 50, 75, 100].map((value) => ({
+      value,
+      label: value === 0 ? '0%' : `${value}`,
+    }));
+
+  const renderTaskSections = (sections: TaskHierarchySection[], options: { keyPrefix: string; hideOnPlanSwipe: boolean }) => {
+    let previousSectionTitle: string | null = null;
+    let previousSubsectionTitle: string | null = null;
+
+    return sections.map((section, sectionIndex) => {
+      const showSectionTitle = section.sectionTitle !== previousSectionTitle;
+      const showSubsectionTitle = Boolean(section.subsectionTitle) && (showSectionTitle || section.subsectionTitle !== previousSubsectionTitle);
+
+      previousSectionTitle = section.sectionTitle;
+      previousSubsectionTitle = section.subsectionTitle;
+
+      return (
+        <Fragment key={`${options.keyPrefix}-${section.sectionTitle}-${section.subsectionTitle ?? 'root'}-${section.breadcrumbTitle ?? 'leaf'}-${sectionIndex}`}>
+          {showSectionTitle && (
+            <TypographyHeadline variant="small-strong" className="task-section-title" asChild>
+              <h2 className="task-section-heading">
+                <Folder className="task-section-icon" size={16} strokeWidth={2} aria-hidden="true" />
+                <span>{section.sectionTitle}</span>
+              </h2>
+            </TypographyHeadline>
+          )}
+          {showSubsectionTitle && (
+            <TypographyHeadline variant="small-strong" className="task-subsection-title" asChild>
+              <h3>{section.subsectionTitle}</h3>
+            </TypographyHeadline>
+          )}
+          {section.breadcrumbTitle && (
+            <Typography.Body variant="medium" className="task-section-breadcrumbs">
+              {section.breadcrumbTitle}
+            </Typography.Body>
+          )}
+          <CellList mode="island" filled className="work-list">
+            {section.tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                draft={drafts[task.id] ?? createDraft(task)}
+                dateKey={date}
+                hideOnPlanSwipe={options.hideOnPlanSwipe}
+                swipeDisabled={pendingTaskIds.has(task.id)}
+                onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
+                onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
+                onSwipeReset={(nextTask) => resetTaskMark(nextTask)}
+              />
+            ))}
+          </CellList>
+        </Fragment>
+      );
+    });
+  };
 
   const openTaskSheet = (task: FactTask, mode: Exclude<SheetMode, 'close-day' | null>) => {
     const draft = drafts[task.id] ?? createDraft(task);
@@ -460,7 +614,7 @@ export function App() {
   const saveActiveTaskMark = async () => {
     if (!token || !activeTask || !activeDraft) return;
 
-    const parsedValue = Number(activeDraft.value.replace(',', '.'));
+    const parsedValue = parseNumericInput(activeDraft.value);
     setSubmitting(true);
     setError(null);
     try {
@@ -556,7 +710,9 @@ export function App() {
       worked: state !== 'not_worked',
       explicitValue: activeDraft.explicitValue || state === 'done',
       value: state === 'done'
-        ? activeDraft.inputMode === 'percent' ? '100' : String(activeTask.workVolume ?? activeTask.dayPlan ?? activeDraft.value)
+        ? activeDraft.inputMode === 'percent'
+          ? '100'
+          : formatVolumeValue(activeTask.workVolume ?? activeTask.dayPlan ?? parseNumericInput(activeDraft.value))
         : state === 'not_worked' ? '0' : activeDraft.value,
     });
   };
@@ -845,32 +1001,7 @@ export function App() {
                     <Typography.Headline variant="small-strong">Все работы отмечены</Typography.Headline>
                   </Container>
                 )}
-                {visibleTaskSections.map((section, sectionIndex) => {
-                  return (
-                    <Fragment key={`${section.title ?? 'root'}-${sectionIndex}`}>
-                      {section.title && (
-                        <TypographyHeadline variant="small-strong" className="task-section-title" asChild>
-                          <h2>{section.title}</h2>
-                        </TypographyHeadline>
-                      )}
-                      <CellList mode="island" filled className="work-list">
-                        {section.tasks.map((task) => (
-                          <TaskCard
-                            key={task.id}
-                            task={task}
-                            draft={drafts[task.id] ?? createDraft(task)}
-                            dateKey={date}
-                            hideOnPlanSwipe={hideMarkedTasks}
-                            swipeDisabled={pendingTaskIds.has(task.id)}
-                            onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
-                            onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
-                            onSwipeReset={(nextTask) => resetTaskMark(nextTask)}
-                          />
-                        ))}
-                      </CellList>
-                    </Fragment>
-                  );
-                })}
+                {renderTaskSections(visibleTaskSections, { keyPrefix: 'today', hideOnPlanSwipe: hideMarkedTasks })}
                 {visibleUnmarkedTasks.length > 0 && (
                   <Container className="bulk-plan-action" fullWidth>
                     <Flex direction="column" gap={12} className="bulk-plan-stack">
@@ -910,32 +1041,7 @@ export function App() {
                     <Typography.Body variant="medium">Работы объекта появятся после синхронизации.</Typography.Body>
                   </Container>
                 )}
-                {taskSections.map((section, sectionIndex) => {
-                  return (
-                    <Fragment key={`object-${section.title ?? 'root'}-${sectionIndex}`}>
-                      {section.title && (
-                        <TypographyHeadline variant="small-strong" className="task-section-title" asChild>
-                          <h2>{section.title}</h2>
-                        </TypographyHeadline>
-                      )}
-                      <CellList mode="island" filled className="work-list">
-                        {section.tasks.map((task) => (
-                          <TaskCard
-                            key={task.id}
-                            task={task}
-                            draft={drafts[task.id] ?? createDraft(task)}
-                            dateKey={date}
-                            hideOnPlanSwipe={false}
-                            swipeDisabled={pendingTaskIds.has(task.id)}
-                            onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
-                            onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
-                            onSwipeReset={(nextTask) => resetTaskMark(nextTask)}
-                          />
-                        ))}
-                      </CellList>
-                    </Fragment>
-                  );
-                })}
+                {renderTaskSections(taskSections, { keyPrefix: 'object', hideOnPlanSwipe: false })}
               </Flex>
             </>
           )}
@@ -1073,72 +1179,125 @@ export function App() {
                 {sheetMode !== 'photo' && (
                   <>
                     {activeDraft.state !== 'not_worked' && (
-                      <CellList mode="island" header={<CellHeader titleStyle="normal">Объем</CellHeader>}>
+                      <CellList mode="island">
                         <Container className="fact-progress-control" fullWidth>
-                          <Flex align="center" gap={8} className="fact-progress-row">
-                            <Button
-                              mode="secondary"
-                              appearance="neutral"
-                              size="medium"
-                              onClick={() => updatePercentDraft(activeTask.id, activeDraft, Number(activeDraft.value || 0) - 5, true)}
-                              aria-label="Уменьшить процент выполнения"
-                            >
-                              -
-                            </Button>
+                          <Grid className="fact-progress-input-grid" gap={8}>
                             <Input
                               mode="secondary"
                               className="fact-progress-input"
                               innerClassNames={{
                                 body: 'fact-progress-input-body',
                                 input: 'fact-progress-input-control',
-                                clearButton: 'fact-progress-clear',
+                                clearButton: 'fact-progress-clear-hidden',
+                              }}
+                              placeholder=""
+                              name="fact-volume-value"
+                              aria-label="Значение факта в объеме"
+                              autoComplete="off"
+                              inputMode="decimal"
+                              type="number"
+                              min="0"
+                              max={activeTaskTotalVolume ?? undefined}
+                              step={activeTaskTotalVolume ? getVolumeStep(activeTaskTotalVolume) : 1}
+                              value={activeTaskTotalVolume ? formatVolumeValue(activeDraftVolume) : ''}
+                              disabled={!activeTaskTotalVolume}
+                              onChange={(event) => updateVolumeDraft(activeTask, activeDraft, event.target.value)}
+                              onFocus={() => {
+                                if (activeTaskTotalVolume && activeDraft.inputMode !== 'volume') {
+                                  updateVolumeDraft(activeTask, activeDraft, activeDraftVolume);
+                                }
+                              }}
+                            />
+                            <Input
+                              mode="secondary"
+                              className="fact-progress-input"
+                              innerClassNames={{
+                                body: 'fact-progress-input-body',
+                                input: 'fact-progress-input-control',
+                                clearButton: 'fact-progress-clear-hidden',
                               }}
                               placeholder="0"
-                              name="fact-value"
+                              name="fact-percent-value"
                               aria-label="Значение факта в процентах"
                               autoComplete="off"
                               inputMode="decimal"
                               type="number"
-                              withClearButton
                               min="0"
                               max={100}
                               step={1}
-                              value={activeDraft.value}
+                              value={String(activeDraftPercent)}
                               onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: event.target.value, explicitValue: true })}
+                              onFocus={() => {
+                                if (activeDraft.inputMode !== 'percent') {
+                                  updatePercentDraft(activeTask.id, activeDraft, activeDraftPercent);
+                                }
+                              }}
                             />
-                            <Typography.Label variant="large-strong" className="fact-progress-sign">%</Typography.Label>
+                          </Grid>
+                          <Flex align="center" justify="space-between" className="fact-progress-row fact-progress-row--meta">
+                            <Typography.Label variant="small-strong">Объем{activeTask.workUnit ? `, ${activeTask.workUnit}` : ''}</Typography.Label>
+                            <Typography.Label variant="small-strong">Проценты, %</Typography.Label>
+                          </Flex>
+                          <input
+                            className="fact-progress-range"
+                            aria-label={activeDraft.inputMode === 'volume' ? 'Объем выполнения работы' : 'Процент выполнения работы'}
+                            type="range"
+                            min="0"
+                            max={activeDraft.inputMode === 'volume' ? String(activeTaskTotalVolume ?? 0) : '100'}
+                            step={activeDraft.inputMode === 'volume' ? String(activeProgressStep) : '5'}
+                            value={activeDraft.inputMode === 'volume' ? activeDraftVolume : activeDraftPercent}
+                            onChange={(event) => (
+                              activeDraft.inputMode === 'volume'
+                                ? updateVolumeDraft(activeTask, activeDraft, event.target.value, true)
+                                : updatePercentDraft(activeTask.id, activeDraft, event.target.value, true)
+                            )}
+                            style={getProgressRangeStyle(String(activeDraftPercent))}
+                          />
+                          <Flex justify="space-between" className="fact-progress-marks">
+                            {activeProgressMarks.map((mark) => (
+                              <button
+                                key={`${activeDraft.inputMode}-${mark.value}`}
+                                className="fact-progress-mark"
+                                type="button"
+                                onClick={() => (
+                                  activeDraft.inputMode === 'volume'
+                                    ? updateVolumeDraft(activeTask, activeDraft, mark.value, true)
+                                    : updatePercentDraft(activeTask.id, activeDraft, mark.value, true)
+                                )}
+                              >
+                                {mark.label}
+                              </button>
+                            ))}
+                          </Flex>
+                          <Flex align="center" gap={8} className="fact-progress-row fact-progress-row--actions">
                             <Button
                               mode="secondary"
                               appearance="neutral"
                               size="medium"
-                              onClick={() => updatePercentDraft(activeTask.id, activeDraft, Number(activeDraft.value || 0) + 5, true)}
-                              aria-label="Увеличить процент выполнения"
+                              stretched
+                              onClick={() => (
+                                activeDraft.inputMode === 'volume'
+                                  ? updateVolumeDraft(activeTask, activeDraft, activeDraftVolume - activeProgressStep, true)
+                                  : updatePercentDraft(activeTask.id, activeDraft, activeDraftPercent - activeProgressStep, true)
+                              )}
+                              aria-label={activeDraft.inputMode === 'volume' ? 'Уменьшить объем выполнения' : 'Уменьшить процент выполнения'}
+                            >
+                              -
+                            </Button>
+                            <Button
+                              mode="secondary"
+                              appearance="neutral"
+                              size="medium"
+                              stretched
+                              onClick={() => (
+                                activeDraft.inputMode === 'volume'
+                                  ? updateVolumeDraft(activeTask, activeDraft, activeDraftVolume + activeProgressStep, true)
+                                  : updatePercentDraft(activeTask.id, activeDraft, activeDraftPercent + activeProgressStep, true)
+                              )}
+                              aria-label={activeDraft.inputMode === 'volume' ? 'Увеличить объем выполнения' : 'Увеличить процент выполнения'}
                             >
                               +
                             </Button>
-                          </Flex>
-                          <input
-                            className="fact-progress-range"
-                            aria-label="Процент выполнения работы"
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="5"
-                            value={clampPercent(Number(activeDraft.value || 0))}
-                            onChange={(event) => updatePercentDraft(activeTask.id, activeDraft, event.target.value, true)}
-                            style={getProgressRangeStyle(activeDraft.value)}
-                          />
-                          <Flex justify="space-between" className="fact-progress-marks">
-                            {[0, 25, 50, 75, 100].map((value) => (
-                              <button
-                                key={value}
-                                className="fact-progress-mark"
-                                type="button"
-                                onClick={() => updatePercentDraft(activeTask.id, activeDraft, value, true)}
-                              >
-                                {value === 0 ? '0%' : value}
-                              </button>
-                            ))}
                           </Flex>
                         </Container>
                       </CellList>
