@@ -12,7 +12,7 @@ interface Window {
   readonly WebApp?: {
     readonly initData?: string;
     readonly initDataUnsafe?: {
-      readonly start_param?: string;
+      readonly start_param?: unknown;
     };
   };
 }
