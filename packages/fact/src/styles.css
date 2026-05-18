@@ -601,13 +601,20 @@ textarea {
   width: 100%;
 }
 
+.fact-progress-input-grid--labels {
+  margin-bottom: 2px;
+}
+
 .fact-progress-row {
   width: 100%;
 }
 
-.fact-progress-row--meta {
-  margin-top: 6px;
+.fact-progress-field-label {
   color: var(--text-secondary);
+}
+
+.fact-progress-field-label--right {
+  text-align: right;
 }
 
 .fact-progress-row--actions {

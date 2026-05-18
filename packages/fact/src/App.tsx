@@ -1181,6 +1181,14 @@ export function App() {
                     {activeDraft.state !== 'not_worked' && (
                       <CellList mode="island">
                         <Container className="fact-progress-control" fullWidth>
+                          <Grid className="fact-progress-input-grid fact-progress-input-grid--labels" gap={8}>
+                            <Typography.Label variant="medium-strong" className="fact-progress-field-label">
+                              Объем
+                            </Typography.Label>
+                            <Typography.Label variant="medium-strong" className="fact-progress-field-label fact-progress-field-label--right">
+                              Проценты
+                            </Typography.Label>
+                          </Grid>
                           <Grid className="fact-progress-input-grid" gap={8}>
                             <Input
                               mode="secondary"
@@ -1190,7 +1198,7 @@ export function App() {
                                 input: 'fact-progress-input-control',
                                 clearButton: 'fact-progress-clear-hidden',
                               }}
-                              placeholder=""
+                              placeholder={activeTaskTotalVolume ? '' : '—'}
                               name="fact-volume-value"
                               aria-label="Значение факта в объеме"
                               autoComplete="off"
@@ -1207,11 +1215,13 @@ export function App() {
                                   updateVolumeDraft(activeTask, activeDraft, activeDraftVolume);
                                 }
                               }}
-                              iconAfter={(
-                                <Typography.Label variant="large-strong" className="fact-progress-unit">
-                                  {activeTask.workUnit ?? 'ед.'}
-                                </Typography.Label>
-                              )}
+                              iconAfter={activeTaskTotalVolume
+                                ? (
+                                  <Typography.Label variant="large-strong" className="fact-progress-unit">
+                                    {activeTask.workUnit ?? 'ед.'}
+                                  </Typography.Label>
+                                )
+                                : undefined}
                             />
                             <Input
                               mode="secondary"
@@ -1244,10 +1254,6 @@ export function App() {
                               )}
                             />
                           </Grid>
-                          <Flex align="center" justify="space-between" className="fact-progress-row fact-progress-row--meta">
-                            <Typography.Label variant="small-strong">Объем</Typography.Label>
-                            <Typography.Label variant="small-strong">Проценты</Typography.Label>
-                          </Flex>
                           <input
                             className="fact-progress-range"
                             aria-label={activeDraft.inputMode === 'volume' ? 'Объем выполнения работы' : 'Процент выполнения работы'}
