@@ -1208,7 +1208,7 @@ export function App() {
                                 }
                               }}
                               iconAfter={(
-                                <Typography.Label variant="small-strong" className="fact-progress-unit">
+                                <Typography.Label variant="large-strong" className="fact-progress-unit">
                                   {activeTask.workUnit ?? 'ед.'}
                                 </Typography.Label>
                               )}
@@ -1238,15 +1238,15 @@ export function App() {
                                 }
                               }}
                               iconAfter={(
-                                <Typography.Label variant="small-strong" className="fact-progress-unit">
+                                <Typography.Label variant="large-strong" className="fact-progress-unit">
                                   %
                                 </Typography.Label>
                               )}
                             />
                           </Grid>
                           <Flex align="center" justify="space-between" className="fact-progress-row fact-progress-row--meta">
-                            <Typography.Label variant="small-strong">Объем{activeTask.workUnit ? `, ${activeTask.workUnit}` : ''}</Typography.Label>
-                            <Typography.Label variant="small-strong">Проценты, %</Typography.Label>
+                            <Typography.Label variant="small-strong">Объем</Typography.Label>
+                            <Typography.Label variant="small-strong">Проценты</Typography.Label>
                           </Flex>
                           <input
                             className="fact-progress-range"
