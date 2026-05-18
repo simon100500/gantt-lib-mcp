@@ -51,8 +51,20 @@ export type FactDayCloseEntry = {
 
 const API_BASE_URL = (import.meta.env.VITE_FACT_API_BASE_URL ?? '').replace(/\/$/, '');
 
+function getRequestUrl(path: string): string {
+  if (API_BASE_URL) {
+    return `${API_BASE_URL}${path}`;
+  }
+
+  if (import.meta.env.PROD) {
+    throw new Error('VITE_FACT_API_BASE_URL is required for the production fact build.');
+  }
+
+  return path;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(getRequestUrl(path), {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -63,6 +75,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     throw new Error(payload?.error ?? `Request failed: ${response.status}`);
   }
+  if (payload === null) {
+    throw new Error('API returned an empty or non-JSON response.');
+  }
   return payload as T;
 }
 
@@ -71,7 +86,11 @@ export async function loadFactSession(input: { token: string; date?: string }): 
   if (input.date) {
     params.set('date', input.date);
   }
-  return request<FactSession>(`/api/fact/session?${params.toString()}`);
+  const payload = await request<FactSession>(`/api/fact/session?${params.toString()}`);
+  if (!payload || !Array.isArray(payload.tasks) || !payload.project || typeof payload.date !== 'string') {
+    throw new Error('Fact session response has an unexpected shape.');
+  }
+  return payload;
 }
 
 export async function closeFactDay(input: {
