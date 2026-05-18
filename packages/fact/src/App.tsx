@@ -46,7 +46,7 @@ type FreeProblem = {
   status: 'open' | 'waiting' | 'resolved';
 };
 
-type SheetMode = 'fact' | 'problem' | 'photo' | 'close-day' | null;
+type SheetMode = 'fact' | 'problem' | 'photo' | 'close-day' | 'bulk-plan' | null;
 type Tab = 'today' | 'object' | 'problems' | 'journal';
 type DayPreset = 'yesterday' | 'today' | 'tomorrow' | 'custom';
 
@@ -172,6 +172,16 @@ function getRelativeDayLabel(dateKey: string, baseDate: string): string {
       : 'дней';
 
   return `${diffDays > 0 ? '+' : '-'}${absDays} ${suffix}`;
+}
+
+function formatWorkCount(count: number): string {
+  const absCount = Math.abs(count);
+  const suffix = absCount % 10 === 1 && absCount % 100 !== 11
+    ? 'работу'
+    : absCount % 10 >= 2 && absCount % 10 <= 4 && (absCount % 100 < 12 || absCount % 100 > 14)
+      ? 'работы'
+      : 'работ';
+  return `${count} ${suffix}`;
 }
 
 function clampPercent(value: number): number {
@@ -356,6 +366,8 @@ export function App() {
     }
     updateDraft(taskId, { ...draft, inputMode: 'percent', value: String(nextPercent), explicitValue: true });
   };
+
+  const visibleUnmarkedTasks = visibleTaskSections.flatMap((section) => section.tasks).filter((task) => !isDraftMarked(drafts[task.id]));
 
   const openTaskSheet = (task: FactTask, mode: Exclude<SheetMode, 'close-day' | null>) => {
     const draft = drafts[task.id] ?? createDraft(task);
@@ -594,6 +606,82 @@ export function App() {
     return true;
   };
 
+  const markVisibleTasksAsPlanned = async () => {
+    if (!token || visibleUnmarkedTasks.length === 0) return;
+
+    const targetTasks = visibleUnmarkedTasks.filter((task) => !pendingTaskIds.has(task.id));
+    if (targetTasks.length === 0) return;
+
+    const previousDrafts = drafts;
+    const previousSession = session;
+    const marks = targetTasks.map((task) => {
+      const plannedProgress = getPlannedProgressByDate(task, date);
+      const plannedState: FactMarkState = plannedProgress >= 100 ? 'done' : 'fact';
+      const draft: Draft = {
+        ...(drafts[task.id] ?? createDraft(task)),
+        state: plannedState,
+        inputMode: 'percent',
+        value: String(plannedProgress),
+        explicitValue: true,
+        reason: '',
+        comment: '',
+        worked: true,
+      };
+      return { task, plannedProgress, plannedState, draft };
+    });
+
+    setDrafts((current) => ({
+      ...current,
+      ...Object.fromEntries(marks.map((mark) => [mark.task.id, mark.draft])),
+    }));
+    setSession((current) => current
+      ? {
+          ...current,
+          tasks: current.tasks.map((item) => {
+            const mark = marks.find((nextMark) => nextMark.task.id === item.id);
+            return mark
+              ? {
+                  ...item,
+                  closeState: mark.plannedState,
+                  closeInputMode: 'percent',
+                  closeValue: mark.plannedProgress,
+                  closeReason: null,
+                  closeComment: null,
+                  dayFactUpdatedAt: new Date().toISOString(),
+                }
+              : item;
+          }),
+        }
+      : current);
+    setPendingTaskIds((current) => {
+      const next = new Set(current);
+      for (const mark of marks) next.add(mark.task.id);
+      return next;
+    });
+    setError(null);
+    try {
+      triggerMediumHaptic();
+      await Promise.all(marks.map((mark) => saveFactTaskMark({
+        token,
+        taskId: mark.task.id,
+        date,
+        state: mark.plannedState,
+        value: mark.plannedProgress,
+        inputMode: 'percent',
+      })));
+    } catch (err) {
+      setDrafts(previousDrafts);
+      setSession(previousSession);
+      setError(err instanceof Error ? err.message : 'Не удалось отметить работы по плану.');
+    } finally {
+      setPendingTaskIds((current) => {
+        const next = new Set(current);
+        for (const mark of marks) next.delete(mark.task.id);
+        return next;
+      });
+    }
+  };
+
   const toggleReason = (reason: string) => {
     if (activeTask && activeDraft) {
       const parts = activeDraft.reason.split(',').map((part) => part.trim()).filter(Boolean);
@@ -768,6 +856,25 @@ export function App() {
                     </Fragment>
                   );
                 })}
+                {visibleUnmarkedTasks.length > 0 && (
+                  <Container className="bulk-plan-action" fullWidth>
+                    <Flex direction="column" gap={12} className="bulk-plan-stack">
+                      <div className="bulk-plan-divider" aria-hidden="true" />
+                      <Button
+                        mode="primary"
+                        appearance="themed"
+                        size="large"
+                        stretched
+                        onClick={() => {
+                          setSheetClosing(false);
+                          setSheetMode('bulk-plan');
+                        }}
+                      >
+                        Всё идёт по плану
+                      </Button>
+                    </Flex>
+                  </Container>
+                )}
               </Flex>
             </>
           )}
@@ -934,7 +1041,7 @@ export function App() {
             />
             <Flex className="modal-header" align="center" justify="space-between">
               <Typography.Headline variant="small-strong">
-                {sheetMode === 'close-day' ? 'Закрытие дня' : sheetMode === 'photo' ? 'Фото' : activeTask?.name ?? 'Новая проблема'}
+                {sheetMode === 'bulk-plan' ? 'Всё идёт по плану' : sheetMode === 'close-day' ? 'Закрытие дня' : sheetMode === 'photo' ? 'Фото' : activeTask?.name ?? 'Новая проблема'}
               </Typography.Headline>
               <IconButton mode="link" appearance="neutral" size="small" onClick={closeSheet} aria-label="Закрыть">
                 <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -1135,6 +1242,37 @@ export function App() {
                   <Button mode="primary" size="large" stretched onClick={submitFreeProblem}>
                     Отправить проблему
                   </Button>
+                </Container>
+              </Flex>
+            )}
+
+            {sheetMode === 'bulk-plan' && (
+              <Flex direction="column" gap={16} className="modal-body">
+                <CellList mode="island">
+                  <CellSimple
+                    height="normal"
+                    title={`Отметить ${formatWorkCount(visibleUnmarkedTasks.length)}`}
+                    subtitle="Поставим каждой работе предлагаемый процент по плану."
+                  />
+                </CellList>
+                <Container className="modal-actions">
+                  <Flex align="center" gap={8} className="modal-actions-row">
+                    <Button mode="secondary" appearance="neutral" size="large" stretched onClick={closeSheet}>
+                      Отмена
+                    </Button>
+                    <Button
+                      mode="primary"
+                      appearance="themed"
+                      size="large"
+                      stretched
+                      onClick={() => {
+                        closeSheet();
+                        void markVisibleTasksAsPlanned();
+                      }}
+                    >
+                      Подтвердить
+                    </Button>
+                  </Flex>
                 </Container>
               </Flex>
             )}

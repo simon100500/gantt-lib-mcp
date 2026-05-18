@@ -259,6 +259,21 @@ textarea {
   width: 100%;
 }
 
+.bulk-plan-action {
+  width: 100%;
+  padding: 22px 16px 16px;
+}
+
+.bulk-plan-stack {
+  width: 100%;
+}
+
+.bulk-plan-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--stroke-separator-primary);
+}
+
 .work-card:active {
   transform: scale(0.995);
 }
