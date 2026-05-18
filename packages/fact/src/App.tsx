@@ -117,7 +117,21 @@ function getSectionTitle(task: FactTask, tasks: FactTask[]): string | null {
   if (!task.parentId) {
     return 'Без категории';
   }
-  return tasks.find((item) => item.id === task.parentId)?.name ?? null;
+
+  const tasksById = new Map(tasks.map((item) => [item.id, item]));
+  const ancestors: string[] = [];
+  const visitedIds = new Set<string>();
+  let parentId: string | null = task.parentId;
+
+  while (parentId && !visitedIds.has(parentId)) {
+    visitedIds.add(parentId);
+    const parent = tasksById.get(parentId);
+    if (!parent) break;
+    ancestors.unshift(parent.name);
+    parentId = parent.parentId;
+  }
+
+  return ancestors.length > 0 ? ancestors.join(' › ') : null;
 }
 
 const dayOptions: Array<{ key: Exclude<DayPreset, 'custom'>; label: string }> = [
