@@ -110,13 +110,6 @@ function getPresetDateKey(preset: Exclude<DayPreset, 'custom'>, baseDate: string
   return itemDate.toISOString().slice(0, 10);
 }
 
-function getWorkListTitle(preset: DayPreset, dateKey: string): string {
-  if (preset === 'yesterday') return 'Работы за вчера';
-  if (preset === 'today') return 'Работы на сегодня';
-  if (preset === 'tomorrow') return 'Работы на завтра';
-  return `Работы на ${formatRuDate(dateKey)}`;
-}
-
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -497,19 +490,12 @@ export function App() {
 
               <CellList mode="island" filled>
                 <CellSimple
-                  height="compact"
-                  title={getWorkListTitle(activeDayPreset, date)}
-                  after={<Counter value={writableTasks.length} rounded appearance="neutral" />}
+                  as="label"
+                  height="normal"
+                  title="Скрыть отмеченные"
+                  subtitle={`${markedCount} из ${writableTasks.length} работ отмечено`}
+                  after={<Switch checked={hideMarkedTasks} onChange={(event) => setHideMarkedTasks(event.target.checked)} />}
                 />
-                {markedCount > 0 && (
-                  <CellSimple
-                    as="label"
-                    height="normal"
-                    title="Скрыть отмеченные"
-                    subtitle={`${markedCount} уже отмечено`}
-                    after={<Switch checked={hideMarkedTasks} onChange={(event) => setHideMarkedTasks(event.target.checked)} />}
-                  />
-                )}
               </CellList>
 
               <Flex direction="column" gap={10}>

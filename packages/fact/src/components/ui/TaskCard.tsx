@@ -28,7 +28,6 @@ const problemCounterStyle: CSSProperties = {
   color: 'var(--text-contrast-static)',
   backgroundColor: '#b4232f',
 };
-
 function formatDateRange(task: FactTask): string {
   const start = task.startDate ? dateFormatter.format(new Date(`${task.startDate}T00:00:00.000Z`)) : 'дата не задана';
   const end = task.endDate ? dateFormatter.format(new Date(`${task.endDate}T00:00:00.000Z`)) : 'дата не задана';
@@ -68,7 +67,16 @@ export function TaskCard({
       height="normal"
       title={task.name}
       subtitle={subtitle}
-      after={<Counter value={progress} appearance={isProblem ? 'negative' : 'themed'} mode="filled" className="percent-counter" style={counterStyle} />}
+      after={
+        <Counter
+          value={progress}
+          appearance={isProblem || isMarked ? (isProblem ? 'negative' : 'themed') : 'neutral'}
+          mode={isProblem || isMarked ? 'filled' : 'inverse'}
+          muted={!isProblem && !isMarked}
+          className="percent-counter"
+          style={counterStyle}
+        />
+      }
       innerClassNames={isProblem ? { subtitle: 'task-card-subtitle--problem' } : undefined}
       showChevron
       onClick={() => onOpenFact(task)}
