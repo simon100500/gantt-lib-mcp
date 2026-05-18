@@ -523,6 +523,7 @@ export function App() {
                             key={task.id}
                             task={task}
                             draft={drafts[task.id] ?? createDraft(task)}
+                            dateKey={date}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                           />
                         ))}
@@ -564,6 +565,7 @@ export function App() {
                             key={task.id}
                             task={task}
                             draft={drafts[task.id] ?? createDraft(task)}
+                            dateKey={date}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                           />
                         ))}
@@ -638,6 +640,7 @@ export function App() {
                             key={task.id}
                             task={task}
                             draft={drafts[task.id] ?? createDraft(task)}
+                            dateKey={date}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
                           />
                         ))}

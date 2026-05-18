@@ -228,6 +228,14 @@ textarea {
   color: #b4232f;
 }
 
+.task-card-deadline {
+  color: inherit;
+}
+
+.task-card-deadline--overdue {
+  color: #b86a76;
+}
+
 .progress-block {
   padding: 0 12px 10px;
 }

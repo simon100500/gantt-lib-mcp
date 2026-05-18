@@ -1,5 +1,5 @@
 import { CellSimple, Counter } from '@maxhub/max-ui';
-import type { CSSProperties } from 'react';
+import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import type { FactMarkState, FactTask } from '../../api/factApi';
 
 type Draft = {
@@ -16,10 +16,12 @@ type Draft = {
 type TaskCardProps = {
   task: FactTask;
   draft: Draft;
+  dateKey: string;
   onOpenFact: (task: FactTask) => void;
 };
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const shortDateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' });
 const markedCounterStyle: CSSProperties = {
   color: 'var(--text-contrast-static)',
   backgroundColor: 'var(--background-accent-positive)',
@@ -28,13 +30,78 @@ const problemCounterStyle: CSSProperties = {
   color: 'var(--text-contrast-static)',
   backgroundColor: '#b4232f',
 };
-function formatDateRange(task: FactTask): string {
-  const start = task.startDate ? dateFormatter.format(new Date(`${task.startDate}T00:00:00.000Z`)) : 'дата не задана';
-  const end = task.endDate ? dateFormatter.format(new Date(`${task.endDate}T00:00:00.000Z`)) : 'дата не задана';
-  return `${start} - ${end}`;
+
+function getUtcDayIndex(dateKey: string): number {
+  return Math.floor(new Date(`${dateKey}T00:00:00.000Z`).getTime() / 86_400_000);
 }
 
-function formatProblemSubtitle(draft: Draft, fallback: string): string {
+function getTodayDateKey(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDeadlineDate(dateKey: string): string {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  const currentYear = new Date().getFullYear();
+  return date.getUTCFullYear() === currentYear ? shortDateFormatter.format(date) : dateFormatter.format(date);
+}
+
+function formatDeadlineLabel(dateKey: string): { text: string; isOverdue: boolean } {
+  const todayDateKey = getTodayDateKey();
+  const overdueDays = getUtcDayIndex(todayDateKey) - getUtcDayIndex(dateKey);
+  const baseDate = formatDeadlineDate(dateKey);
+
+  if (overdueDays > 0) {
+    return {
+      text: `${baseDate} (-${overdueDays} д.)`,
+      isOverdue: true,
+    };
+  }
+
+  return {
+    text: baseDate,
+    isOverdue: false,
+  };
+}
+
+function getPlannedProgressByDate(task: FactTask, dateKey: string): number {
+  const startIndex = getUtcDayIndex(task.startDate);
+  const endIndex = getUtcDayIndex(task.endDate);
+  const currentIndex = getUtcDayIndex(dateKey);
+
+  if (!Number.isFinite(startIndex) || !Number.isFinite(endIndex) || !Number.isFinite(currentIndex)) {
+    return 0;
+  }
+
+  if (currentIndex < startIndex) {
+    return 0;
+  }
+
+  if (currentIndex >= endIndex) {
+    return 100;
+  }
+
+  const totalDays = Math.max(1, endIndex - startIndex + 1);
+  const elapsedDays = Math.max(0, currentIndex - startIndex + 1);
+  return Math.max(0, Math.min(100, Math.round((elapsedDays / totalDays) * 100)));
+}
+
+function formatPlanSubtitle(task: FactTask, dateKey: string) {
+  const plannedProgress = getPlannedProgressByDate(task, dateKey);
+  const deadline = task.endDate ? formatDeadlineLabel(task.endDate) : { text: 'дата не задана', isOverdue: false };
+
+  return (
+    <Fragment>
+      <span>{`План ${plannedProgress}% · `}</span>
+      <span className={deadline.isOverdue ? 'task-card-deadline task-card-deadline--overdue' : 'task-card-deadline'}>{`⚑ ${deadline.text}`}</span>
+    </Fragment>
+  );
+}
+
+function formatProblemSubtitle(draft: Draft, fallback: ReactNode): ReactNode {
   const reason = draft.reason
     .split(',')
     .map((part) => part.trim())
@@ -49,6 +116,7 @@ function formatProblemSubtitle(draft: Draft, fallback: string): string {
 export function TaskCard({
   task,
   draft,
+  dateKey,
   onOpenFact,
 }: TaskCardProps) {
   if (!task.writable) {
@@ -59,7 +127,7 @@ export function TaskCard({
   const hasProblemText = Boolean(draft.reason.trim() || draft.comment.trim());
   const isMarked = draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || Boolean(draft.value.trim());
   const isProblem = draft.state === 'problem' || draft.state === 'not_worked' || hasProblemText;
-  const subtitle = isProblem ? formatProblemSubtitle(draft, formatDateRange(task)) : formatDateRange(task);
+  const subtitle = isProblem ? formatProblemSubtitle(draft, formatPlanSubtitle(task, dateKey)) : formatPlanSubtitle(task, dateKey);
   const counterStyle = isProblem ? problemCounterStyle : isMarked ? markedCounterStyle : undefined;
 
   return (
