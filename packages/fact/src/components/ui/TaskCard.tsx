@@ -19,6 +19,7 @@ type TaskCardProps = {
   task: FactTask;
   draft: Draft;
   dateKey: string;
+  forceVisible?: boolean;
   hideOnPlanSwipe: boolean;
   swipeDisabled: boolean;
   onOpenFact: (task: FactTask) => void;
@@ -121,6 +122,7 @@ export function TaskCard({
   task,
   draft,
   dateKey,
+  forceVisible = false,
   hideOnPlanSwipe,
   swipeDisabled,
   onOpenFact,
@@ -134,7 +136,7 @@ export function TaskCard({
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isDismissing, setIsDismissing] = useState(false);
 
-  if (!task.writable) {
+  if (!task.writable && !forceVisible) {
     return null;
   }
 

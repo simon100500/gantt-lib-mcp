@@ -47,7 +47,7 @@ type FreeProblem = {
 };
 
 type SheetMode = 'fact' | 'problem' | 'photo' | 'close-day' | 'bulk-plan' | null;
-type Tab = 'today' | 'object' | 'problems' | 'journal';
+type Tab = 'today' | 'project' | 'problems' | 'journal';
 type DayPreset = 'yesterday' | 'today' | 'tomorrow' | 'custom';
 type TaskHierarchySection = {
   sectionTitle: string;
@@ -59,7 +59,7 @@ type TaskHierarchySection = {
 const reasonTags = ['Нет материала', 'Нет людей', 'Не готов фронт', 'Ждем смежников', 'Изменение проекта', 'Погода', 'Техника', 'Другое'];
 const navItems: Array<{ id: Tab; label: string }> = [
   { id: 'today', label: 'Сегодня' },
-  { id: 'object', label: 'Объект' },
+  { id: 'project', label: 'Проект' },
   { id: 'problems', label: 'Проблемы' },
   { id: 'journal', label: 'Журнал' },
 ];
@@ -202,6 +202,33 @@ function sortHierarchySections(sections: TaskHierarchySection[]): TaskHierarchyS
     const rightSortOrder = right.tasks[0]?.sortOrder ?? 0;
     return leftSortOrder - rightSortOrder;
   });
+}
+
+function buildHierarchySections(tasks: FactTask[], predicate: (task: FactTask) => boolean): TaskHierarchySection[] {
+  const sections: TaskHierarchySection[] = [];
+  const tasksById = new Map(tasks.map((item) => [item.id, item]));
+
+  for (const task of tasks) {
+    if (!predicate(task)) continue;
+
+    const hierarchy = getTaskHierarchySection(task, tasksById);
+    const lastSection = sections[sections.length - 1];
+    if (
+      lastSection
+      && lastSection.sectionTitle === hierarchy.sectionTitle
+      && lastSection.subsectionTitle === hierarchy.subsectionTitle
+      && lastSection.breadcrumbTitle === hierarchy.breadcrumbTitle
+    ) {
+      lastSection.tasks.push(task);
+    } else {
+      sections.push({ ...hierarchy, tasks: [task] });
+    }
+  }
+
+  return sortHierarchySections(sections.map((section) => ({
+    ...section,
+    tasks: sortSectionTasks(section.tasks),
+  })));
 }
 
 const dayOptions: Array<{ key: Exclude<DayPreset, 'custom'>; label: string }> = [
@@ -388,7 +415,7 @@ export function App() {
   }, [sheetMode]);
 
   const writableTasks = session?.tasks.filter((task) => task.writable) ?? [];
-  const activeTask = activeTaskId ? writableTasks.find((task) => task.id === activeTaskId) ?? null : null;
+  const activeTask = activeTaskId ? session?.tasks.find((task) => task.id === activeTaskId && task.isLeaf) ?? null : null;
   const activeDraft = activeTask ? drafts[activeTask.id] ?? createDraft(activeTask) : null;
   const activeTaskHasSavedMark = Boolean(activeTask && (
     activeTask.closeState !== null
@@ -400,33 +427,10 @@ export function App() {
   const markedCount = markedTasks.length;
   const problemTasks = writableTasks.filter((task) => drafts[task.id]?.state === 'problem');
   const unmarkedTasks = writableTasks.filter((task) => !isDraftMarked(drafts[task.id]));
-  const taskSections = useMemo(() => {
-    const sections: TaskHierarchySection[] = [];
-    const allTasks = session?.tasks ?? [];
-    const tasksById = new Map(allTasks.map((item) => [item.id, item]));
-
-    for (const task of allTasks) {
-      if (!task.writable) continue;
-
-      const hierarchy = getTaskHierarchySection(task, tasksById);
-      const lastSection = sections[sections.length - 1];
-      if (
-        lastSection
-        && lastSection.sectionTitle === hierarchy.sectionTitle
-        && lastSection.subsectionTitle === hierarchy.subsectionTitle
-        && lastSection.breadcrumbTitle === hierarchy.breadcrumbTitle
-      ) {
-        lastSection.tasks.push(task);
-      } else {
-        sections.push({ ...hierarchy, tasks: [task] });
-      }
-    }
-
-    return sortHierarchySections(sections.map((section) => ({
-      ...section,
-      tasks: sortSectionTasks(section.tasks),
-    })));
-  }, [session?.tasks]);
+  const taskSections = useMemo(
+    () => buildHierarchySections(session?.tasks ?? [], (task) => task.writable),
+    [session?.tasks],
+  );
   const visibleTaskSections = useMemo(() => {
     if (!hideMarkedTasks) {
       return taskSections;
@@ -459,6 +463,9 @@ export function App() {
 
     return sections;
   }, [date, drafts, session?.tasks]);
+  const projectSections = useMemo(() => {
+    return buildHierarchySections(session?.tasks ?? [], (task) => task.isLeaf);
+  }, [session?.tasks]);
 
   const updateDraft = (taskId: string, nextDraft: Draft) => {
     setDrafts((current) => ({ ...current, [taskId]: nextDraft }));
@@ -535,7 +542,7 @@ export function App() {
     }))
     : [];
 
-  const renderTaskSections = (sections: TaskHierarchySection[], options: { keyPrefix: string; hideOnPlanSwipe: boolean }) => {
+  const renderTaskSections = (sections: TaskHierarchySection[], options: { keyPrefix: string; hideOnPlanSwipe: boolean; forceVisible?: boolean }) => {
     let previousSectionTitle: string | null = null;
     let previousSubsectionTitle: string | null = null;
 
@@ -573,6 +580,7 @@ export function App() {
                 task={task}
                 draft={drafts[task.id] ?? createDraft(task)}
                 dateKey={date}
+                forceVisible={options.forceVisible}
                 hideOnPlanSwipe={options.hideOnPlanSwipe}
                 swipeDisabled={pendingTaskIds.has(task.id)}
                 onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
@@ -1075,23 +1083,22 @@ export function App() {
             </>
           )}
 
-          {activeTab === 'object' && (
+          {activeTab === 'project' && (
             <>
-              <CellList mode="island" filled>
-                <CellSimple
-                  height="compact"
-                  title={session?.project.name ?? 'Объект'}
-                  after={<Counter value={writableTasks.length} appearance="themed" mode="filled" />}
-                />
-              </CellList>
-
               <Flex direction="column" gap={10}>
-                {taskSections.length === 0 && (
-                  <Container className="state-box state-box--compact">
-                    <Typography.Body variant="medium">Работы объекта появятся после синхронизации.</Typography.Body>
+                {session?.tasks.length === 0 && (
+                  <Container className="state-box state-box--compact empty-state">
+                    <NoWorkIcon />
+                    <Typography.Headline variant="small-strong">Работ в проекте нет</Typography.Headline>
                   </Container>
                 )}
-                {renderTaskSections(taskSections, { keyPrefix: 'object', hideOnPlanSwipe: false })}
+                {session?.tasks.length !== 0 && projectSections.length === 0 && (
+                  <Container className="state-box state-box--compact empty-state">
+                    <NoWorkIcon />
+                    <Typography.Headline variant="small-strong">Работ в проекте нет</Typography.Headline>
+                  </Container>
+                )}
+                {renderTaskSections(projectSections, { keyPrefix: 'project', hideOnPlanSwipe: false, forceVisible: true })}
               </Flex>
             </>
           )}

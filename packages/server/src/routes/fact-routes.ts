@@ -597,8 +597,9 @@ export async function registerFactRoutes(fastify: FastifyInstance): Promise<void
         ))
         .map((task) => task.id),
     );
-    const ancestorIds = collectAncestorIds(tasks, dayTaskIds);
-    const visibleTaskIds = new Set([...dayTaskIds, ...ancestorIds]);
+    const hierarchyTaskIds = new Set(accessibleTaskIds);
+    const ancestorIds = collectAncestorIds(tasks, hierarchyTaskIds);
+    const visibleTaskIds = new Set([...hierarchyTaskIds, ...ancestorIds]);
 
     await prisma.factAccessToken.update({
       where: { id: token.id },
