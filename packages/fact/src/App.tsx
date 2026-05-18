@@ -49,10 +49,12 @@ type FreeProblem = {
 type SheetMode = 'fact' | 'problem' | 'photo' | 'close-day' | 'bulk-plan' | null;
 type Tab = 'today' | 'project' | 'problems' | 'journal';
 type DayPreset = 'yesterday' | 'today' | 'tomorrow' | 'custom';
+type ProjectSort = 'order' | 'deadline' | 'completion';
 type TaskHierarchySection = {
   sectionTitle: string;
   subsectionTitle: string | null;
   breadcrumbTitle: string | null;
+  dividerTitle?: string;
   tasks: FactTask[];
 };
 
@@ -204,9 +206,13 @@ function sortHierarchySections(sections: TaskHierarchySection[]): TaskHierarchyS
   });
 }
 
-function buildHierarchySections(tasks: FactTask[], predicate: (task: FactTask) => boolean): TaskHierarchySection[] {
+function buildHierarchySections(
+  tasks: FactTask[],
+  predicate: (task: FactTask) => boolean,
+  options: { preserveInputOrder?: boolean; hierarchyTasks?: FactTask[] } = {},
+): TaskHierarchySection[] {
   const sections: TaskHierarchySection[] = [];
-  const tasksById = new Map(tasks.map((item) => [item.id, item]));
+  const tasksById = new Map((options.hierarchyTasks ?? tasks).map((item) => [item.id, item]));
 
   for (const task of tasks) {
     if (!predicate(task)) continue;
@@ -225,10 +231,12 @@ function buildHierarchySections(tasks: FactTask[], predicate: (task: FactTask) =
     }
   }
 
-  return sortHierarchySections(sections.map((section) => ({
+  const normalizedSections = sections.map((section) => ({
     ...section,
-    tasks: sortSectionTasks(section.tasks),
-  })));
+    tasks: options.preserveInputOrder ? section.tasks : sortSectionTasks(section.tasks),
+  }));
+
+  return options.preserveInputOrder ? normalizedSections : sortHierarchySections(normalizedSections);
 }
 
 const dayOptions: Array<{ key: Exclude<DayPreset, 'custom'>; label: string }> = [
@@ -365,6 +373,8 @@ export function App() {
   const [sheetClosing, setSheetClosing] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [hideMarkedTasks, setHideMarkedTasks] = useState(true);
+  const [projectQuery, setProjectQuery] = useState('');
+  const [projectSort, setProjectSort] = useState<ProjectSort>('order');
 
   useEffect(() => {
     if (!token) {
@@ -464,8 +474,83 @@ export function App() {
     return sections;
   }, [date, drafts, session?.tasks]);
   const projectSections = useMemo(() => {
-    return buildHierarchySections(session?.tasks ?? [], (task) => task.isLeaf);
-  }, [session?.tasks]);
+    const allTasks = session?.tasks ?? [];
+    const normalizedQuery = projectQuery.trim().toLowerCase();
+    const projectTasks = allTasks
+      .filter((task) => task.isLeaf)
+      .filter((task) => normalizedQuery.length === 0 || task.name.toLowerCase().includes(normalizedQuery));
+
+    if (projectSort === 'order') {
+      return buildHierarchySections(allTasks, (task) => (
+        task.isLeaf
+        && (normalizedQuery.length === 0 || task.name.toLowerCase().includes(normalizedQuery))
+      ));
+    }
+
+    const sortedTasks = [...projectTasks].sort((left, right) => {
+      if (projectSort === 'deadline') {
+        return left.endDate.localeCompare(right.endDate)
+          || left.startDate.localeCompare(right.startDate)
+          || left.sortOrder - right.sortOrder;
+      }
+
+      if (projectSort === 'completion') {
+        return Math.round(left.progress || 0) - Math.round(right.progress || 0)
+          || left.endDate.localeCompare(right.endDate)
+          || left.sortOrder - right.sortOrder;
+      }
+
+      return left.sortOrder - right.sortOrder;
+    });
+
+    if (projectSort === 'deadline') {
+      const beforeToday = sortedTasks.filter((task) => task.endDate < baseToday);
+      const fromToday = sortedTasks.filter((task) => task.endDate >= baseToday);
+      const sections: TaskHierarchySection[] = [];
+
+      if (beforeToday.length > 0) {
+        sections.push({
+          sectionTitle: '',
+          subsectionTitle: null,
+          breadcrumbTitle: null,
+          tasks: beforeToday,
+        });
+      }
+
+      if (fromToday.length > 0) {
+        sections.push({
+          sectionTitle: '',
+          subsectionTitle: null,
+          breadcrumbTitle: null,
+          dividerTitle: `Сегодня, ${formatShortRuDate(baseToday)}`,
+          tasks: fromToday,
+        });
+      }
+
+      return sections;
+    }
+
+    return [{
+      sectionTitle: '',
+      subsectionTitle: null,
+      breadcrumbTitle: null,
+      tasks: sortedTasks,
+    }];
+  }, [baseToday, projectQuery, projectSort, session?.tasks]);
+  const projectBreadcrumbs = useMemo(() => {
+    if (projectSort === 'order') {
+      return new Map<string, string>();
+    }
+
+    const allTasks = session?.tasks ?? [];
+    const tasksById = new Map(allTasks.map((item) => [item.id, item]));
+    return new Map(
+      allTasks
+        .filter((task) => task.isLeaf)
+        .map((task) => [task.id, getTaskAncestorNames(task, tasksById).join(' › ')])
+        .filter((entry): entry is [string, string] => entry[1].length > 0),
+    );
+  }, [projectSort, session?.tasks]);
 
   const updateDraft = (taskId: string, nextDraft: Draft) => {
     setDrafts((current) => ({ ...current, [taskId]: nextDraft }));
@@ -542,12 +627,12 @@ export function App() {
     }))
     : [];
 
-  const renderTaskSections = (sections: TaskHierarchySection[], options: { keyPrefix: string; hideOnPlanSwipe: boolean; forceVisible?: boolean }) => {
+  const renderTaskSections = (sections: TaskHierarchySection[], options: { keyPrefix: string; hideOnPlanSwipe: boolean; forceVisible?: boolean; breadcrumbs?: Map<string, string> }) => {
     let previousSectionTitle: string | null = null;
     let previousSubsectionTitle: string | null = null;
 
     return sections.map((section, sectionIndex) => {
-      const showSectionTitle = section.sectionTitle !== previousSectionTitle;
+      const showSectionTitle = Boolean(section.sectionTitle) && section.sectionTitle !== previousSectionTitle;
       const showSubsectionTitle = Boolean(section.subsectionTitle) && (showSectionTitle || section.subsectionTitle !== previousSubsectionTitle);
 
       previousSectionTitle = section.sectionTitle;
@@ -555,6 +640,11 @@ export function App() {
 
       return (
         <Fragment key={`${options.keyPrefix}-${section.sectionTitle}-${section.subsectionTitle ?? 'root'}-${section.breadcrumbTitle ?? 'leaf'}-${sectionIndex}`}>
+          {section.dividerTitle && (
+            <div className="project-date-divider" role="separator">
+              <span>{section.dividerTitle}</span>
+            </div>
+          )}
           {showSectionTitle && (
             <TypographyHeadline variant="small-strong" className="task-section-title" asChild>
               <h2 className="task-section-heading">
@@ -580,6 +670,7 @@ export function App() {
                 task={task}
                 draft={drafts[task.id] ?? createDraft(task)}
                 dateKey={date}
+                breadcrumb={options.breadcrumbs?.get(task.id)}
                 forceVisible={options.forceVisible}
                 hideOnPlanSwipe={options.hideOnPlanSwipe}
                 swipeDisabled={pendingTaskIds.has(task.id)}
@@ -1086,6 +1177,43 @@ export function App() {
           {activeTab === 'project' && (
             <>
               <Flex direction="column" gap={10}>
+                <CellList mode="island" filled>
+                  <Container className="project-controls" fullWidth>
+                    <Input
+                      mode="secondary"
+                      value={projectQuery}
+                      onChange={(event) => setProjectQuery(event.target.value)}
+                      placeholder="Поиск по работам"
+                      aria-label="Поиск по работам проекта"
+                    />
+                    <Flex gap={8} className="project-sort-row">
+                      <Button
+                        mode={projectSort === 'order' ? 'primary' : 'secondary'}
+                        appearance={projectSort === 'order' ? 'themed' : 'neutral'}
+                        size="small"
+                        onClick={() => setProjectSort('order')}
+                      >
+                        По порядку
+                      </Button>
+                      <Button
+                        mode={projectSort === 'deadline' ? 'primary' : 'secondary'}
+                        appearance={projectSort === 'deadline' ? 'themed' : 'neutral'}
+                        size="small"
+                        onClick={() => setProjectSort('deadline')}
+                      >
+                        По срокам
+                      </Button>
+                      <Button
+                        mode={projectSort === 'completion' ? 'primary' : 'secondary'}
+                        appearance={projectSort === 'completion' ? 'themed' : 'neutral'}
+                        size="small"
+                        onClick={() => setProjectSort('completion')}
+                      >
+                        По завершённости
+                      </Button>
+                    </Flex>
+                  </Container>
+                </CellList>
                 {session?.tasks.length === 0 && (
                   <Container className="state-box state-box--compact empty-state">
                     <NoWorkIcon />
@@ -1095,10 +1223,10 @@ export function App() {
                 {session?.tasks.length !== 0 && projectSections.length === 0 && (
                   <Container className="state-box state-box--compact empty-state">
                     <NoWorkIcon />
-                    <Typography.Headline variant="small-strong">Работ в проекте нет</Typography.Headline>
+                    <Typography.Headline variant="small-strong">Ничего не найдено</Typography.Headline>
                   </Container>
                 )}
-                {renderTaskSections(projectSections, { keyPrefix: 'project', hideOnPlanSwipe: false, forceVisible: true })}
+                {renderTaskSections(projectSections, { keyPrefix: 'project', hideOnPlanSwipe: false, forceVisible: true, breadcrumbs: projectBreadcrumbs })}
               </Flex>
             </>
           )}

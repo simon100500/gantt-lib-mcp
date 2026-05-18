@@ -19,6 +19,7 @@ type TaskCardProps = {
   task: FactTask;
   draft: Draft;
   dateKey: string;
+  breadcrumb?: string | null;
   forceVisible?: boolean;
   hideOnPlanSwipe: boolean;
   swipeDisabled: boolean;
@@ -88,11 +89,12 @@ function getPlannedVolume(task: FactTask, plannedProgress: number): number | nul
   return (task.workVolume * plannedProgress) / 100;
 }
 
-function formatPlanSubtitle(task: FactTask, dateKey: string, allowOverdueHighlight: boolean) {
+function formatPlanSubtitle(task: FactTask, dateKey: string, allowOverdueHighlight: boolean, actualProgress: number) {
   const plannedProgress = getPlannedProgressByDate(task, dateKey);
   const plannedVolume = getPlannedVolume(task, plannedProgress);
   const deadline = task.endDate ? formatDeadlineLabel(task.endDate) : { text: 'дата не задана', isOverdue: false };
   const highlightDeadline = allowOverdueHighlight && deadline.isOverdue;
+  const highlightPlan = plannedProgress > actualProgress;
   const hasPlannedVolume = Boolean(plannedVolume !== null && task.workUnit);
   const subtitlePrefix = hasPlannedVolume
     ? `План +${formatVolumeValue(plannedVolume!)} ${task.workUnit} · `
@@ -100,7 +102,7 @@ function formatPlanSubtitle(task: FactTask, dateKey: string, allowOverdueHighlig
 
   return (
     <Fragment>
-      <span>{subtitlePrefix}</span>
+      <span className={highlightPlan ? 'task-card-plan task-card-plan--behind-fact' : 'task-card-plan'}>{subtitlePrefix}</span>
       <span className={highlightDeadline ? 'task-card-deadline task-card-deadline--overdue' : 'task-card-deadline'}>{`⚑ ${deadline.text}`}</span>
     </Fragment>
   );
@@ -122,6 +124,7 @@ export function TaskCard({
   task,
   draft,
   dateKey,
+  breadcrumb,
   forceVisible = false,
   hideOnPlanSwipe,
   swipeDisabled,
@@ -149,8 +152,8 @@ export function TaskCard({
   const markedProgress = draft.explicitValue ? Math.max(0, Math.min(100, Math.round(Number(draft.value || 0) || 0))) : progress;
   const isCompleted = !isProblem && hasExplicitMark && (draft.state === 'done' || markedProgress >= 100);
   const subtitle = isProblem
-    ? formatProblemSubtitle(draft, formatPlanSubtitle(task, dateKey, false))
-    : formatPlanSubtitle(task, dateKey, !isCompleted);
+    ? formatProblemSubtitle(draft, formatPlanSubtitle(task, dateKey, false, markedProgress))
+    : formatPlanSubtitle(task, dateKey, !isCompleted, markedProgress);
   const counterStyle = isProblem ? problemCounterStyle : isCompleted ? markedCounterStyle : undefined;
 
   useEffect(() => {
@@ -269,7 +272,12 @@ export function TaskCard({
       >
         <CellSimple
           height="normal"
-          title={task.name}
+          title={breadcrumb ? (
+            <span className="task-card-title-stack">
+              <span className="task-card-inline-breadcrumbs">{breadcrumb}</span>
+              <span>{task.name}</span>
+            </span>
+          ) : task.name}
           subtitle={subtitle}
           after={
             swipeDisabled

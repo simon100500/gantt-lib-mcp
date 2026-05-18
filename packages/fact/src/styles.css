@@ -392,12 +392,37 @@ textarea {
   color: #b4232f;
 }
 
+.task-card-plan {
+  color: inherit;
+}
+
+.task-card-plan--behind-fact {
+  color: #b86a76;
+}
+
 .task-card-deadline {
   color: inherit;
 }
 
 .task-card-deadline--overdue {
   color: #b86a76;
+}
+
+.task-card-title-stack {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.task-card-inline-breadcrumbs {
+  max-width: 100%;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .progress-block {
@@ -806,6 +831,41 @@ textarea {
 
 .modal-reset-button {
   flex: 0 0 auto;
+}
+
+.project-controls {
+  padding: 10px 12px 12px;
+}
+
+.project-sort-row {
+  width: 100%;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.project-date-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 16px 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.project-date-divider::before,
+.project-date-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--stroke-separator-primary);
+}
+
+.project-date-divider span {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 @media (min-width: 481px) {
