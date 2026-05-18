@@ -476,6 +476,7 @@ export function App() {
     ? getVolumeStep(activeTaskTotalVolume)
     : 5;
   const activePlannedProgress = activeTask ? getPlannedProgressByDate(activeTask, date) : 0;
+  const activePlannedVolume = getVolumeFromPercent(activePlannedProgress, activeTaskTotalVolume);
   const isActiveDraftAtPlannedProgress = activeDraftPercent >= activePlannedProgress;
   const percentProgressMarks = [0, 25, 50, 75, 100].map((value) => ({
     value,
@@ -1164,7 +1165,7 @@ export function App() {
               onTouchEnd={(event) => finishSheetDrag(event.changedTouches[0]?.clientY ?? 0)}
             />
             <Flex className="modal-header" align="center" justify="space-between">
-              <Typography.Headline variant="small-strong">
+              <Typography.Headline variant="small-strong" className="modal-header-title">
                 {sheetMode === 'bulk-plan' ? 'Всё идёт по плану' : sheetMode === 'close-day' ? 'Закрытие дня' : sheetMode === 'photo' ? 'Фото' : activeTask?.name ?? 'Новая проблема'}
               </Typography.Headline>
               <IconButton mode="link" appearance="neutral" size="small" onClick={closeSheet} aria-label="Закрыть">
@@ -1184,6 +1185,26 @@ export function App() {
                     {activeDraft.state !== 'not_worked' && (
                       <CellList mode="island">
                         <Container className="fact-progress-control" fullWidth>
+                          {activeTaskTotalVolume && activeTask.workUnit && (
+                            <Grid className="fact-progress-summary-grid" gap={8}>
+                              <div className="fact-progress-summary-card">
+                                <Typography.Label variant="medium-strong" className="fact-progress-summary-label">
+                                  План
+                                </Typography.Label>
+                                <Typography.Body variant="medium" className="fact-progress-summary-value">
+                                  {`+${formatVolumeValue(activePlannedVolume)} ${activeTask.workUnit}`}
+                                </Typography.Body>
+                              </div>
+                              <div className="fact-progress-summary-card fact-progress-summary-card--right">
+                                <Typography.Label variant="medium-strong" className="fact-progress-summary-label">
+                                  Факт
+                                </Typography.Label>
+                                <Typography.Body variant="medium" className="fact-progress-summary-value">
+                                  {`+${formatVolumeValue(activeDraftVolume)} ${activeTask.workUnit}`}
+                                </Typography.Body>
+                              </div>
+                            </Grid>
+                          )}
                           <Grid className="fact-progress-input-grid fact-progress-input-grid--labels" gap={8}>
                             <Typography.Label variant="medium-strong" className="fact-progress-field-label">
                               Объем

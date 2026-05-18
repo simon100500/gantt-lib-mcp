@@ -446,8 +446,8 @@ textarea {
 }
 
 .modal-header button {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 36px;
+  min-height: 36px;
 }
 
 .bottom-nav {
@@ -563,9 +563,14 @@ textarea {
 
 .modal-header {
   flex: 0 0 auto;
-  padding: 4px 16px 12px;
+  padding: 0 16px 8px;
   border-bottom: 1px solid var(--stroke-separator-primary);
   background: var(--background-surface-primary);
+}
+
+.modal-header-title {
+  font-size: 22px;
+  line-height: 28px;
 }
 
 .modal-body {
@@ -593,6 +598,31 @@ textarea {
 
 .fact-progress-control {
   gap: 4px;
+}
+
+.fact-progress-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.fact-progress-summary-card {
+  min-width: 0;
+}
+
+.fact-progress-summary-card--right {
+  text-align: right;
+}
+
+.fact-progress-summary-label {
+  color: var(--text-secondary);
+}
+
+.fact-progress-summary-value {
+  margin-top: 2px;
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .fact-progress-input-grid {
