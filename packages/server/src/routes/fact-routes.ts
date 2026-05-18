@@ -297,12 +297,8 @@ async function applyFactMark(input: {
     }
     amount = 0;
   } else if (inputMode === 'percent') {
-    if (workVolume && workVolume > 0) {
-      amount = workVolume * (amount / 100);
-    } else {
-      percentWithoutVolume = clampTaskProgress(amount);
-      amount = 0;
-    }
+    percentWithoutVolume = clampTaskProgress(amount);
+    amount = 0;
   }
   amount = roundFactAmount(Math.max(0, amount));
 
@@ -369,6 +365,8 @@ async function applyFactMark(input: {
       currentStatus: task?.status,
       currentCompletedVolume: task?.completedVolume,
       nextProgress: percentWithoutVolume,
+      nextCompletedVolume: workVolume && workVolume > 0 ? workVolume * (percentWithoutVolume / 100) : undefined,
+      currentWorkVolume: workVolume,
     });
     await input.tx.task.update({
       where: { id: input.task.id },
@@ -691,6 +689,64 @@ export async function registerFactRoutes(fastify: FastifyInstance): Promise<void
       });
     } catch (error) {
       return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to save fact' });
+    }
+
+    return reply.send({ ok: true });
+  });
+
+  fastify.delete('/api/fact/tasks/:taskId/progress', async (req, reply) => {
+    const prisma = getPrisma();
+    const params = req.params as { taskId?: string };
+    const body = (req.body ?? {}) as { token?: string; date?: unknown };
+    const slug = typeof body.token === 'string' ? body.token.trim() : '';
+    const taskId = typeof params.taskId === 'string' ? params.taskId.trim() : '';
+    const dateKey = typeof body.date === 'string' ? body.date : '';
+    const entryDate = parseIsoDateOnly(dateKey);
+
+    if (!slug) {
+      return reply.status(400).send({ error: 'token required' });
+    }
+    if (!taskId || !entryDate) {
+      return reply.status(400).send({ error: 'invalid fact mark reset' });
+    }
+
+    const token = assertUsableToken(await prisma.factAccessToken.findUnique({
+      where: { slug },
+      select: { id: true, slug: true, projectId: true, includedTaskIds: true, label: true, revokedAt: true, expiresAt: true },
+    }));
+    if (!token) {
+      return reply.status(404).send({ error: 'Fact access token not found' });
+    }
+
+    const task = await prisma.task.findFirst({
+      where: { id: taskId, projectId: token.projectId },
+      select: { id: true, workVolume: true, _count: { select: { children: true } } },
+    });
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+    if (task._count.children > 0) {
+      return reply.status(400).send({ error: 'Fact can only be entered for leaf tasks' });
+    }
+    if (token.includedTaskIds.length > 0 && !token.includedTaskIds.includes(task.id)) {
+      return reply.status(403).send({ error: 'Task is not available for this token' });
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.factDayCloseEntry.deleteMany({
+          where: {
+            projectId: token.projectId,
+            taskId: task.id,
+            tokenId: token.id,
+            date: entryDate,
+          },
+        });
+        await recomputeTaskProgress(tx, token.projectId, task.id, task.workVolume ?? null);
+        await tx.factAccessToken.update({ where: { id: token.id }, data: { lastUsedAt: new Date() } });
+      });
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Failed to reset fact' });
     }
 
     return reply.send({ ok: true });

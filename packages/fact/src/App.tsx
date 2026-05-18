@@ -18,9 +18,10 @@ import {
   Typography,
 } from '@maxhub/max-ui';
 import { Calendar, House } from 'lucide-react';
-import { closeFactDay, loadFactSession, saveFactTaskMark, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
+import { closeFactDay, loadFactSession, resetFactTaskMark, saveFactTaskMark, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
 import { readLaunchToken, todayKey } from './session/token';
 import { TaskCard } from './components/ui/TaskCard';
+import { getPlannedProgressByDate } from './utils/plannedProgress';
 
 type Draft = {
   state: FactMarkState;
@@ -178,6 +179,10 @@ function triggerLightHaptic(): void {
   void window.WebApp?.HapticFeedback?.impactOccurred?.('light').catch(() => undefined);
 }
 
+function triggerMediumHaptic(): void {
+  void window.WebApp?.HapticFeedback?.impactOccurred?.('medium').catch(() => undefined);
+}
+
 export function App() {
   const [token] = useState(() => readLaunchToken());
   const dateInputRef = useRef<HTMLInputElement | null>(null);
@@ -251,6 +256,12 @@ export function App() {
   const writableTasks = session?.tasks.filter((task) => task.writable) ?? [];
   const activeTask = activeTaskId ? writableTasks.find((task) => task.id === activeTaskId) ?? null : null;
   const activeDraft = activeTask ? drafts[activeTask.id] ?? createDraft(activeTask) : null;
+  const activeTaskHasSavedMark = Boolean(activeTask && (
+    activeTask.closeState !== null
+    || activeTask.closeValue !== null
+    || Boolean(activeTask.closeReason)
+    || Boolean(activeTask.closeComment)
+  ));
   const markedTasks = writableTasks.filter((task) => isDraftMarked(drafts[task.id]));
   const markedCount = markedTasks.length;
   const problemTasks = writableTasks.filter((task) => drafts[task.id]?.state === 'problem');
@@ -422,6 +433,63 @@ export function App() {
     }
   };
 
+  const resetActiveTaskMark = async () => {
+    if (!token || !activeTask || submitting) return;
+
+    const previousDrafts = drafts;
+    const previousSession = session;
+    const resetInputMode = activeTask.workVolume && activeTask.workVolume > 0 ? 'volume' : 'percent';
+    const resetValue = resetInputMode === 'volume' ? activeTask.dayFact : activeTask.progress;
+    const resetDraft: Draft = {
+      ...(drafts[activeTask.id] ?? createDraft(activeTask)),
+      state: 'fact',
+      inputMode: resetInputMode,
+      value: resetValue ? String(resetValue) : '',
+      explicitValue: false,
+      reason: '',
+      comment: '',
+      worked: true,
+    };
+
+    setDrafts((current) => ({ ...current, [activeTask.id]: resetDraft }));
+    setSession((current) => current
+      ? {
+          ...current,
+          tasks: current.tasks.map((item) => item.id === activeTask.id
+            ? {
+                ...item,
+                closeState: null,
+                closeInputMode: null,
+                closeValue: null,
+                closeReason: null,
+                closeComment: null,
+              }
+            : item),
+        }
+      : current);
+    setSubmitting(true);
+    setError(null);
+    try {
+      await resetFactTaskMark({
+        token,
+        taskId: activeTask.id,
+        date,
+      });
+      setSheetMode(null);
+      setActiveTaskId(null);
+      setSheetClosing(false);
+      const refreshed = await loadFactSession({ token, date });
+      setSession(refreshed);
+      setDrafts(Object.fromEntries(refreshed.tasks.filter((task) => task.writable).map((task) => [task.id, createDraft(task)])));
+    } catch (err) {
+      setDrafts(previousDrafts);
+      setSession(previousSession);
+      setError(err instanceof Error ? err.message : 'Не удалось сбросить отметку.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const setActiveState = (state: FactMarkState) => {
     if (!activeTask || !activeDraft) return;
     updateDraft(activeTask.id, {
@@ -433,6 +501,65 @@ export function App() {
         ? activeDraft.inputMode === 'percent' ? '100' : String(activeTask.workVolume ?? activeTask.dayPlan ?? activeDraft.value)
         : state === 'not_worked' ? '0' : activeDraft.value,
     });
+  };
+
+  const markTaskAsPlanned = async (task: FactTask) => {
+    if (!token || submitting) return;
+
+    const plannedProgress = getPlannedProgressByDate(task, date);
+    const plannedState: FactMarkState = plannedProgress >= 100 ? 'done' : 'fact';
+    const previousDrafts = drafts;
+    const previousSession = session;
+    const optimisticDraft: Draft = {
+      ...(drafts[task.id] ?? createDraft(task)),
+      state: plannedState,
+      inputMode: 'percent',
+      value: String(plannedProgress),
+      explicitValue: true,
+      reason: '',
+      comment: '',
+      worked: true,
+    };
+
+    setDrafts((current) => ({ ...current, [task.id]: optimisticDraft }));
+    setSession((current) => current
+      ? {
+          ...current,
+          tasks: current.tasks.map((item) => item.id === task.id
+            ? {
+                ...item,
+                closeState: plannedState,
+                closeInputMode: 'percent',
+                closeValue: plannedProgress,
+                closeReason: null,
+                closeComment: null,
+                dayFactUpdatedAt: new Date().toISOString(),
+              }
+            : item),
+        }
+      : current);
+    setSubmitting(true);
+    setError(null);
+    try {
+      triggerMediumHaptic();
+      await saveFactTaskMark({
+        token,
+        taskId: task.id,
+        date,
+        state: plannedState,
+        value: plannedProgress,
+        inputMode: 'percent',
+      });
+      const refreshed = await loadFactSession({ token, date });
+      setSession(refreshed);
+      setDrafts(Object.fromEntries(refreshed.tasks.filter((item) => item.writable).map((item) => [item.id, createDraft(item)])));
+    } catch (err) {
+      setDrafts(previousDrafts);
+      setSession(previousSession);
+      setError(err instanceof Error ? err.message : 'Не удалось отметить работу по плану.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const toggleReason = (reason: string) => {
@@ -599,6 +726,7 @@ export function App() {
                             draft={drafts[task.id] ?? createDraft(task)}
                             dateKey={date}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
+                            onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
                           />
                         ))}
                       </CellList>
@@ -641,6 +769,7 @@ export function App() {
                             draft={drafts[task.id] ?? createDraft(task)}
                             dateKey={date}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
+                            onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
                           />
                         ))}
                       </CellList>
@@ -716,6 +845,7 @@ export function App() {
                             draft={drafts[task.id] ?? createDraft(task)}
                             dateKey={date}
                             onOpenFact={(nextTask) => openTaskSheet(nextTask, 'fact')}
+                            onSwipePlan={(nextTask) => markTaskAsPlanned(nextTask)}
                           />
                         ))}
                       </CellList>
@@ -917,9 +1047,16 @@ export function App() {
                 )}
 
                 <Container className="modal-actions">
-                  <Button mode="primary" size="large" stretched loading={submitting} disabled={submitting} onClick={saveActiveTaskMark}>
+                  <Flex align="center" gap={8} className="modal-actions-row">
+                    {activeTaskHasSavedMark && (
+                      <Button className="modal-reset-button" mode="secondary" appearance="neutral" size="large" loading={submitting} disabled={submitting} onClick={resetActiveTaskMark}>
+                        Сбросить
+                      </Button>
+                    )}
+                    <Button mode="primary" size="large" stretched loading={submitting} disabled={submitting} onClick={saveActiveTaskMark}>
                     Сохранить отметку
-                  </Button>
+                    </Button>
+                  </Flex>
                 </Container>
               </Flex>
             )}

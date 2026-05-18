@@ -1,6 +1,7 @@
 import { CellSimple, Counter } from '@maxhub/max-ui';
-import { Fragment, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { FactMarkState, FactTask } from '../../api/factApi';
+import { getPlannedProgressByDate } from '../../utils/plannedProgress';
 
 type Draft = {
   state: FactMarkState;
@@ -19,6 +20,7 @@ type TaskCardProps = {
   draft: Draft;
   dateKey: string;
   onOpenFact: (task: FactTask) => void;
+  onSwipePlan: (task: FactTask) => void | Promise<void>;
 };
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -32,7 +34,7 @@ const problemCounterStyle: CSSProperties = {
   backgroundColor: '#b4232f',
 };
 
-function getUtcDayIndex(dateKey: string): number {
+function getDateKeyIndex(dateKey: string): number {
   return Math.floor(new Date(`${dateKey}T00:00:00.000Z`).getTime() / 86_400_000);
 }
 
@@ -52,7 +54,7 @@ function formatDeadlineDate(dateKey: string): string {
 
 function formatDeadlineLabel(dateKey: string): { text: string; isOverdue: boolean } {
   const todayDateKey = getTodayDateKey();
-  const overdueDays = getUtcDayIndex(todayDateKey) - getUtcDayIndex(dateKey);
+  const overdueDays = getDateKeyIndex(todayDateKey) - getDateKeyIndex(dateKey);
   const baseDate = formatDeadlineDate(dateKey);
 
   if (overdueDays > 0) {
@@ -66,28 +68,6 @@ function formatDeadlineLabel(dateKey: string): { text: string; isOverdue: boolea
     text: baseDate,
     isOverdue: false,
   };
-}
-
-function getPlannedProgressByDate(task: FactTask, dateKey: string): number {
-  const startIndex = getUtcDayIndex(task.startDate);
-  const endIndex = getUtcDayIndex(task.endDate);
-  const currentIndex = getUtcDayIndex(dateKey);
-
-  if (!Number.isFinite(startIndex) || !Number.isFinite(endIndex) || !Number.isFinite(currentIndex)) {
-    return 0;
-  }
-
-  if (currentIndex < startIndex) {
-    return 0;
-  }
-
-  if (currentIndex >= endIndex) {
-    return 100;
-  }
-
-  const totalDays = Math.max(1, endIndex - startIndex + 1);
-  const elapsedDays = Math.max(0, currentIndex - startIndex + 1);
-  return Math.max(0, Math.min(100, Math.round((elapsedDays / totalDays) * 100)));
 }
 
 function formatPlanSubtitle(task: FactTask, dateKey: string, allowOverdueHighlight: boolean) {
@@ -120,7 +100,14 @@ export function TaskCard({
   draft,
   dateKey,
   onOpenFact,
+  onSwipePlan,
 }: TaskCardProps) {
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeModeRef = useRef<'pending' | 'horizontal' | 'vertical' | null>(null);
+  const swipeOffsetRef = useRef(0);
+  const suppressClickRef = useRef(false);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+
   if (!task.writable) {
     return null;
   }
@@ -136,24 +123,103 @@ export function TaskCard({
     : formatPlanSubtitle(task, dateKey, !isCompleted);
   const counterStyle = isProblem ? problemCounterStyle : isCompleted ? markedCounterStyle : undefined;
 
+  const resetSwipe = () => {
+    pointerStartRef.current = null;
+    swipeModeRef.current = null;
+    swipeOffsetRef.current = 0;
+    setSwipeOffset(0);
+  };
+
+  const updateSwipeOffset = (nextOffset: number) => {
+    swipeOffsetRef.current = nextOffset;
+    setSwipeOffset(nextOffset);
+  };
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    pointerStartRef.current = { x: event.clientX, y: event.clientY };
+    swipeModeRef.current = 'pending';
+    suppressClickRef.current = false;
+    swipeOffsetRef.current = 0;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = pointerStartRef.current;
+    if (!start) return;
+
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+
+    if (swipeModeRef.current === 'pending') {
+      if (Math.abs(deltaX) < 8 && Math.abs(deltaY) < 8) return;
+      swipeModeRef.current = Math.abs(deltaX) > Math.abs(deltaY) && deltaX < 0 ? 'horizontal' : 'vertical';
+    }
+
+    if (swipeModeRef.current !== 'horizontal') {
+      return;
+    }
+
+    event.preventDefault();
+    updateSwipeOffset(Math.max(-104, Math.min(0, deltaX)));
+  };
+
+  const handlePointerEnd = async (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (pointerStartRef.current) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+
+    if (swipeModeRef.current === 'horizontal' && swipeOffsetRef.current <= -72) {
+      suppressClickRef.current = true;
+      resetSwipe();
+      await onSwipePlan(task);
+      return;
+    }
+
+    resetSwipe();
+  };
+
   return (
-    <CellSimple
-      height="normal"
-      title={task.name}
-      subtitle={subtitle}
-      after={
-        <Counter
-          value={markedProgress}
-          appearance={isProblem ? 'negative' : hasExplicitMark ? 'themed' : 'neutral'}
-          mode={isProblem || hasExplicitMark ? 'filled' : 'inverse'}
-          muted={!isProblem && !hasExplicitMark}
-          className="percent-counter"
-          style={counterStyle}
+    <div
+      className="task-card-swipe"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={(event) => { void handlePointerEnd(event); }}
+      onPointerCancel={resetSwipe}
+      onClick={() => {
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false;
+          return;
+        }
+        onOpenFact(task);
+      }}
+    >
+      <div className={`task-card-swipe-action ${swipeOffset < 0 ? 'task-card-swipe-action--visible' : ''}`.trim()} aria-hidden="true">По плану</div>
+      <div
+        className="task-card-swipe-content"
+        style={{
+          transform: `translateX(${swipeOffset}px)`,
+          transition: swipeOffset < 0 ? 'none' : undefined,
+        }}
+      >
+        <CellSimple
+          height="normal"
+          title={task.name}
+          subtitle={subtitle}
+          after={
+            <Counter
+              value={markedProgress}
+              appearance={isProblem ? 'negative' : hasExplicitMark ? 'themed' : 'neutral'}
+              mode={isProblem || hasExplicitMark ? 'filled' : 'inverse'}
+              muted={!isProblem && !hasExplicitMark}
+              className="percent-counter"
+              style={counterStyle}
+            />
+          }
+          innerClassNames={isProblem ? { subtitle: 'task-card-subtitle--problem' } : undefined}
+          showChevron
         />
-      }
-      innerClassNames={isProblem ? { subtitle: 'task-card-subtitle--problem' } : undefined}
-      showChevron
-      onClick={() => onOpenFact(task)}
-    />
+      </div>
+    </div>
   );
 }

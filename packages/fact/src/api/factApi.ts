@@ -120,3 +120,15 @@ export async function saveFactTaskMark(input: {
     body: JSON.stringify(body),
   });
 }
+
+export async function resetFactTaskMark(input: {
+  token: string;
+  taskId: string;
+  date: string;
+}): Promise<{ ok: true }> {
+  const { taskId, ...body } = input;
+  return request(`/api/fact/tasks/${encodeURIComponent(taskId)}/progress`, {
+    method: 'DELETE',
+    body: JSON.stringify(body),
+  });
+}
