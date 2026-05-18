@@ -1207,6 +1207,11 @@ export function App() {
                                   updateVolumeDraft(activeTask, activeDraft, activeDraftVolume);
                                 }
                               }}
+                              iconAfter={(
+                                <Typography.Label variant="small-strong" className="fact-progress-unit">
+                                  {activeTask.workUnit ?? 'ед.'}
+                                </Typography.Label>
+                              )}
                             />
                             <Input
                               mode="secondary"
@@ -1232,6 +1237,11 @@ export function App() {
                                   updatePercentDraft(activeTask.id, activeDraft, activeDraftPercent);
                                 }
                               }}
+                              iconAfter={(
+                                <Typography.Label variant="small-strong" className="fact-progress-unit">
+                                  %
+                                </Typography.Label>
+                              )}
                             />
                           </Grid>
                           <Flex align="center" justify="space-between" className="fact-progress-row fact-progress-row--meta">
