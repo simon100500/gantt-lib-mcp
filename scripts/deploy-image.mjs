@@ -3,13 +3,19 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-loadDotEnv();
-
-const args = new Set(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const args = new Set(argv);
 const deployToCapRover = args.has('--deploy-caprover');
+const target = getArgValue(argv, '--target') || 'default';
 
-const registry = process.env.DEPLOY_REGISTRY || 'reg.volobuev.keenetic.pro';
-const imageName = process.env.DEPLOY_IMAGE || 'getgantt';
+const targetConfig = getTargetConfig(target);
+loadDotEnv('.env');
+for (const envPath of targetConfig.extraEnvPaths) {
+  loadDotEnv(envPath);
+}
+
+const registry = getFirstEnv(targetConfig.registryEnvNames) || 'reg.volobuev.keenetic.pro';
+const imageName = getFirstEnv(targetConfig.imageEnvNames) || targetConfig.defaultImageName;
 const imageSource =
   process.env.IMAGE_SOURCE || getGitOutput(['remote', 'get-url', 'origin']) || 'https://github.com/simon100500/gantt-lib-mcp.git';
 const fullSha = getRequiredGitOutput(['rev-parse', 'HEAD']);
@@ -22,20 +28,34 @@ const shaTag = `${registry}/${imageName}:sha-${shortSha}`;
 console.log(`Building image ${latestTag}`);
 console.log(`Commit SHA: ${fullSha}`);
 
-run('docker', [
+for (const envName of targetConfig.requiredEnvNames) {
+  requireEnv(envName, process.env[envName]);
+}
+
+const buildArgs = [
   'build',
+  '-f',
+  targetConfig.dockerfilePath,
   '--build-arg',
   `VCS_REF=${fullSha}`,
   '--build-arg',
   `BUILD_DATE=${buildDate}`,
   '--build-arg',
   `IMAGE_SOURCE=${imageSource}`,
-  '-t',
-  latestTag,
-  '-t',
-  shaTag,
-  '.',
-]);
+];
+
+for (const buildArgName of targetConfig.buildArgNames) {
+  const buildArgValue = process.env[buildArgName];
+  if (!buildArgValue) {
+    continue;
+  }
+
+  buildArgs.push('--build-arg', `${buildArgName}=${buildArgValue}`);
+}
+
+buildArgs.push('-t', latestTag, '-t', shaTag, '.');
+
+run('docker', buildArgs);
 
 console.log(`Pushing image ${latestTag}`);
 run('docker', ['push', latestTag]);
@@ -44,13 +64,13 @@ console.log(`Pushing image ${shaTag}`);
 run('docker', ['push', shaTag]);
 
 if (deployToCapRover) {
-  const caproverUrl = process.env.CAPROVER_URL || process.env.CAPROVER_SERVER;
-  const caproverAppName = process.env.CAPROVER_APP_NAME;
-  const caproverAppToken = process.env.CAPROVER_APP_TOKEN;
+  const caproverUrl = getFirstEnv(targetConfig.caproverUrlEnvNames);
+  const caproverAppName = getFirstEnv(targetConfig.appNameEnvNames);
+  const caproverAppToken = getFirstEnv(targetConfig.appTokenEnvNames);
 
-  requireEnv('CAPROVER_SERVER or CAPROVER_URL', caproverUrl);
-  requireEnv('CAPROVER_APP_NAME', caproverAppName);
-  requireEnv('CAPROVER_APP_TOKEN', caproverAppToken);
+  requireEnv(targetConfig.caproverUrlEnvNames.join(' or '), caproverUrl);
+  requireEnv(targetConfig.appNameEnvNames.join(' or '), caproverAppName);
+  requireEnv(targetConfig.appTokenEnvNames.join(' or '), caproverAppToken);
 
   console.log(`Deploying ${shaTag} to CapRover app ${caproverAppName}`);
   run(
@@ -114,9 +134,66 @@ function requireEnv(name, value) {
   }
 }
 
-function loadDotEnv() {
+function getFirstEnv(names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) {
+      return value;
+    }
+  }
+
+  return '';
+}
+
+function getArgValue(argv, name) {
+  const inlinePrefix = `${name}=`;
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg.startsWith(inlinePrefix)) {
+      return arg.slice(inlinePrefix.length);
+    }
+
+    if (arg === name) {
+      return argv[index + 1] || '';
+    }
+  }
+
+  return '';
+}
+
+function getTargetConfig(target) {
+  if (target === 'fact') {
+    return {
+      dockerfilePath: 'Dockerfile.fact',
+      extraEnvPaths: ['packages/fact/.env'],
+      defaultImageName: 'gantt-fact',
+      imageEnvNames: ['FACT_DEPLOY_IMAGE', 'DEPLOY_IMAGE'],
+      registryEnvNames: ['FACT_DEPLOY_REGISTRY', 'DEPLOY_REGISTRY'],
+      caproverUrlEnvNames: ['FACT_CAPROVER_URL', 'FACT_CAPROVER_SERVER'],
+      appNameEnvNames: ['FACT_CAPROVER_APP_NAME'],
+      appTokenEnvNames: ['FACT_CAPROVER_APP_TOKEN'],
+      buildArgNames: ['VITE_FACT_API_BASE_URL'],
+      requiredEnvNames: ['VITE_FACT_API_BASE_URL'],
+    };
+  }
+
+  return {
+    dockerfilePath: 'Dockerfile',
+    extraEnvPaths: [],
+    defaultImageName: 'getgantt',
+    imageEnvNames: ['DEPLOY_IMAGE'],
+    registryEnvNames: ['DEPLOY_REGISTRY'],
+    caproverUrlEnvNames: ['CAPROVER_URL', 'CAPROVER_SERVER'],
+    appNameEnvNames: ['CAPROVER_APP_NAME'],
+    appTokenEnvNames: ['CAPROVER_APP_TOKEN'],
+    buildArgNames: [],
+    requiredEnvNames: [],
+  };
+}
+
+function loadDotEnv(relativeEnvPath) {
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-  const envPath = path.resolve(scriptDir, '../.env');
+  const envPath = path.resolve(scriptDir, '..', relativeEnvPath);
 
   if (!existsSync(envPath)) {
     return;

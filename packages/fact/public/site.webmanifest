@@ -1,0 +1,11 @@
+{
+  "name": "Fact GetGantt",
+  "short_name": "Fact",
+  "description": "Ежедневный сбор факта выполнения работ на объекте.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#f7f8fa",
+  "lang": "ru"
+}

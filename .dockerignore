@@ -6,4 +6,5 @@ packages/*/dist
 *.md
 !README.md
 .env
+packages/*/.env
 local-data

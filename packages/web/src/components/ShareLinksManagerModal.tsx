@@ -4,6 +4,7 @@ import {
   Copy,
   Download,
   ExternalLink,
+  HardHat,
   LoaderCircle,
   Pencil,
   Plus,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from './ui/button.tsx';
-import type { ShareLinkListItem } from '../lib/apiTypes.ts';
+import type { FactAccessTokenListItem, ShareLinkListItem } from '../lib/apiTypes.ts';
 import { printShareLinkSheet } from '../lib/shareLinkPrint.ts';
 
 interface ShareLinksManagerModalProps {
@@ -76,6 +77,22 @@ function resolveShareUrl(token: string): string {
   return `${window.location.origin}/?share=${encodeURIComponent(token)}`;
 }
 
+function resolveFactUrl(link: FactAccessTokenListItem): string {
+  const configuredBase = import.meta.env.VITE_FACT_APP_URL?.replace(/\/$/, '');
+  if (configuredBase) {
+    return `${configuredBase}?token=${encodeURIComponent(link.slug)}`;
+  }
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return `http://localhost:5175?token=${encodeURIComponent(link.slug)}`;
+  }
+  return link.url;
+}
+
+function resolveFactMaxUrl(link: FactAccessTokenListItem): string {
+  const botName = import.meta.env.VITE_FACT_MAX_BOT_NAME?.trim() || 'id781902818607_bot';
+  return `https://max.ru/${encodeURIComponent(botName)}?startapp=${encodeURIComponent(link.slug)}`;
+}
+
 export function ShareLinksManagerModal({
   accessToken,
   projectId,
@@ -87,6 +104,7 @@ export function ShareLinksManagerModal({
   onStatusChange,
 }: ShareLinksManagerModalProps) {
   const [links, setLinks] = useState<ShareLinkListItem[]>([]);
+  const [factLinks, setFactLinks] = useState<FactAccessTokenListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,22 +113,36 @@ export function ShareLinksManagerModal({
   const [editingLabel, setEditingLabel] = useState('');
   const [renamingLinkId, setRenamingLinkId] = useState<string | null>(null);
   const [downloadingLinkId, setDownloadingLinkId] = useState<string | null>(null);
+  const [downloadingFactLinkId, setDownloadingFactLinkId] = useState<string | null>(null);
   const visibleLinks = links.filter((link) => !link.revokedAt);
+  const visibleFactLinks = factLinks.filter((link) => !link.revokedAt);
 
   const loadLinks = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/projects/${projectId}/share-links`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      const [shareResponse, factResponse] = await Promise.all([
+        fetch(`/api/projects/${projectId}/share-links`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }),
+        fetch(`/api/projects/${projectId}/fact-access-tokens`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }),
+      ]);
+      if (!shareResponse.ok) {
+        throw new Error(`Share links HTTP ${shareResponse.status}`);
       }
-      const data = await response.json() as { links: ShareLinkListItem[] };
+      if (!factResponse.ok) {
+        throw new Error(`Fact links HTTP ${factResponse.status}`);
+      }
+      const data = await shareResponse.json() as { links: ShareLinkListItem[] };
+      const factData = await factResponse.json() as { tokens: FactAccessTokenListItem[] };
       setLinks(Array.isArray(data.links) ? data.links : []);
+      setFactLinks(Array.isArray(factData.tokens) ? factData.tokens : []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     } finally {
@@ -163,6 +195,68 @@ export function ShareLinksManagerModal({
       setDownloadingLinkId(null);
     }
   }, [downloadingLinkId, projectName]);
+
+  const handleCopyFact = useCallback(async (link: FactAccessTokenListItem) => {
+    try {
+      await navigator.clipboard.writeText(resolveFactUrl(link));
+      setCopiedLinkId(link.id);
+      onStatusChange?.('copied');
+      window.setTimeout(() => {
+        setCopiedLinkId((current) => current === link.id ? null : current);
+        onStatusChange?.('idle');
+      }, 1500);
+    } catch {
+      onStatusChange?.('error');
+    }
+  }, [onStatusChange]);
+
+  const handleCopyFactMax = useCallback(async (link: FactAccessTokenListItem) => {
+    try {
+      await navigator.clipboard.writeText(resolveFactMaxUrl(link));
+      setCopiedLinkId(`max:${link.id}`);
+      onStatusChange?.('copied');
+      window.setTimeout(() => {
+        setCopiedLinkId((current) => current === `max:${link.id}` ? null : current);
+        onStatusChange?.('idle');
+      }, 1500);
+    } catch {
+      onStatusChange?.('error');
+    }
+  }, [onStatusChange]);
+
+  const handleOpenFact = useCallback((link: FactAccessTokenListItem) => {
+    window.open(resolveFactUrl(link), '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const handleOpenFactMax = useCallback((link: FactAccessTokenListItem) => {
+    window.open(resolveFactMaxUrl(link), '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const handleDownloadFactPdf = useCallback(async (link: FactAccessTokenListItem) => {
+    if (downloadingFactLinkId === link.id) {
+      return;
+    }
+
+    setDownloadingFactLinkId(link.id);
+    setError(null);
+
+    try {
+      await printShareLinkSheet({
+        shareUrl: resolveFactUrl(link),
+        projectName,
+        logoUrl: `${window.location.origin}/favicon.svg`,
+        serviceName: 'GetGantt Fact',
+        descriptor: 'Мобильная ссылка для прораба: открыть работы на день, внести факт, отметить простой или проблему.',
+        details: link.includedTaskIds.length > 0
+          ? `Работы: ${(link.previewTitles ?? []).join(', ') || 'выбранные задачи'}`
+          : 'Все доступные работы проекта',
+      });
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : String(downloadError));
+    } finally {
+      setDownloadingFactLinkId(null);
+    }
+  }, [downloadingFactLinkId, projectName]);
 
   const handleStartRename = useCallback((link: ShareLinkListItem) => {
     setEditingLinkId(link.id);
@@ -244,10 +338,58 @@ export function ShareLinksManagerModal({
     }
   }, [accessToken, loadLinks, onStatusChange, projectId, projectName]);
 
+  const handleCreateFactAccess = useCallback(async () => {
+    setSubmitting(true);
+    onStatusChange?.('creating');
+    try {
+      const response = await fetch(`/api/projects/${projectId}/fact-access-tokens`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          label: `${projectName} · отметка факта`,
+          includedTaskIds: [],
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      onStatusChange?.('idle');
+      await loadLinks();
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : String(createError));
+      onStatusChange?.('error');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [accessToken, loadLinks, onStatusChange, projectId, projectName]);
+
   const handleRevoke = useCallback(async (link: ShareLinkListItem) => {
     setSubmitting(true);
     try {
       const response = await fetch(`/api/projects/${projectId}/share-links/${link.id}/revoke`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      await loadLinks();
+    } catch (revokeError) {
+      setError(revokeError instanceof Error ? revokeError.message : String(revokeError));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [accessToken, loadLinks, projectId]);
+
+  const handleRevokeFact = useCallback(async (link: FactAccessTokenListItem) => {
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/fact-access-tokens/${link.id}/revoke`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -326,6 +468,29 @@ export function ShareLinksManagerModal({
               </span>
             )}
           </div>
+          <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                  <HardHat className="h-4 w-4" />
+                  Отметка факта
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Создает отдельную ссылку на fact.getgantt.ru или в MAX для внесения факта и указания проблем.
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { void handleCreateFactAccess(); }}
+                disabled={submitting}
+                className="h-10 shrink-0 justify-center rounded-lg border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              >
+                {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Ссылка прорабу
+              </Button>
+            </div>
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col px-5 py-5">
@@ -343,7 +508,7 @@ export function ShareLinksManagerModal({
                 <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                 Загружаем ссылки...
               </div>
-            ) : visibleLinks.length === 0 ? (
+            ) : visibleLinks.length === 0 && visibleFactLinks.length === 0 ? (
               <div className="flex h-40 items-center justify-center text-sm text-slate-500">
                 Ссылок пока нет.
               </div>
@@ -469,6 +634,128 @@ export function ShareLinksManagerModal({
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {!loading && visibleFactLinks.length > 0 && (
+              <div className="mt-5 border-t border-slate-100 pt-5">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                    Отметка факта ({visibleFactLinks.length})
+                  </h3>
+                </div>
+                <div className="space-y-2 pr-1">
+                  {visibleFactLinks.map((link) => (
+                    <div key={link.id} className="rounded-xl bg-slate-100 p-2.5">
+                      <div className="mb-2 flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-bold leading-none text-slate-700">
+                            {link.label || 'Отметка факта'}
+                          </div>
+                          <div className="mt-1 text-[10px] font-medium text-slate-400">
+                            {formatCreatedAt(link.createdAt)}
+                            {link.lastUsedAt ? ` · открывали ${formatCreatedAt(link.lastUsedAt)}` : ''}
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-700">
+                          ФАКТ
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-inset ring-slate-200">
+                          <img src="/favicon.svg" alt="" className="h-5 w-5 rounded-[4px]" aria-hidden="true" />
+                        </div>
+                        <input
+                          readOnly
+                          onClick={() => void handleCopyFact(link)}
+                          value={resolveFactUrl(link)}
+                          title="Нажмите, чтобы скопировать"
+                          className="min-w-0 flex-1 cursor-pointer rounded-lg bg-white px-3 py-2 font-mono text-xs text-slate-500 outline-none ring-1 ring-inset ring-slate-200 transition-colors hover:ring-slate-300"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleCopyFact(link)}
+                          className={`h-9 shrink-0 rounded-lg px-3 text-xs font-semibold ${copiedLinkId === link.id
+                            ? 'border-green-200 bg-green-50 text-green-600'
+                            : ''
+                            }`}
+                        >
+                          {copiedLinkId === link.id ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                          <span>{copiedLinkId === link.id ? 'Скопировано' : 'Копировать'}</span>
+                        </Button>
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-inset ring-slate-200">
+                          <img src="/logo_MAX.svg" alt="" className="h-5 w-5" aria-hidden="true" />
+                        </div>
+                        <input
+                          readOnly
+                          onClick={() => void handleCopyFactMax(link)}
+                          value={resolveFactMaxUrl(link)}
+                          title="Нажмите, чтобы скопировать ссылку MAX"
+                          className="min-w-0 flex-1 cursor-pointer rounded-lg bg-white px-3 py-2 font-mono text-xs text-slate-500 outline-none ring-1 ring-inset ring-slate-200 transition-colors hover:ring-slate-300"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleCopyFactMax(link)}
+                          className={`h-9 shrink-0 rounded-lg px-3 text-xs font-semibold ${copiedLinkId === `max:${link.id}`
+                            ? 'border-green-200 bg-green-50 text-green-600'
+                            : ''
+                            }`}
+                        >
+                          {copiedLinkId === `max:${link.id}` ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                          <span>{copiedLinkId === `max:${link.id}` ? 'Скопировано' : 'MAX'}</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleOpenFactMax(link)}
+                          className="h-9 w-9 shrink-0 rounded-lg p-0 text-slate-500"
+                          title="Открыть в MAX"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => { void handleDownloadFactPdf(link); }}
+                          disabled={submitting || downloadingFactLinkId === link.id}
+                          className="h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-slate-600"
+                          title="Скачать QR-код"
+                        >
+                          {downloadingFactLinkId === link.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                          <span>QR-код</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleOpenFact(link)}
+                          className="h-9 w-9 shrink-0 rounded-lg p-0 text-slate-500"
+                          title="Открыть"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleRevokeFact(link)}
+                          disabled={submitting}
+                          className="h-9 w-9 shrink-0 rounded-lg p-0 text-slate-500 hover:border-red-200 hover:text-red-500"
+                          title="Отозвать доступ"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

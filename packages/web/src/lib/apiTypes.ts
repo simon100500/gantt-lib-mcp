@@ -66,6 +66,20 @@ export interface ShareLinkListItem {
   url: string;
 }
 
+export interface FactAccessTokenListItem {
+  id: string;
+  slug: string;
+  projectId: string;
+  label: string;
+  includedTaskIds: string[];
+  previewTitles?: string[];
+  revokedAt: string | null;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  url: string;
+}
+
 export interface AuthSuccessResponse {
   accessToken: string;
   refreshToken: string;

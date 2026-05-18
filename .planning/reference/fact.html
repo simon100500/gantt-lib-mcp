@@ -1,0 +1,2815 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fact GetGantt — Факт с площадки</title>
+    <link href="https://cdn.jsdelivr.net/npm/fontsource-inter@5.1/latin.css" rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #f0f2f5;
+            --surface: #ffffff;
+            --primary: #2563eb;
+            --primary-light: #dbeafe;
+            --primary-dark: #1d4ed8;
+            --success: #16a34a;
+            --success-light: #dcfce7;
+            --warning: #d97706;
+            --warning-light: #fef3c7;
+            --danger: #dc2626;
+            --danger-light: #fee2e2;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-xs: 6px;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.12);
+            --nav-height: 72px;
+            --header-height: 64px;
+        }
+
+        html {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--gray-800);
+            font-size: 15px;
+            line-height: 1.5;
+            overflow: hidden;
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        /* App Container */
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            max-width: 480px;
+            margin: 0 auto;
+            position: relative;
+            background: var(--bg);
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: var(--surface);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--gray-200);
+            z-index: 10;
+            flex-shrink: 0;
+            height: var(--header-height);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-logo {
+            font-weight: 800;
+            font-size: 18px;
+            color: var(--primary);
+            letter-spacing: -0.5px;
+        }
+
+        .header-logo span {
+            color: var(--gray-400);
+            font-weight: 500;
+            font-size: 13px;
+            margin-left: 2px;
+        }
+
+        .header-object {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header-object-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-700);
+        }
+
+        .header-object-sub {
+            font-size: 11px;
+            color: var(--gray-400);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-date {
+            font-size: 12px;
+            color: var(--gray-500);
+            font-weight: 500;
+            background: var(--gray-100);
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        .avatar-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+        }
+
+        /* Content Area */
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-bottom: calc(var(--nav-height) + 16px);
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .content::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Tab panels */
+        .tab-panel {
+            display: none;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Day Switcher */
+        .day-switcher {
+            display: flex;
+            gap: 6px;
+            padding: 16px 20px 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .day-switcher::-webkit-scrollbar {
+            display: none;
+        }
+
+        .day-chip {
+            flex-shrink: 0;
+            padding: 8px 16px;
+            border-radius: 24px;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1.5px solid var(--gray-200);
+            background: var(--surface);
+            color: var(--gray-600);
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .day-chip.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .day-chip .day-num {
+            display: block;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .day-chip .day-name {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        /* Section Header */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px 8px;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .section-count {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-400);
+            background: var(--gray-100);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        /* Work Card */
+        .work-card {
+            background: var(--surface);
+            margin: 8px 16px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            transition: all 0.2s;
+            border: 1.5px solid transparent;
+        }
+
+        .work-card:active {
+            transform: scale(0.98);
+        }
+
+        .work-card.status-done {
+            border-left: 4px solid var(--success);
+        }
+
+        .work-card.status-progress {
+            border-left: 4px solid var(--primary);
+        }
+
+        .work-card.status-risk {
+            border-left: 4px solid var(--warning);
+        }
+
+        .work-card.status-problem {
+            border-left: 4px solid var(--danger);
+        }
+
+        .work-card.status-not-started {
+            border-left: 4px solid var(--gray-300);
+        }
+
+        .card-header {
+            padding: 14px 16px 10px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .card-icon.plaster {
+            background: #fef3c7;
+        }
+
+        .card-icon.electric {
+            background: #dbeafe;
+        }
+
+        .card-icon.plumbing {
+            background: #cffafe;
+        }
+
+        .card-icon.concrete {
+            background: #e5e7eb;
+        }
+
+        .card-icon.partition {
+            background: #fce7f3;
+        }
+
+        .card-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--gray-800);
+            line-height: 1.3;
+        }
+
+        .card-location {
+            font-size: 12px;
+            color: var(--gray-500);
+            margin-top: 2px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .card-location svg {
+            width: 12px;
+            height: 12px;
+            flex-shrink: 0;
+        }
+
+        .card-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+            white-space: nowrap;
+            align-self: flex-start;
+        }
+
+        .badge-done {
+            background: var(--success-light);
+            color: var(--success);
+        }
+
+        .badge-progress {
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .badge-risk {
+            background: var(--warning-light);
+            color: var(--warning);
+        }
+
+        .badge-problem {
+            background: var(--danger-light);
+            color: var(--danger);
+        }
+
+        .badge-not-started {
+            background: var(--gray-100);
+            color: var(--gray-500);
+        }
+
+        .card-body {
+            padding: 0 16px 12px;
+        }
+
+        .card-details {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .card-detail {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-detail-label {
+            font-size: 10px;
+            color: var(--gray-400);
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .card-detail-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-top: 1px;
+        }
+
+        .card-progress {
+            margin-top: 10px;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--gray-100);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .progress-fill.done {
+            background: var(--success);
+        }
+
+        .progress-fill.progress {
+            background: var(--primary);
+        }
+
+        .progress-fill.risk {
+            background: var(--warning);
+        }
+
+        .progress-fill.problem {
+            background: var(--danger);
+        }
+
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 4px;
+        }
+
+        .progress-text span {
+            font-size: 11px;
+            color: var(--gray-500);
+        }
+
+        .progress-text strong {
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 6px;
+            padding: 0 16px 14px;
+        }
+
+        .card-btn {
+            flex: 1;
+            padding: 9px 6px;
+            border-radius: var(--radius-xs);
+            border: 1.5px solid var(--gray-200);
+            background: var(--surface);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-600);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: all 0.15s;
+        }
+
+        .card-btn:active {
+            transform: scale(0.95);
+        }
+
+        .card-btn.primary-btn {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .card-btn.danger-btn {
+            border-color: #fecaca;
+            color: var(--danger);
+            background: #fef2f2;
+        }
+
+        .card-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .card-photos {
+            display: flex;
+            gap: 4px;
+            padding: 0 16px 12px;
+        }
+
+        .card-photo-thumb {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            background: var(--gray-100);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .card-photo-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Close Day Banner */
+        .close-day-banner {
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            margin: 16px;
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            color: white;
+            cursor: pointer;
+        }
+
+        .close-day-banner:active {
+            transform: scale(0.98);
+        }
+
+        .close-day-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .close-day-stats {
+            display: flex;
+            gap: 16px;
+            margin-top: 10px;
+        }
+
+        .close-day-stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .close-day-stat-num {
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .close-day-stat-label {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 480px;
+            background: var(--surface);
+            border-top: 1px solid var(--gray-200);
+            display: flex;
+            padding-bottom: env(safe-area-inset-bottom, 0);
+            z-index: 100;
+        }
+
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 0 10px;
+            gap: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            background: none;
+            position: relative;
+        }
+
+        .nav-item svg {
+            width: 22px;
+            height: 22px;
+            color: var(--gray-400);
+            transition: all 0.2s;
+        }
+
+        .nav-item span {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--gray-400);
+            transition: all 0.2s;
+        }
+
+        .nav-item.active svg {
+            color: var(--primary);
+        }
+
+        .nav-item.active span {
+            color: var(--primary);
+        }
+
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 24px;
+            height: 3px;
+            background: var(--primary);
+            border-radius: 0 0 3px 3px;
+        }
+
+        .nav-badge {
+            position: absolute;
+            top: 4px;
+            right: calc(50% - 18px);
+            width: 16px;
+            height: 16px;
+            background: var(--danger);
+            border-radius: 50%;
+            font-size: 9px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 200;
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+            animation: fadeOverlay 0.2s ease;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        @keyframes fadeOverlay {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .modal-sheet {
+            background: var(--surface);
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            max-height: 90dvh;
+            border-radius: 24px 24px 0 0;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+            }
+
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--gray-200);
+            position: sticky;
+            top: 0;
+            background: var(--surface);
+            z-index: 10;
+            border-radius: 24px 24px 0 0;
+        }
+
+        .modal-title {
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--gray-100);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        /* Status Selector */
+        .status-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .status-option {
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            border: 2px solid var(--gray-200);
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+        }
+
+        .status-option:active {
+            transform: scale(0.96);
+        }
+
+        .status-option.selected {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+
+        .status-option.selected-done {
+            border-color: var(--success);
+            background: var(--success-light);
+        }
+
+        .status-option.selected-problem {
+            border-color: var(--danger);
+            background: var(--danger-light);
+        }
+
+        .status-option .status-emoji {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .status-option .status-label {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Progress Steps */
+        .progress-steps {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 20px;
+        }
+
+        .progress-step {
+            flex: 1;
+            padding: 10px 4px;
+            border-radius: var(--radius-xs);
+            border: 2px solid var(--gray-200);
+            background: var(--surface);
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--gray-500);
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+        }
+
+        .progress-step:active {
+            transform: scale(0.95);
+        }
+
+        .progress-step.active {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: white;
+        }
+
+        /* Input Groups */
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-600);
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1.5px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            font-size: 15px;
+            font-family: inherit;
+            background: var(--gray-50);
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        .input-field:focus {
+            border-color: var(--primary);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .input-row .input-field {
+            flex: 1;
+        }
+
+        /* Photo Upload */
+        .photo-upload {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .photo-placeholder {
+            width: 72px;
+            height: 72px;
+            border-radius: var(--radius-sm);
+            border: 2px dashed var(--gray-300);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            cursor: pointer;
+            background: var(--gray-50);
+            transition: all 0.2s;
+        }
+
+        .photo-placeholder:active {
+            transform: scale(0.95);
+        }
+
+        .photo-placeholder svg {
+            width: 20px;
+            height: 20px;
+            color: var(--gray-400);
+        }
+
+        .photo-placeholder span {
+            font-size: 9px;
+            color: var(--gray-400);
+            font-weight: 600;
+        }
+
+        .photo-preview {
+            width: 72px;
+            height: 72px;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .photo-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .photo-remove {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--danger);
+            color: white;
+            border: none;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Reason Tags */
+        .reason-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .reason-tag {
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1.5px solid var(--gray-200);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-600);
+            cursor: pointer;
+            background: var(--surface);
+            transition: all 0.15s;
+        }
+
+        .reason-tag:active {
+            transform: scale(0.95);
+        }
+
+        .reason-tag.active {
+            border-color: var(--danger);
+            background: var(--danger-light);
+            color: var(--danger);
+        }
+
+        /* Team Section */
+        .team-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--gray-100);
+        }
+
+        .team-row:last-child {
+            border-bottom: none;
+        }
+
+        .team-toggle {
+            width: 44px;
+            height: 26px;
+            border-radius: 13px;
+            border: none;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .team-toggle.on {
+            background: var(--success);
+        }
+
+        .team-toggle.off {
+            background: var(--gray-300);
+        }
+
+        .team-toggle::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            top: 3px;
+            left: 3px;
+            transition: all 0.2s;
+            box-shadow: var(--shadow);
+        }
+
+        .team-toggle.on::after {
+            left: 21px;
+        }
+
+        .team-label {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .team-value {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--primary);
+            background: var(--primary-light);
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+
+        /* Submit Button */
+        .submit-btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: var(--primary);
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 8px;
+        }
+
+        .submit-btn:active {
+            transform: scale(0.98);
+            background: var(--primary-dark);
+        }
+
+        .submit-btn:disabled {
+            background: var(--gray-300);
+            cursor: not-allowed;
+        }
+
+        /* Object Tab */
+        .object-tree {
+            padding: 0 16px;
+        }
+
+        .tree-item {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--gray-100);
+            transition: all 0.15s;
+        }
+
+        .tree-item:active {
+            background: var(--gray-50);
+        }
+
+        .tree-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-xs);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .tree-icon.building {
+            background: #dbeafe;
+        }
+
+        .tree-icon.section {
+            background: #fef3c7;
+        }
+
+        .tree-icon.floor {
+            background: #e5e7eb;
+        }
+
+        .tree-icon.room {
+            background: #cffafe;
+        }
+
+        .tree-info {
+            flex: 1;
+        }
+
+        .tree-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .tree-sub {
+            font-size: 11px;
+            color: var(--gray-400);
+        }
+
+        .tree-count {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--gray-400);
+            background: var(--gray-100);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .tree-arrow {
+            color: var(--gray-400);
+        }
+
+        /* Problems Tab */
+        .problem-card {
+            background: var(--surface);
+            margin: 8px 16px;
+            border-radius: var(--radius);
+            padding: 16px;
+            box-shadow: var(--shadow);
+            border-left: 4px solid var(--danger);
+        }
+
+        .problem-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .problem-emoji {
+            font-size: 24px;
+        }
+
+        .problem-title {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .problem-loc {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .problem-reason {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--danger);
+            background: var(--danger-light);
+            padding: 3px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 6px;
+        }
+
+        .problem-date {
+            font-size: 11px;
+            color: var(--gray-400);
+            margin-top: 8px;
+        }
+
+        .add-problem-btn {
+            position: fixed;
+            bottom: calc(var(--nav-height) + 20px);
+            right: 20px;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: var(--danger);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 16px rgba(220, 38, 38, 0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            z-index: 50;
+            transition: all 0.2s;
+        }
+
+        .add-problem-btn:active {
+            transform: scale(0.9);
+        }
+
+        /* Journal Tab */
+        .journal-item {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            gap: 12px;
+        }
+
+        .journal-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-top: 5px;
+            flex-shrink: 0;
+        }
+
+        .journal-dot.done {
+            background: var(--success);
+        }
+
+        .journal-dot.progress {
+            background: var(--primary);
+        }
+
+        .journal-dot.problem {
+            background: var(--danger);
+        }
+
+        .journal-dot.not-started {
+            background: var(--gray-400);
+        }
+
+        .journal-content {
+            flex: 1;
+        }
+
+        .journal-task {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .journal-meta {
+            font-size: 12px;
+            color: var(--gray-500);
+            margin-top: 2px;
+        }
+
+        .journal-fact {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .journal-fact svg {
+            width: 14px;
+            height: 14px;
+            color: var(--gray-400);
+        }
+
+        .journal-photos {
+            display: flex;
+            gap: 4px;
+            margin-top: 6px;
+        }
+
+        .journal-photo {
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .journal-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Close Day Modal */
+        .close-day-summary {
+            text-align: center;
+            padding: 8px 0 16px;
+        }
+
+        .close-day-big {
+            font-size: 48px;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        .close-day-sub {
+            font-size: 14px;
+            color: var(--gray-500);
+        }
+
+        .close-task-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--gray-50);
+            border-radius: var(--radius-sm);
+            margin-bottom: 8px;
+        }
+
+        .close-task-icon {
+            font-size: 20px;
+        }
+
+        .close-task-info {
+            flex: 1;
+        }
+
+        .close-task-name {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .close-task-prompt {
+            font-size: 11px;
+            color: var(--gray-400);
+        }
+
+        .close-task-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .close-task-btn {
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--gray-200);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            background: white;
+            transition: all 0.15s;
+        }
+
+        .close-task-btn:active {
+            transform: scale(0.95);
+        }
+
+        .close-task-btn.filled {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: var(--gray-800);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 300;
+            opacity: 0;
+            transition: all 0.3s ease;
+            pointer-events: none;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast.success {
+            background: var(--success);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .empty-state .empty-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        .empty-state .empty-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--gray-700);
+        }
+
+        .empty-state .empty-sub {
+            font-size: 13px;
+            color: var(--gray-400);
+            margin-top: 4px;
+        }
+
+        /* Responsive desktop preview */
+        @media (min-width: 481px) {
+            .app {
+                border-left: 1px solid var(--gray-200);
+                border-right: 1px solid var(--gray-200);
+            }
+        }
+
+        /* Animations for cards */
+        .work-card {
+            animation: cardIn 0.3s ease both;
+        }
+
+        .work-card:nth-child(1) {
+            animation-delay: 0.05s;
+        }
+
+        .work-card:nth-child(2) {
+            animation-delay: 0.1s;
+        }
+
+        .work-card:nth-child(3) {
+            animation-delay: 0.15s;
+        }
+
+        .work-card:nth-child(4) {
+            animation-delay: 0.2s;
+        }
+
+        .work-card:nth-child(5) {
+            animation-delay: 0.25s;
+        }
+
+        @keyframes cardIn {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Pull hint */
+        .pull-hint {
+            text-align: center;
+            padding: 8px;
+            font-size: 12px;
+            color: var(--gray-400);
+        }
+
+        /* Success checkmark animation */
+        .checkmark-circle {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--success-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+        }
+
+        .checkmark-circle svg {
+            width: 32px;
+            height: 32px;
+            color: var(--success);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="header-logo">fact<span>.getgantt.ru</span></div>
+                <div class="header-object">
+                    <span class="header-object-name">ЖК Северный</span>
+                    <span class="header-object-sub">Корпус 2 · Общестрой</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="header-date">7 мая, Ср</div>
+                <button class="avatar-btn" title="Профиль">АИ</button>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <div class="content" id="mainContent">
+            <!-- TAB 1: Сегодня -->
+            <div class="tab-panel active" id="tabToday">
+                <!-- Day Switcher -->
+                <div class="day-switcher">
+                    <div class="day-chip" data-day="6">
+                        <span class="day-num">6</span>
+                        <span class="day-name">Вт</span>
+                    </div>
+                    <div class="day-chip active" data-day="7">
+                        <span class="day-num">7</span>
+                        <span class="day-name">Ср</span>
+                    </div>
+                    <div class="day-chip" data-day="8">
+                        <span class="day-num">8</span>
+                        <span class="day-name">Чт</span>
+                    </div>
+                    <div class="day-chip" data-day="9">
+                        <span class="day-num">9</span>
+                        <span class="day-name">Пт</span>
+                    </div>
+                    <div class="day-chip" data-day="10">
+                        <span class="day-num">10</span>
+                        <span class="day-name">Сб</span>
+                    </div>
+                    <div class="day-chip" data-day="11">
+                        <span class="day-num">11</span>
+                        <span class="day-name">Вс</span>
+                    </div>
+                    <div class="day-chip" data-day="12">
+                        <span class="day-num">12</span>
+                        <span class="day-name">Пн</span>
+                    </div>
+                </div>
+
+                <!-- Section: В работе -->
+                <div class="section-header">
+                    <span class="section-title">В работе сегодня</span>
+                    <span class="section-count">5 работ</span>
+                </div>
+
+                <!-- Card 1 -->
+                <div class="work-card status-progress"
+                    onclick="openFactModal('Штукатурка стен', 'Корпус 2, Секция 1, Этаж 4', '120 м²', '75%', 'Штукатуры Иванов', 'plaster')">
+                    <div class="card-header">
+                        <div class="card-icon plaster">🧱</div>
+                        <div class="card-info">
+                            <div class="card-title">Штукатурка стен</div>
+                            <div class="card-location">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                                    <circle cx="12" cy="10" r="3" />
+                                </svg>
+                                Корпус 2 · Секция 1 · Этаж 4
+                            </div>
+                        </div>
+                        <span class="card-badge badge-progress">По плану</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-details">
+                            <div class="card-detail">
+                                <span class="card-detail-label">План</span>
+                                <span class="card-detail-value">120 м²</span>
+                            </div>
+                            <div class="card-detail">
+                                <span class="card-detail-label">Бригада</span>
+                                <span class="card-detail-value">Штукатуры Иванов</span>
+                            </div>
+                            <div class="card-detail">
+                                <span class="card-detail-label">Срок</span>
+                                <span class="card-detail-value">6–8 мая</span>
+                            </div>
+                        </div>
+                        <div class="card-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill progress" style="width: 75%"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span>Выполнено</span>
+                                <strong>80 / 120 м² (67%)</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="card-btn primary-btn"
+                            onclick="event.stopPropagation(); openFactModal('Штукатурка стен','Корпус 2, Секция 1, Этаж 4','120 м²','67%','Штукатуры Иванов','plaster')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
+                            Факт
+                        </button>
+                        <button class="card-btn danger-btn"
+                            onclick="event.stopPropagation(); openProblemModal('Штукатурка стен')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path
+                                    d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                            </svg>
+                            Проблема
+                        </button>
+                        <button class="card-btn" onclick="event.stopPropagation(); openPhotoModal('Штукатурка стен')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <path d="M21 15l-5-5L5 21" />
+                            </svg>
+                            Фото
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="work-card status-done"
+                    onclick="openFactModal('Стяжка пола', 'Корпус 2, Секция 1, Этаж 3', '200 м²', '100%', 'Стяжечники Петров', 'concrete')">
+                    <div class="card-header">
+                        <div class="card-icon concrete">🏗️</div>
+                        <div class="card-info">
+                            <div class="card-title">Стяжка пола</div>
+                            <div class="card-location">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                                    <circle cx="12" cy="10" r="3" />
+                                </svg>
+                                Корпус 2 · Секция 1 · Этаж 3
+                            </div>
+                        </div>
+                        <span class="card-badge badge-done">Завершена ✓</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-details">
+                            <div class="card-detail">
+                                <span class="card-detail-label">План</span>
+                                <span class="card-detail-value">200 м²</span>
+                            </div>
+                            <div class="card-detail">
+                                <span class="card-detail-label">Бригада</span>
+                                <span class="card-detail-value">Стяжечники Петров</span>
+                            </div>
+                            <div class="card-detail">
+                                <span class="card-detail-label">Срок</span>
+                                <span class="card-detail-value">5–7 мая</span>
+                            </div>
+                        </div>
+                        <div class="card-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill done" style="width: 100%"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span>Выполнено</span>
+                                <strong>200 / 200 м² (100%)</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="card-btn primary-btn"
+                            onclick="event.stopPropagation(); openFactModal('Стяжка пола','Корпус 2, Секция 1, Этаж 3','200 м²','100%','Стяжечники Петров','concrete')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
+                            Факт
+                        </button>
+                        <button class="card-btn" onclick="event.stopPropagation(); openPhotoModal('Стяжка пола')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <path d="M21 15l-5-5L5 21" />
+                            </svg>
+                            Фото
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card 3 - Problem -->
+                <div class="work-card status-problem"
+                    onclick="openFactModal('Монтаж перегородок', 'Корпус 2, Секция 2, Этаж 5', '300 м²', '30%', 'Монтажники Сидоров', 'partition')">
+                    <div class="card-header">
+                        <div class="card-icon partition">🔲</div>
+                        <div class="card-info">
+                            <div class="card-title">Монтаж перегородок</div>
+                            <div class="card-location">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                                    <circle cx="12" cy="10" r="3" />
+                                </svg>
+                                Корпус 2 · Секция 2 · Этаж 5
+                            </div>
+                        </div>
+                        <span class="card-badge badge-problem">Проблема</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-details">
+                            <div class="card-detail">
+                                <span class="card-detail-label">План</span>
+                                <span class="card-detail-value">300 м²</span>
+                            </div>
+                            <div class="card-detail">
+                                <span class="card-detail-label">Бригада</span>
+                                <span class="card-detail-value">Монтажники Сидоров</span>
+                            </div>
+                            <div class="card-detail">
+                                <span class="card-detail-label">Срок</span>
+                                <span class="card-detail-value">5–10 мая</span>
+                            </div>
+                        </div>
+                        <div class="card-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill problem" style="width: 30%"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span>Выполнено</span>
+                                <strong>90 / 300 м² (30%)</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="card-btn primary-btn"
+                            onclick="event.stopPropagation(); openFactModal('Монтаж перегородок','Корпус 2, Секция 2, Этаж 5','300 м²','30%','Монтажники Сидоров','partition')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
+                            Факт
+                        </button>
+                        <button class="card-btn danger-btn"
+                            onclick="event.stopPropagation(); openProblemModal('Монтаж перегородок')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path
+                                    d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                            </svg>
+                            Проблема
+                        </button>
+                        <button class="card-btn"
+                            onclick="event.stopPropagation(); openPhotoModal('Монтаж перегородок')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <path d="M21 15l-5-5L5 21" />
+                            </svg>
+                            Фото
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card 4 -->
+                <div class="work-card status-risk"
+                    onclick="openFactModal('Электромонтаж', 'Корпус 2, Секция 1, Этаж 4', '—', '55%', 'Электрики Козлов', 'electric')">
+                    <div class="card-header">
+                        <div class="card-icon electric">⚡</div>
+                        <div class="card-info">
+                            <div class="card-title">Электромонтаж</div>
+                            <div class="card-location">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                                    <circle cx="12" cy="10" r="3" />
+                                </svg>
+                                Корпус 2 · Секция 1 · Этаж 4
+                            </div>
+                        </div>
+                        <span class="card-badge badge-risk">Риск</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-details">
+                            <div class="card-detail">
+                                <span class="card-detail-label">План</span>
+                                <span class="card-detail-value">—</span>
+                            </div>
+                            <div class="card-detail">
+                                <span class="card-detail-label">Бригада</span>
+                                <span class="card-detail-value">Электрики Козлов</span>
+                            </div>
+                            <div class="card-detail">
+                                <span class="card-detail-label">Срок</span>
+                                <span class="card-detail-value">6–10 мая</span>
+                            </div>
+                        </div>
+                        <div class="card-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill risk" style="width: 55%"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span>Выполнено</span>
+                                <strong>55%</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="card-btn primary-btn"
+                            onclick="event.stopPropagation(); openFactModal('Электромонтаж','Корпус 2, Секция 1, Этаж 4','—','55%','Электрики Козлов','electric')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
+                            Факт
+                        </button>
+                        <button class="card-btn danger-btn"
+                            onclick="event.stopPropagation(); openProblemModal('Электромонтаж')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path
+                                    d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                            </svg>
+                            Проблема
+                        </button>
+                        <button class="card-btn" onclick="event.stopPropagation(); openPhotoModal('Электромонтаж')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <path d="M21 15l-5-5L5 21" />
+                            </svg>
+                            Фото
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card 5 - Not started -->
+                <div class="work-card status-not-started"
+                    onclick="openFactModal('Сантехника', 'Корпус 2, Секция 2, Этаж 3', '—', '0%', 'Сантехники Морозов', 'plumbing')">
+                    <div class="card-header">
+                        <div class="card-icon plumbing">🔧</div>
+                        <div class="card-info">
+                            <div class="card-title">Сантехника</div>
+                            <div class="card-location">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                                    <circle cx="12" cy="10" r="3" />
+                                </svg>
+                                Корпус 2 · Секция 2 · Этаж 3
+                            </div>
+                        </div>
+                        <span class="card-badge badge-not-started">Не начата</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-details">
+                            <div class="card-detail">
+                                <span class="card-detail-label">Бригада</span>
+                                <span class="card-detail-value">Сантехники Морозов</span>
+                            </div>
+                            <div class="card-detail">
+                                <span class="card-detail-label">Срок</span>
+                                <span class="card-detail-value">7–12 мая</span>
+                            </div>
+                        </div>
+                        <div class="card-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 0%; background: var(--gray-300);"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span>Выполнено</span>
+                                <strong>0%</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="card-btn primary-btn"
+                            onclick="event.stopPropagation(); openFactModal('Сантехника','Корпус 2, Секция 2, Этаж 3','—','0%','Сантехники Морозов','plumbing')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
+                            Факт
+                        </button>
+                        <button class="card-btn" onclick="event.stopPropagation(); openPhotoModal('Сантехника')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <path d="M21 15l-5-5L5 21" />
+                            </svg>
+                            Фото
+                        </button>
+                        <button class="card-btn danger-btn"
+                            onclick="event.stopPropagation(); openProblemModal('Сантехника')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path
+                                    d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                            </svg>
+                            Не работали
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Close Day Banner -->
+                <div class="close-day-banner" onclick="openCloseDayModal()">
+                    <div class="close-day-title">📋 Закрытие дня</div>
+                    <div style="font-size: 12px; opacity: 0.9;">По плану 12 работ: 7 отмечено, 3 не отмечено, 2 с
+                        проблемами</div>
+                    <div class="close-day-stats">
+                        <div class="close-day-stat"><span class="close-day-stat-num">7</span><span
+                                class="close-day-stat-label">Отмечено</span></div>
+                        <div class="close-day-stat"><span class="close-day-stat-num">3</span><span
+                                class="close-day-stat-label">Не отмечено</span></div>
+                        <div class="close-day-stat"><span class="close-day-stat-num">2</span><span
+                                class="close-day-stat-label">Проблемы</span></div>
+                    </div>
+                </div>
+
+                <div class="pull-hint">Завтра: 8 работ по плану →</div>
+            </div>
+
+            <!-- TAB 2: Объект -->
+            <div class="tab-panel" id="tabObject">
+                <div class="section-header">
+                    <span class="section-title">Структура объекта</span>
+                </div>
+                <div class="object-tree">
+                    <div class="tree-item" onclick="toggleTree(this)">
+                        <div class="tree-icon building">🏢</div>
+                        <div class="tree-info">
+                            <div class="tree-name">Корпус 2</div>
+                            <div class="tree-sub">ЖК Северный · Общестрой</div>
+                        </div>
+                        <span class="tree-count">5 работ</span>
+                        <svg class="tree-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </div>
+                    <div class="tree-children" style="display:none;">
+                        <div class="tree-item" onclick="toggleTree(this)" style="padding-left: 40px;">
+                            <div class="tree-icon section">📐</div>
+                            <div class="tree-info">
+                                <div class="tree-name">Секция 1</div>
+                                <div class="tree-sub">3 работы</div>
+                            </div>
+                            <span class="tree-count">3</span>
+                            <svg class="tree-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </div>
+                        <div class="tree-children" style="display:none;">
+                            <div class="tree-item" style="padding-left: 64px;">
+                                <div class="tree-icon floor">📄</div>
+                                <div class="tree-info">
+                                    <div class="tree-name">Этаж 3</div>
+                                    <div class="tree-sub">Стяжка пола — завершена</div>
+                                </div>
+                            </div>
+                            <div class="tree-item" style="padding-left: 64px;">
+                                <div class="tree-icon floor">📄</div>
+                                <div class="tree-info">
+                                    <div class="tree-name">Этаж 4</div>
+                                    <div class="tree-sub">Штукатурка, электромонтаж</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tree-item" onclick="toggleTree(this)" style="padding-left: 40px;">
+                            <div class="tree-icon section">📐</div>
+                            <div class="tree-info">
+                                <div class="tree-name">Секция 2</div>
+                                <div class="tree-sub">2 работы</div>
+                            </div>
+                            <span class="tree-count">2</span>
+                            <svg class="tree-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </div>
+                        <div class="tree-children" style="display:none;">
+                            <div class="tree-item" style="padding-left: 64px;">
+                                <div class="tree-icon floor">📄</div>
+                                <div class="tree-info">
+                                    <div class="tree-name">Этаж 5</div>
+                                    <div class="tree-sub">Монтаж перегородок</div>
+                                </div>
+                            </div>
+                            <div class="tree-item" style="padding-left: 64px;">
+                                <div class="tree-icon floor">📄</div>
+                                <div class="tree-info">
+                                    <div class="tree-name">Этаж 3</div>
+                                    <div class="tree-sub">Сантехника</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-header">
+                    <span class="section-title">Завтра по плану</span>
+                    <span class="section-count">8 работ</span>
+                </div>
+                <div class="work-card status-progress" style="margin-left:16px; margin-right:16px;">
+                    <div class="card-header">
+                        <div class="card-icon plaster">🧱</div>
+                        <div class="card-info">
+                            <div class="card-title">Штукатурка стен</div>
+                            <div class="card-location">Корпус 2 · Секция 1 · Этаж 4</div>
+                        </div>
+                        <span class="card-badge badge-progress">Продолжение</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill progress" style="width: 67%"></div>
+                            </div>
+                            <div class="progress-text"><span>Текущий прогресс</span><strong>67%</strong></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="work-card status-not-started" style="margin-left:16px; margin-right:16px;">
+                    <div class="card-header">
+                        <div class="card-icon electric">⚡</div>
+                        <div class="card-info">
+                            <div class="card-title">Прокладка кабеля</div>
+                            <div class="card-location">Корпус 2 · Секция 1 · Этаж 5</div>
+                        </div>
+                        <span class="card-badge badge-not-started">Начало</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: Проблемы -->
+            <div class="tab-panel" id="tabProblems">
+                <div class="section-header">
+                    <span class="section-title">Открытые проблемы</span>
+                    <span class="section-count">3</span>
+                </div>
+
+                <div class="problem-card">
+                    <div class="problem-header">
+                        <span class="problem-emoji">🚫</span>
+                        <div>
+                            <div class="problem-title">Монтаж перегородок</div>
+                            <div class="problem-loc">Корпус 2 · Секция 2 · Этаж 5</div>
+                        </div>
+                    </div>
+                    <span class="problem-reason">Не готов фронт</span>
+                    <div class="problem-date">Создана 6 мая в 14:30 · А. Иванов</div>
+                </div>
+
+                <div class="problem-card">
+                    <div class="problem-header">
+                        <span class="problem-emoji">📦</span>
+                        <div>
+                            <div class="problem-title">Нет материала</div>
+                            <div class="problem-loc">Корпус 2 · Секция 1 · Этаж 4</div>
+                        </div>
+                    </div>
+                    <span class="problem-reason">Нет материала</span>
+                    <div class="problem-date">Создана 7 мая в 09:15 · А. Иванов</div>
+                </div>
+
+                <div class="problem-card">
+                    <div class="problem-header">
+                        <span class="problem-emoji">👥</span>
+                        <div>
+                            <div class="problem-title">Не вышла бригада</div>
+                            <div class="problem-loc">Корпус 2 · Секция 2 · Этаж 3</div>
+                        </div>
+                    </div>
+                    <span class="problem-reason">Нет людей</span>
+                    <div class="problem-date">Создана 7 мая в 08:00 · А. Иванов</div>
+                </div>
+
+                <div class="section-header">
+                    <span class="section-title">Решённые</span>
+                    <span class="section-count">1</span>
+                </div>
+                <div class="problem-card" style="border-left-color: var(--gray-300); opacity: 0.6;">
+                    <div class="problem-header">
+                        <span class="problem-emoji">✅</span>
+                        <div>
+                            <div class="problem-title">Задержка бетона</div>
+                            <div class="problem-loc">Корпус 2 · Секция 1 · Этаж 3</div>
+                        </div>
+                    </div>
+                    <span class="problem-reason"
+                        style="background: var(--success-light); color: var(--success);">Решено</span>
+                    <div class="problem-date">Решена 5 мая в 16:00 · РП подтвердил</div>
+                </div>
+            </div>
+
+            <!-- TAB 4: Журнал -->
+            <div class="tab-panel" id="tabJournal">
+                <div class="section-header">
+                    <span class="section-title">Журнал факта</span>
+                    <span class="section-count">7 мая</span>
+                </div>
+
+                <div class="journal-item">
+                    <div class="journal-dot done"></div>
+                    <div class="journal-content">
+                        <div class="journal-task">Стяжка пола</div>
+                        <div class="journal-meta">Корпус 2 · Секция 1 · Этаж 3 · 14:32</div>
+                        <div class="journal-fact">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            Завершена · 200 / 200 м² · 100%
+                        </div>
+                        <div class="journal-photos">
+                            <div class="journal-photo">
+                                <div
+                                    style="width:40px;height:40px;background:#e5e7eb;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                                    📷</div>
+                            </div>
+                            <div class="journal-photo">
+                                <div
+                                    style="width:40px;height:40px;background:#e5e7eb;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                                    📷</div>
+                            </div>
+                            <div class="journal-photo">
+                                <div
+                                    style="width:40px;height:40px;background:#e5e7eb;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                                    📷</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="journal-item">
+                    <div class="journal-dot progress"></div>
+                    <div class="journal-content">
+                        <div class="journal-task">Штукатурка стен</div>
+                        <div class="journal-meta">Корпус 2 · Секция 1 · Этаж 4 · 13:15</div>
+                        <div class="journal-fact">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            35 м² сегодня · 80 / 120 м² · 67%
+                        </div>
+                        <div class="journal-photos">
+                            <div class="journal-photo">
+                                <div
+                                    style="width:40px;height:40px;background:#e5e7eb;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                                    📷</div>
+                            </div>
+                            <div class="journal-photo">
+                                <div
+                                    style="width:40px;height:40px;background:#e5e7eb;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                                    📷</div>
+                            </div>
+                            <div class="journal-photo">
+                                <div
+                                    style="width:40px;height:40px;background:#e5e7eb;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                                    📷</div>
+                            </div>
+                            <div class="journal-photo">
+                                <div
+                                    style="width:40px;height:40px;background:#e5e7eb;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                                    📷</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="journal-item">
+                    <div class="journal-dot problem"></div>
+                    <div class="journal-content">
+                        <div class="journal-task">Монтаж перегородок</div>
+                        <div class="journal-meta">Корпус 2 · Секция 2 · Этаж 5 · 11:40</div>
+                        <div class="journal-fact" style="color: var(--danger);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="15" y1="9" x2="9" y2="15" />
+                                <line x1="9" y1="9" x2="15" y2="15" />
+                            </svg>
+                            Не работали — не готов фронт
+                        </div>
+                    </div>
+                </div>
+
+                <div class="journal-item">
+                    <div class="journal-dot progress"></div>
+                    <div class="journal-content">
+                        <div class="journal-task">Электромонтаж</div>
+                        <div class="journal-meta">Корпус 2 · Секция 1 · Этаж 4 · 10:20</div>
+                        <div class="journal-fact">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            55% выполнено · бригада 4 чел.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="journal-item">
+                    <div class="journal-dot not-started"></div>
+                    <div class="journal-content">
+                        <div class="journal-task">Сантехника</div>
+                        <div class="journal-meta">Корпус 2 · Секция 2 · Этаж 3 · 09:00</div>
+                        <div class="journal-fact" style="color: var(--gray-400);">
+                            Не начата · ожидание
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-header">
+                    <span class="section-title">6 мая</span>
+                </div>
+
+                <div class="journal-item">
+                    <div class="journal-dot done"></div>
+                    <div class="journal-content">
+                        <div class="journal-task">Стяжка пола</div>
+                        <div class="journal-meta">Корпус 2 · Секция 1 · Этаж 3 · 16:45</div>
+                        <div class="journal-fact">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            120 / 200 м² · 60%
+                        </div>
+                    </div>
+                </div>
+
+                <div class="journal-item">
+                    <div class="journal-dot progress"></div>
+                    <div class="journal-content">
+                        <div class="journal-task">Штукатурка стен</div>
+                        <div class="journal-meta">Корпус 2 · Секция 1 · Этаж 4 · 15:30</div>
+                        <div class="journal-fact">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            45 м² сегодня · 45 / 120 м² · 38%
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Problem FAB -->
+        <button class="add-problem-btn" id="addProblemFAB" style="display:none;"
+            onclick="openAddProblemModal()">+</button>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-tab="tabToday" onclick="switchTab('tabToday', this)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                    <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
+                </svg>
+                <span>Сегодня</span>
+            </button>
+            <button class="nav-item" data-tab="tabObject" onclick="switchTab('tabObject', this)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+                <span>Объект</span>
+            </button>
+            <button class="nav-item" data-tab="tabProblems" onclick="switchTab('tabProblems', this)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span>Проблемы</span>
+                <div class="nav-badge">3</div>
+            </button>
+            <button class="nav-item" data-tab="tabJournal" onclick="switchTab('tabJournal', this)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                </svg>
+                <span>Журнал</span>
+            </button>
+        </nav>
+
+        <!-- Modal: Fact Entry -->
+        <div class="modal-overlay" id="factModal">
+            <div class="modal-sheet">
+                <div class="modal-header">
+                    <span class="modal-title" id="factModalTitle">Внести факт</span>
+                    <button class="modal-close" onclick="closeModal('factModal')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="factTaskInfo"
+                        style="background:var(--gray-50);border-radius:var(--radius-sm);padding:12px;margin-bottom:20px;">
+                        <div style="font-size:15px;font-weight:700;" id="factTaskName">Штукатурка стен</div>
+                        <div style="font-size:12px;color:var(--gray-500);margin-top:2px;" id="factTaskLoc">Корпус 2 ·
+                            Секция 1 · Этаж 4</div>
+                        <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">План: <span
+                                id="factTaskPlan">120 м²</span> · Прогресс: <span id="factTaskProgress">67%</span></div>
+                    </div>
+
+                    <label class="input-label">Статус за день</label>
+                    <div class="status-selector" id="statusSelector">
+                        <div class="status-option" data-status="done" onclick="selectStatus(this)">
+                            <div class="status-emoji">✅</div>
+                            <div class="status-label">Завершена</div>
+                        </div>
+                        <div class="status-option selected" data-status="working" onclick="selectStatus(this)">
+                            <div class="status-emoji">🔨</div>
+                            <div class="status-label">Выполнялась</div>
+                        </div>
+                        <div class="status-option" data-status="not-working" onclick="selectStatus(this)">
+                            <div class="status-emoji">⏸️</div>
+                            <div class="status-label">Не выполнялась</div>
+                        </div>
+                        <div class="status-option" data-status="problem" onclick="selectStatus(this)">
+                            <div class="status-emoji">⚠️</div>
+                            <div class="status-label">Есть проблема</div>
+                        </div>
+                    </div>
+
+                    <div id="volumeSection">
+                        <label class="input-label">Объём факта</label>
+                        <div class="input-row" style="margin-bottom:12px;">
+                            <div style="flex:1;">
+                                <input type="number" class="input-field" placeholder="35" id="volumeToday"
+                                    style="width:100%;">
+                                <div style="font-size:10px;color:var(--gray-400);margin-top:2px;">Сделано сегодня, м²
+                                </div>
+                            </div>
+                            <div style="flex:1;">
+                                <input type="text" class="input-field" value="80 / 120" readonly
+                                    style="width:100%;background:var(--gray-100);color:var(--gray-600);">
+                                <div style="font-size:10px;color:var(--gray-400);margin-top:2px;">Всего выполнено</div>
+                            </div>
+                        </div>
+
+                        <label class="input-label">Или выберите прогресс</label>
+                        <div class="progress-steps" id="progressSteps">
+                            <button class="progress-step" onclick="selectProgress(this)">0%</button>
+                            <button class="progress-step" onclick="selectProgress(this)">25%</button>
+                            <button class="progress-step active" onclick="selectProgress(this)">50%</button>
+                            <button class="progress-step" onclick="selectProgress(this)">75%</button>
+                            <button class="progress-step" onclick="selectProgress(this)">100%</button>
+                        </div>
+                    </div>
+
+                    <div id="teamSection">
+                        <label class="input-label">Бригада</label>
+                        <div class="team-row">
+                            <button class="team-toggle on" onclick="toggleTeam(this)"></button>
+                            <span class="team-label">Работали</span>
+                            <span class="team-value">5 чел.</span>
+                        </div>
+                    </div>
+
+                    <div id="reasonSection" style="display:none;">
+                        <label class="input-label">Причина отклонения</label>
+                        <div class="reason-tags">
+                            <span class="reason-tag" onclick="toggleReason(this)">Нет материала</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Нет людей</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Не готов фронт</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Ждём смежников</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Изменение проекта</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Погода</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Техника</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:16px;">
+                        <label class="input-label">Фото факта</label>
+                        <div class="photo-upload" id="photoUpload">
+                            <div class="photo-placeholder" onclick="addPhoto()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Фото</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:16px;">
+                        <label class="input-label">Комментарий</label>
+                        <textarea class="input-field" rows="3" placeholder="Добавьте комментарий..."></textarea>
+                    </div>
+
+                    <button class="submit-btn" onclick="submitFact()">Отправить факт</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Problem -->
+        <div class="modal-overlay" id="problemModal">
+            <div class="modal-sheet">
+                <div class="modal-header">
+                    <span class="modal-title">Проблема</span>
+                    <button class="modal-close" onclick="closeModal('problemModal')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div
+                        style="background:var(--danger-light);border-radius:var(--radius-sm);padding:12px;margin-bottom:20px;">
+                        <div style="font-size:15px;font-weight:700;color:var(--danger);" id="problemTaskName">Штукатурка
+                            стен</div>
+                        <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">Укажите причину проблемы</div>
+                    </div>
+
+                    <label class="input-label">Причина</label>
+                    <div class="reason-tags" id="problemReasons">
+                        <span class="reason-tag" onclick="toggleReason(this)">Нет материала</span>
+                        <span class="reason-tag" onclick="toggleReason(this)">Нет людей</span>
+                        <span class="reason-tag" onclick="toggleReason(this)">Не готов фронт</span>
+                        <span class="reason-tag" onclick="toggleReason(this)">Ждём смежников</span>
+                        <span class="reason-tag" onclick="toggleReason(this)">Изменение проекта</span>
+                        <span class="reason-tag" onclick="toggleReason(this)">Погода</span>
+                        <span class="reason-tag" onclick="toggleReason(this)">Техника</span>
+                    </div>
+
+                    <div style="margin-top:20px;">
+                        <label class="input-label">Подробности</label>
+                        <textarea class="input-field" rows="4" placeholder="Опишите проблему подробнее..."></textarea>
+                    </div>
+
+                    <div style="margin-top:16px;">
+                        <label class="input-label">Фото</label>
+                        <div class="photo-upload">
+                            <div class="photo-placeholder" onclick="addPhoto()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Фото</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="submit-btn" style="background:var(--danger);" onclick="submitProblem()">Отправить
+                        проблему</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Photo -->
+        <div class="modal-overlay" id="photoModal">
+            <div class="modal-sheet">
+                <div class="modal-header">
+                    <span class="modal-title">Фото факта</span>
+                    <button class="modal-close" onclick="closeModal('photoModal')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div
+                        style="background:var(--gray-50);border-radius:var(--radius-sm);padding:12px;margin-bottom:20px;">
+                        <div style="font-size:15px;font-weight:700;" id="photoTaskName">Штукатурка стен</div>
+                    </div>
+
+                    <div class="photo-upload" id="photoUploadModal" style="gap:8px;">
+                        <div class="photo-placeholder" style="width:100%;height:120px;" onclick="addPhotoLarge()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                style="width:32px;height:32px;">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <path d="M21 15l-5-5L5 21" />
+                            </svg>
+                            <span style="font-size:13px;">Сделать фото</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:16px;">
+                        <label class="input-label">Комментарий к фото</label>
+                        <textarea class="input-field" rows="2" placeholder="Что на фото..."></textarea>
+                    </div>
+
+                    <button class="submit-btn" onclick="submitPhotos()">Загрузить фото</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Add Problem (FAB) -->
+        <div class="modal-overlay" id="addProblemModal">
+            <div class="modal-sheet">
+                <div class="modal-header">
+                    <span class="modal-title">Новая проблема</span>
+                    <button class="modal-close" onclick="closeModal('addProblemModal')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div
+                        style="background:var(--danger-light);border-radius:var(--radius-sm);padding:12px;margin-bottom:20px;">
+                        <div style="font-size:13px;color:var(--gray-600);">Можно добавить проблему без привязки к
+                            работе. РП привяжет позже.</div>
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">Локация</label>
+                        <input type="text" class="input-field" placeholder="Корпус 2, Секция 1, Этаж 4">
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">Причина</label>
+                        <div class="reason-tags">
+                            <span class="reason-tag" onclick="toggleReason(this)">Нет материала</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Нет людей</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Не готов фронт</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Ждём смежников</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Изменение проекта</span>
+                            <span class="reason-tag" onclick="toggleReason(this)">Погода</span>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">Описание</label>
+                        <textarea class="input-field" rows="3" placeholder="Опишите проблему..."></textarea>
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">Фото</label>
+                        <div class="photo-upload">
+                            <div class="photo-placeholder" onclick="addPhoto()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Фото</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="submit-btn" style="background:var(--danger);" onclick="submitProblem()">Отправить
+                        проблему</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Close Day -->
+        <div class="modal-overlay" id="closeDayModal">
+            <div class="modal-sheet">
+                <div class="modal-header">
+                    <span class="modal-title">📋 Закрытие дня</span>
+                    <button class="modal-close" onclick="closeModal('closeDayModal')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="close-day-summary">
+                        <div class="close-day-big">7 / 12</div>
+                        <div class="close-day-sub">работ отмечено</div>
+                    </div>
+
+                    <label class="input-label" style="margin-bottom:12px;">Неотмеченные работы</label>
+
+                    <div class="close-task-item">
+                        <span class="close-task-icon">🔲</span>
+                        <div class="close-task-info">
+                            <div class="close-task-name">Монтаж перегородок</div>
+                            <div class="close-task-prompt">Что было сегодня?</div>
+                        </div>
+                        <div class="close-task-actions">
+                            <button class="close-task-btn filled"
+                                onclick="this.textContent='✓';this.style.background='var(--success)';this.style.borderColor='var(--success)';this.closest('.close-task-item').style.opacity='0.5';">Факт</button>
+                            <button class="close-task-btn"
+                                onclick="this.textContent='✓';this.style.background='var(--gray-300)';this.closest('.close-task-item').style.opacity='0.5';">Не
+                                работали</button>
+                            <button class="close-task-btn"
+                                onclick="this.textContent='✓';this.style.background='var(--warning)';this.style.borderColor='var(--warning)';this.style.color='white';this.closest('.close-task-item').style.opacity='0.5';">Перенести</button>
+                        </div>
+                    </div>
+
+                    <div class="close-task-item">
+                        <span class="close-task-icon">⚡</span>
+                        <div class="close-task-info">
+                            <div class="close-task-name">Прокладка кабеля</div>
+                            <div class="close-task-prompt">Что было сегодня?</div>
+                        </div>
+                        <div class="close-task-actions">
+                            <button class="close-task-btn filled"
+                                onclick="this.textContent='✓';this.style.background='var(--success)';this.style.borderColor='var(--success)';this.closest('.close-task-item').style.opacity='0.5';">Факт</button>
+                            <button class="close-task-btn"
+                                onclick="this.textContent='✓';this.style.background='var(--gray-300)';this.closest('.close-task-item').style.opacity='0.5';">Не
+                                работали</button>
+                            <button class="close-task-btn"
+                                onclick="this.textContent='✓';this.style.background='var(--warning)';this.style.borderColor='var(--warning)';this.style.color='white';this.closest('.close-task-item').style.opacity='0.5';">Перенести</button>
+                        </div>
+                    </div>
+
+                    <div class="close-task-item">
+                        <span class="close-task-icon">🔧</span>
+                        <div class="close-task-info">
+                            <div class="close-task-name">Сантехника</div>
+                            <div class="close-task-prompt">Что было сегодня?</div>
+                        </div>
+                        <div class="close-task-actions">
+                            <button class="close-task-btn filled"
+                                onclick="this.textContent='✓';this.style.background='var(--success)';this.style.borderColor='var(--success)';this.closest('.close-task-item').style.opacity='0.5';">Факт</button>
+                            <button class="close-task-btn"
+                                onclick="this.textContent='✓';this.style.background='var(--gray-300)';this.closest('.close-task-item').style.opacity='0.5';">Не
+                                работали</button>
+                            <button class="close-task-btn"
+                                onclick="this.textContent='✓';this.style.background='var(--warning)';this.style.borderColor='var(--warning)';this.style.color='white';this.closest('.close-task-item').style.opacity='0.5';">Перенести</button>
+                        </div>
+                    </div>
+
+                    <button class="submit-btn" onclick="closeDay()">✅ Закрыть день</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast -->
+        <div class="toast" id="toast">Факт отправлен!</div>
+    </div>
+
+    <script>
+        // Tab switching
+        function switchTab(tabId, navItem) {
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            navItem.classList.add('active');
+
+            const fab = document.getElementById('addProblemFAB');
+            fab.style.display = tabId === 'tabProblems' ? 'flex' : 'none';
+        }
+
+        // Day switcher
+        document.querySelectorAll('.day-chip').forEach(chip => {
+            chip.addEventListener('click', function () {
+                document.querySelectorAll('.day-chip').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Modal controls
+        function openFactModal(name, loc, plan, progress, team, iconType) {
+            document.getElementById('factTaskName').textContent = name;
+            document.getElementById('factTaskLoc').textContent = loc;
+            document.getElementById('factTaskPlan').textContent = plan;
+            document.getElementById('factTaskProgress').textContent = progress;
+            document.getElementById('factModal').classList.add('visible');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function openProblemModal(taskName) {
+            document.getElementById('problemTaskName').textContent = taskName;
+            document.getElementById('problemModal').classList.add('visible');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function openPhotoModal(taskName) {
+            document.getElementById('photoTaskName').textContent = taskName;
+            document.getElementById('photoModal').classList.add('visible');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function openAddProblemModal() {
+            document.getElementById('addProblemModal').classList.add('visible');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function openCloseDayModal() {
+            document.getElementById('closeDayModal').classList.add('visible');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('visible');
+            document.body.style.overflow = '';
+        }
+
+        // Close modal on overlay click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function (e) {
+                if (e.target === this) {
+                    this.classList.remove('visible');
+                    document.body.style.overflow = '';
+                }
+            });
+        });
+
+        // Status selection
+        function selectStatus(el) {
+            document.querySelectorAll('#statusSelector .status-option').forEach(s => {
+                s.classList.remove('selected', 'selected-done', 'selected-problem');
+            });
+            const status = el.dataset.status;
+            if (status === 'done') el.classList.add('selected-done');
+            else if (status === 'problem') el.classList.add('selected-problem');
+            else el.classList.add('selected');
+
+            const reasonSection = document.getElementById('reasonSection');
+            const volumeSection = document.getElementById('volumeSection');
+            const teamSection = document.getElementById('teamSection');
+
+            if (status === 'working' || status === 'done') {
+                reasonSection.style.display = 'none';
+                volumeSection.style.display = 'block';
+                teamSection.style.display = 'block';
+            } else if (status === 'problem') {
+                reasonSection.style.display = 'block';
+                volumeSection.style.display = 'none';
+                teamSection.style.display = 'block';
+            } else {
+                reasonSection.style.display = 'block';
+                volumeSection.style.display = 'none';
+                teamSection.style.display = 'block';
+            }
+        }
+
+        // Progress steps
+        function selectProgress(el) {
+            document.querySelectorAll('#progressSteps .progress-step').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        // Team toggle
+        function toggleTeam(el) {
+            el.classList.toggle('on');
+            el.classList.toggle('off');
+        }
+
+        // Reason tags
+        function toggleReason(el) {
+            el.classList.toggle('active');
+        }
+
+        // Photo simulation
+        let photoCount = 0;
+        function addPhoto() {
+            photoCount++;
+            const colors = ['#dbeafe', '#fef3c7', '#dcfce7', '#fce7f3', '#e5e7eb', '#cffafe'];
+            const color = colors[photoCount % colors.length];
+            const placeholder = event.target.closest('.photo-placeholder');
+            const upload = placeholder.parentElement;
+
+            const preview = document.createElement('div');
+            preview.className = 'photo-preview';
+            preview.innerHTML = `<div style="width:100%;height:100%;background:${color};display:flex;align-items:center;justify-content:center;font-size:20px;">📷</div>
+                <button class="photo-remove" onclick="this.parentElement.remove()">×</button>`;
+            upload.insertBefore(preview, placeholder);
+        }
+
+        function addPhotoLarge() {
+            photoCount++;
+            const colors = ['#dbeafe', '#fef3c7', '#dcfce7', '#fce7f3', '#e5e7eb'];
+            const color = colors[photoCount % colors.length];
+            const placeholder = event.target.closest('.photo-placeholder');
+            const upload = placeholder.parentElement;
+
+            const preview = document.createElement('div');
+            preview.style.cssText = 'width:100%;height:120px;border-radius:10px;overflow:hidden;position:relative;margin-bottom:8px;';
+            preview.innerHTML = `<div style="width:100%;height:100%;background:${color};display:flex;align-items:center;justify-content:center;font-size:32px;">📷</div>
+                <button class="photo-remove" onclick="this.parentElement.remove()" style="position:absolute;top:-4px;right:-4px;">×</button>`;
+            upload.insertBefore(preview, placeholder);
+        }
+
+        // Submit actions
+        function showToast(message, type = '') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast' + (type ? ' ' + type : '');
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+
+        function submitFact() {
+            closeModal('factModal');
+            showToast('✓ Факт отправлен!', 'success');
+        }
+
+        function submitProblem() {
+            closeModal('problemModal');
+            closeModal('addProblemModal');
+            showToast('✓ Проблема отправлена!', 'success');
+        }
+
+        function submitPhotos() {
+            closeModal('photoModal');
+            showToast('✓ Фото загружены!', 'success');
+        }
+
+        function closeDay() {
+            closeModal('closeDayModal');
+            showToast('✓ День закрыт!', 'success');
+        }
+
+        // Tree toggle
+        function toggleTree(item) {
+            const children = item.nextElementSibling;
+            if (children && children.classList.contains('tree-children')) {
+                const isHidden = children.style.display === 'none';
+                children.style.display = isHidden ? 'block' : 'none';
+                const arrow = item.querySelector('.tree-arrow');
+                if (arrow) {
+                    arrow.style.transform = isHidden ? 'rotate(180deg)' : '';
+                }
+            }
+        }
+
+        // Swipe gesture for day switcher
+        const switcher = document.querySelector('.day-switcher');
+        let startX = 0;
+        switcher.addEventListener('touchstart', e => { startX = e.touches[0].clientX; });
+        switcher.addEventListener('touchend', e => {
+            const diff = e.changedTouches[0].clientX - startX;
+            if (Math.abs(diff) > 50) {
+                const chips = Array.from(document.querySelectorAll('.day-chip'));
+                const activeIdx = chips.findIndex(c => c.classList.contains('active'));
+                if (diff < 0 && activeIdx < chips.length - 1) {
+                    chips[activeIdx].classList.remove('active');
+                    chips[activeIdx + 1].classList.add('active');
+                    chips[activeIdx + 1].scrollIntoView({ inline: 'center', block: 'nearest' });
+                } else if (diff > 0 && activeIdx > 0) {
+                    chips[activeIdx].classList.remove('active');
+                    chips[activeIdx - 1].classList.add('active');
+                    chips[activeIdx - 1].scrollIntoView({ inline: 'center', block: 'nearest' });
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -11,8 +11,11 @@
     "build": "npm run build --workspaces",
     "build:mcp": "npm run build -w packages/mcp",
     "build:server": "npm run build -w packages/server",
+    "build:fact": "npm run build -w packages/fact",
     "deploy:image": "node scripts/deploy-image.mjs",
     "deploy:caprover": "node scripts/deploy-image.mjs --deploy-caprover",
+    "deploy:fact-image": "node scripts/deploy-image.mjs --target fact",
+    "deploy:fact-caprover": "node scripts/deploy-image.mjs --target fact --deploy-caprover",
     "prisma:generate": "npm run prisma:generate -w packages/runtime-core",
     "smoke:template-publications": "node scripts/template-publications-smoke.mjs",
     "eval:agent-e2e": "tsx scripts/agent-e2e-live.ts",
@@ -21,6 +24,7 @@
     "dump:db": "node scripts/dump-db.js",
     "dev:server": "npm run dev -w packages/server",
     "dev:web": "npm run dev -w packages/web",
+    "dev:fact": "npm run dev -w packages/fact",
     "dev:site": "npm run dev -w packages/site"
   },
   "keywords": [
