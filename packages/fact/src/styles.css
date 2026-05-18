@@ -52,6 +52,11 @@ textarea {
   min-width: 0;
 }
 
+.header-title-row {
+  min-width: 0;
+  color: var(--text-primary);
+}
+
 .header-date-text {
   flex: 0 0 auto;
   color: var(--text-secondary);

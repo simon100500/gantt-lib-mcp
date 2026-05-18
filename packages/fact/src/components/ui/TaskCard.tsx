@@ -6,6 +6,7 @@ type Draft = {
   state: FactMarkState;
   inputMode: 'volume' | 'percent';
   value: string;
+  explicitValue: boolean;
   reason: string;
   comment: string;
   worked: boolean;
@@ -126,10 +127,10 @@ export function TaskCard({
 
   const progress = Math.max(0, Math.min(100, Math.round(task.progress || 0)));
   const hasProblemText = Boolean(draft.reason.trim() || draft.comment.trim());
-  const isMarked = draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || Boolean(draft.value.trim());
+  const hasExplicitMark = draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || (draft.explicitValue && Boolean(draft.value.trim()));
   const isProblem = draft.state === 'problem' || draft.state === 'not_worked' || hasProblemText;
-  const draftProgress = Math.max(0, Math.min(100, Math.round(Number(draft.value || 0) || 0)));
-  const isCompleted = !isProblem && isMarked && (draft.state === 'done' || draftProgress >= 100 || progress >= 100);
+  const markedProgress = draft.explicitValue ? Math.max(0, Math.min(100, Math.round(Number(draft.value || 0) || 0))) : progress;
+  const isCompleted = !isProblem && hasExplicitMark && (draft.state === 'done' || markedProgress >= 100);
   const subtitle = isProblem
     ? formatProblemSubtitle(draft, formatPlanSubtitle(task, dateKey, false))
     : formatPlanSubtitle(task, dateKey, !isCompleted);
@@ -142,10 +143,10 @@ export function TaskCard({
       subtitle={subtitle}
       after={
         <Counter
-          value={progress}
-          appearance={isProblem ? 'negative' : isMarked ? 'themed' : 'neutral'}
-          mode={isProblem || isMarked ? 'filled' : 'inverse'}
-          muted={!isProblem && !isMarked}
+          value={markedProgress}
+          appearance={isProblem ? 'negative' : hasExplicitMark ? 'themed' : 'neutral'}
+          mode={isProblem || hasExplicitMark ? 'filled' : 'inverse'}
+          muted={!isProblem && !hasExplicitMark}
           className="percent-counter"
           style={counterStyle}
         />

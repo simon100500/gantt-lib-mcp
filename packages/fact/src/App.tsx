@@ -17,7 +17,7 @@ import {
   ToolButton,
   Typography,
 } from '@maxhub/max-ui';
-import { Calendar } from 'lucide-react';
+import { Calendar, House } from 'lucide-react';
 import { closeFactDay, loadFactSession, saveFactTaskMark, type FactDayCloseEntry, type FactMarkState, type FactSession, type FactTask } from './api/factApi';
 import { readLaunchToken, todayKey } from './session/token';
 import { TaskCard } from './components/ui/TaskCard';
@@ -26,6 +26,7 @@ type Draft = {
   state: FactMarkState;
   inputMode: 'volume' | 'percent';
   value: string;
+  explicitValue: boolean;
   reason: string;
   comment: string;
   worked: boolean;
@@ -34,7 +35,7 @@ type Draft = {
 };
 
 function isDraftMarked(draft: Draft | undefined): boolean {
-  return Boolean(draft && (draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || draft.value.trim()));
+  return Boolean(draft && (draft.state === 'not_worked' || draft.state === 'done' || draft.state === 'problem' || (draft.explicitValue && draft.value.trim())));
 }
 
 type FreeProblem = {
@@ -102,6 +103,7 @@ function createDraft(task: FactTask): Draft {
     state: task.closeState ?? (task.dayFact > 0 ? 'fact' : 'fact'),
     inputMode,
     value: value ? String(value) : '',
+    explicitValue: task.closeValue !== null || task.closeState === 'done',
     reason: task.closeReason ?? '',
     comment: task.closeComment ?? '',
     worked: task.closeState !== 'not_worked',
@@ -314,7 +316,7 @@ export function App() {
     if (withHaptic && nextPercent !== currentPercent) {
       triggerLightHaptic();
     }
-    updateDraft(taskId, { ...draft, inputMode: 'percent', value: String(nextPercent) });
+    updateDraft(taskId, { ...draft, inputMode: 'percent', value: String(nextPercent), explicitValue: true });
   };
 
   const openTaskSheet = (task: FactTask, mode: Exclude<SheetMode, 'close-day' | null>) => {
@@ -337,6 +339,9 @@ export function App() {
 
   const closeSheet = () => {
     if (!sheetMode || sheetClosing) return;
+    if (activeTask) {
+      updateDraft(activeTask.id, createDraft(activeTask));
+    }
     setSheetClosing(true);
     window.setTimeout(() => {
       setSheetMode(null);
@@ -423,6 +428,7 @@ export function App() {
       ...activeDraft,
       state,
       worked: state !== 'not_worked',
+      explicitValue: activeDraft.explicitValue || state === 'done',
       value: state === 'done'
         ? activeDraft.inputMode === 'percent' ? '100' : String(activeTask.workVolume ?? activeTask.dayPlan ?? activeDraft.value)
         : state === 'not_worked' ? '0' : activeDraft.value,
@@ -493,7 +499,10 @@ export function App() {
         <Container className="app-header" fullWidth>
           <Flex align="center" justify="space-between" gap={12}>
             <Flex direction="column" className="header-title">
-              <Typography.Label variant="large-strong">{session?.project.name ?? 'Объект'}</Typography.Label>
+              <Flex align="center" gap={8} className="header-title-row">
+                <House size={16} strokeWidth={2} aria-hidden="true" />
+                <Typography.Label variant="large-strong">{session?.project.name ?? 'Объект'}</Typography.Label>
+              </Flex>
             </Flex>
             <Typography.Label variant="small-strong" className="header-date-text">{formatHeaderDate(date, activeDayPreset)}</Typography.Label>
           </Flex>
@@ -802,7 +811,7 @@ export function App() {
                               max={100}
                               step={1}
                               value={activeDraft.value}
-                              onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: event.target.value })}
+                              onChange={(event) => updateDraft(activeTask.id, { ...activeDraft, inputMode: 'percent', value: event.target.value, explicitValue: true })}
                             />
                             <Typography.Label variant="large-strong" className="fact-progress-sign">%</Typography.Label>
                             <Button
