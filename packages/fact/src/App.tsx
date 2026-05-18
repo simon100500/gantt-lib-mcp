@@ -180,6 +180,7 @@ export function App() {
   const [token] = useState(() => readLaunchToken());
   const dateInputRef = useRef<HTMLInputElement | null>(null);
   const sheetDragStartRef = useRef<number | null>(null);
+  const hasLoadedSessionRef = useRef(false);
   const [baseToday] = useState(() => todayKey());
   const [date, setDate] = useState(() => todayKey());
   const [activeDayPreset, setActiveDayPreset] = useState<DayPreset>('today');
@@ -189,6 +190,7 @@ export function App() {
   const [freeProblems, setFreeProblems] = useState<FreeProblem[]>([]);
   const [freeProblemDraft, setFreeProblemDraft] = useState({ reason: '', comment: '' });
   const [loading, setLoading] = useState(true);
+  const [dayRefreshing, setDayRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
@@ -204,11 +206,17 @@ export function App() {
     }
 
     let alive = true;
-    setLoading(true);
+    const initialLoad = !hasLoadedSessionRef.current;
+    if (initialLoad) {
+      setLoading(true);
+    } else {
+      setDayRefreshing(true);
+    }
     setError(null);
     loadFactSession({ token, date })
       .then((nextSession) => {
         if (!alive) return;
+        hasLoadedSessionRef.current = true;
         setSession(nextSession);
         setDrafts(Object.fromEntries(nextSession.tasks.filter((task) => task.writable).map((task) => [task.id, createDraft(task)])));
       })
@@ -219,7 +227,10 @@ export function App() {
       })
       .finally(() => {
         if (alive) {
-          setLoading(false);
+          if (initialLoad) {
+            setLoading(false);
+          }
+          setDayRefreshing(false);
         }
       });
 
@@ -488,7 +499,7 @@ export function App() {
           </Flex>
         </Container>
 
-        <Container className="content" fullWidth>
+        <Container className={`content ${dayRefreshing ? 'content--refreshing' : ''}`.trim()} fullWidth>
           {error && <Container className="notice notice--error">{error}</Container>}
 
           {activeTab === 'today' && (
