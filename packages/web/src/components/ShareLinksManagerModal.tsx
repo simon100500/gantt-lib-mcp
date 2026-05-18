@@ -78,7 +78,7 @@ function resolveShareUrl(token: string): string {
 }
 
 function resolveFactUrl(link: FactAccessTokenListItem): string {
-  const configuredBase = (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_FACT_APP_URL?.replace(/\/$/, '');
+  const configuredBase = import.meta.env.VITE_FACT_APP_URL?.replace(/\/$/, '');
   if (configuredBase) {
     return `${configuredBase}?token=${encodeURIComponent(link.slug)}`;
   }
@@ -86,6 +86,11 @@ function resolveFactUrl(link: FactAccessTokenListItem): string {
     return `http://localhost:5175?token=${encodeURIComponent(link.slug)}`;
   }
   return link.url;
+}
+
+function resolveFactMaxUrl(link: FactAccessTokenListItem): string {
+  const botName = import.meta.env.VITE_FACT_MAX_BOT_NAME?.trim() || 'id781902818607_bot';
+  return `https://max.ru/${encodeURIComponent(botName)}?startapp=${encodeURIComponent(link.slug)}`;
 }
 
 export function ShareLinksManagerModal({
@@ -205,8 +210,26 @@ export function ShareLinksManagerModal({
     }
   }, [onStatusChange]);
 
+  const handleCopyFactMax = useCallback(async (link: FactAccessTokenListItem) => {
+    try {
+      await navigator.clipboard.writeText(resolveFactMaxUrl(link));
+      setCopiedLinkId(`max:${link.id}`);
+      onStatusChange?.('copied');
+      window.setTimeout(() => {
+        setCopiedLinkId((current) => current === `max:${link.id}` ? null : current);
+        onStatusChange?.('idle');
+      }, 1500);
+    } catch {
+      onStatusChange?.('error');
+    }
+  }, [onStatusChange]);
+
   const handleOpenFact = useCallback((link: FactAccessTokenListItem) => {
     window.open(resolveFactUrl(link), '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const handleOpenFactMax = useCallback((link: FactAccessTokenListItem) => {
+    window.open(resolveFactMaxUrl(link), '_blank', 'noopener,noreferrer');
   }, []);
 
   const handleDownloadFactPdf = useCallback(async (link: FactAccessTokenListItem) => {
@@ -223,7 +246,7 @@ export function ShareLinksManagerModal({
         projectName,
         logoUrl: `${window.location.origin}/favicon.svg`,
         serviceName: 'GetGantt Fact',
-        descriptor: 'Мобильная ссылка для прораба: открыть работы на день, внести факт, отметить простой или проблему и отправить закрытие дня.',
+        descriptor: 'Мобильная ссылка для прораба: открыть работы на день, внести факт, отметить простой или проблему.',
         details: link.includedTaskIds.length > 0
           ? `Работы: ${(link.previewTitles ?? []).join(', ') || 'выбранные задачи'}`
           : 'Все доступные работы проекта',
@@ -326,7 +349,7 @@ export function ShareLinksManagerModal({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          label: `${projectName} · закрытие дня`,
+          label: `${projectName} · отметка факта`,
           includedTaskIds: [],
         }),
       });
@@ -445,15 +468,15 @@ export function ShareLinksManagerModal({
               </span>
             )}
           </div>
-          <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <div className="flex items-center gap-2 text-sm font-bold text-emerald-900">
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
                   <HardHat className="h-4 w-4" />
-                  Закрытие дня для прораба
+                  Отметка факта
                 </div>
-                <div className="mt-1 text-xs text-emerald-800/80">
-                  Создает отдельную ссылку на fact.getgantt.ru для внесения факта и проблем.
+                <div className="mt-1 text-xs text-slate-500">
+                  Создает отдельную ссылку на fact.getgantt.ru или в MAX для внесения факта и указания проблем.
                 </div>
               </div>
               <Button
@@ -461,7 +484,7 @@ export function ShareLinksManagerModal({
                 variant="outline"
                 onClick={() => { void handleCreateFactAccess(); }}
                 disabled={submitting}
-                className="h-10 shrink-0 justify-center rounded-lg border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100"
+                className="h-10 shrink-0 justify-center rounded-lg border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
               >
                 {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Ссылка прорабу
@@ -618,34 +641,37 @@ export function ShareLinksManagerModal({
               <div className="mt-5 border-t border-slate-100 pt-5">
                 <div className="mb-2 flex items-center justify-between">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">
-                    Закрытие дня ({visibleFactLinks.length})
+                    Отметка факта ({visibleFactLinks.length})
                   </h3>
                 </div>
                 <div className="space-y-2 pr-1">
                   {visibleFactLinks.map((link) => (
-                    <div key={link.id} className="rounded-xl bg-emerald-50 p-2.5 ring-1 ring-inset ring-emerald-100">
+                    <div key={link.id} className="rounded-xl bg-slate-100 p-2.5">
                       <div className="mb-2 flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-bold leading-none text-emerald-950">
-                            {link.label || 'Закрытие дня'}
+                          <div className="truncate text-sm font-bold leading-none text-slate-700">
+                            {link.label || 'Отметка факта'}
                           </div>
-                          <div className="mt-1 text-[10px] font-medium text-emerald-700">
+                          <div className="mt-1 text-[10px] font-medium text-slate-400">
                             {formatCreatedAt(link.createdAt)}
                             {link.lastUsedAt ? ` · открывали ${formatCreatedAt(link.lastUsedAt)}` : ''}
                           </div>
                         </div>
-                        <span className="shrink-0 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-white">
-                          Fact
+                        <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-700">
+                          ФАКТ
                         </span>
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-inset ring-slate-200">
+                          <img src="/favicon.svg" alt="" className="h-5 w-5 rounded-[4px]" aria-hidden="true" />
+                        </div>
                         <input
                           readOnly
                           onClick={() => void handleCopyFact(link)}
                           value={resolveFactUrl(link)}
                           title="Нажмите, чтобы скопировать"
-                          className="min-w-0 flex-1 cursor-pointer rounded-lg bg-white px-3 py-2 font-mono text-xs text-slate-500 outline-none ring-1 ring-inset ring-emerald-100 transition-colors hover:ring-emerald-300"
+                          className="min-w-0 flex-1 cursor-pointer rounded-lg bg-white px-3 py-2 font-mono text-xs text-slate-500 outline-none ring-1 ring-inset ring-slate-200 transition-colors hover:ring-slate-300"
                         />
                         <Button
                           type="button"
@@ -659,6 +685,43 @@ export function ShareLinksManagerModal({
                           {copiedLinkId === link.id ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                           <span>{copiedLinkId === link.id ? 'Скопировано' : 'Копировать'}</span>
                         </Button>
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-inset ring-slate-200">
+                          <img src="/logo_MAX.svg" alt="" className="h-5 w-5" aria-hidden="true" />
+                        </div>
+                        <input
+                          readOnly
+                          onClick={() => void handleCopyFactMax(link)}
+                          value={resolveFactMaxUrl(link)}
+                          title="Нажмите, чтобы скопировать ссылку MAX"
+                          className="min-w-0 flex-1 cursor-pointer rounded-lg bg-white px-3 py-2 font-mono text-xs text-slate-500 outline-none ring-1 ring-inset ring-slate-200 transition-colors hover:ring-slate-300"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleCopyFactMax(link)}
+                          className={`h-9 shrink-0 rounded-lg px-3 text-xs font-semibold ${copiedLinkId === `max:${link.id}`
+                            ? 'border-green-200 bg-green-50 text-green-600'
+                            : ''
+                            }`}
+                        >
+                          {copiedLinkId === `max:${link.id}` ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                          <span>{copiedLinkId === `max:${link.id}` ? 'Скопировано' : 'MAX'}</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleOpenFactMax(link)}
+                          className="h-9 w-9 shrink-0 rounded-lg p-0 text-slate-500"
+                          title="Открыть в MAX"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-2">
                         <Button
                           type="button"
                           variant="outline"
