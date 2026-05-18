@@ -62,6 +62,15 @@ type OptimisticPlannerMove = ResourcePlannerMoveClassification & {
   kind: 'date-only' | 'resource-only' | 'combined';
 };
 
+export type ResourceOccupancyFilter = 'all' | 'assigned' | 'free';
+
+const DEFAULT_RESOURCE_PLANNER_FILTERS: ResourcePlannerFilters = {
+  query: '',
+  resourceTypes: [],
+  conflictOnly: false,
+  includeInactive: true,
+};
+
 class AssignmentRequestError extends Error {
   constructor(
     message: string,
@@ -95,6 +104,45 @@ const AUTO_REFRESH_MIN_HIDDEN_MS = 15_000;
 
 function getPlannerDayWidth(viewMode: ViewMode): number {
   return viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24;
+}
+
+export function filterTimelineResourcesByOccupancy(
+  resources: ResourcePlannerTimelineResource[],
+  filter: ResourceOccupancyFilter,
+): ResourcePlannerTimelineResource[] {
+  if (filter === 'assigned') {
+    return resources.filter((resource) => resource.items.length > 0);
+  }
+
+  if (filter === 'free') {
+    return resources.filter((resource) => resource.items.length === 0);
+  }
+
+  return resources;
+}
+
+function normalizeResourceOccupancyFilter(value: unknown): ResourceOccupancyFilter {
+  return value === 'assigned' || value === 'free' ? value : 'all';
+}
+
+function normalizePersistedResourcePlannerFilters(value: unknown): ResourcePlannerFilters {
+  if (!value || typeof value !== 'object') {
+    return DEFAULT_RESOURCE_PLANNER_FILTERS;
+  }
+
+  const candidate = value as Partial<ResourcePlannerFilters>;
+  const resourceTypes = Array.isArray(candidate.resourceTypes)
+    ? candidate.resourceTypes.filter((type): type is ResourceType => (
+      type === 'human' || type === 'equipment' || type === 'material' || type === 'other'
+    ))
+    : [];
+
+  return {
+    query: typeof candidate.query === 'string' ? candidate.query : '',
+    resourceTypes,
+    conflictOnly: candidate.conflictOnly === true,
+    includeInactive: candidate.includeInactive !== false,
+  };
 }
 
 function normalizePlannerPayload(payload: unknown): ResourcePlannerResult | null {
@@ -443,18 +491,19 @@ export function ResourcePlannerWorkspace({
   const [plannerSaveError, setPlannerSaveError] = useState<string | null>(null);
   const [showDelayedSyncStatus, setShowDelayedSyncStatus] = useState(false);
   const [showDelayedSavingStatus, setShowDelayedSavingStatus] = useState(false);
-  const [filters, setFilters] = useState<ResourcePlannerFilters>({
-    query: '',
-    resourceTypes: [],
-    conflictOnly: false,
-    includeInactive: true,
-  });
+  const [filters, setFilters] = useState<ResourcePlannerFilters>(() => (
+    normalizePersistedResourcePlannerFilters(getProjectState(projectId)?.plannerResourceFilters)
+  ));
+  const [resourceOccupancyFilter, setResourceOccupancyFilter] = useState<ResourceOccupancyFilter>(() => (
+    normalizeResourceOccupancyFilter(getProjectState(projectId)?.plannerResourceOccupancyFilter)
+  ));
   const [selectedItem, setSelectedItem] = useState<ResourcePlannerTimelineItem | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const lastHiddenAtRef = useRef<number | null>(null);
   const lastAutoRefreshAtRef = useRef(0);
   const plannerSectionRef = useRef<HTMLElement | null>(null);
   const selectionHydratedRef = useRef(false);
+  const filtersHydratedRef = useRef(false);
   const resourceTableColumnWidths = useMemo<ResourceTableColumnWidthMap>(() => (
     normalizeResourceTableColumnWidthMap(projectStates[projectId]?.plannerResourceTableColumnWidths)
   ), [projectId, projectStates]);
@@ -598,6 +647,24 @@ export function ResourcePlannerWorkspace({
       setGlobalViewMode(projectState.viewMode);
     }
   }, [getProjectState, projectId, setGlobalViewMode]);
+
+  useEffect(() => {
+    const projectState = getProjectState(projectId);
+    setFilters(normalizePersistedResourcePlannerFilters(projectState?.plannerResourceFilters));
+    setResourceOccupancyFilter(normalizeResourceOccupancyFilter(projectState?.plannerResourceOccupancyFilter));
+    filtersHydratedRef.current = true;
+  }, [getProjectState, projectId]);
+
+  useEffect(() => {
+    if (!filtersHydratedRef.current) {
+      return;
+    }
+
+    setProjectState(projectId, {
+      plannerResourceFilters: filters,
+      plannerResourceOccupancyFilter: resourceOccupancyFilter,
+    });
+  }, [filters, projectId, resourceOccupancyFilter, setProjectState]);
 
   const handleResourceTableColumnWidthsChange = useCallback((widths: ResourceTableColumnWidthMap) => {
     setProjectState(projectId, {
@@ -1409,14 +1476,18 @@ export function ResourcePlannerWorkspace({
     ),
     [assignments, displayedPlannerDataWithVisibleDates, plannerCatalogResources, plannerScope, projectId, resources, visibleProjectSnapshot.tasks],
   );
+  const occupancyFilteredTimelineResources = useMemo(
+    () => filterTimelineResourcesByOccupancy(timelineResources, resourceOccupancyFilter),
+    [resourceOccupancyFilter, timelineResources],
+  );
   const filteredTimelineResources = useMemo(
     () => filterResourceTimelineResources(
-      timelineResources,
+      occupancyFilteredTimelineResources,
       plannerCatalogResources,
       filters,
       selectedItem ? { preserveResourceIds: [selectedItem.resourceId] } : undefined,
     ),
-    [filters, plannerCatalogResources, selectedItem, timelineResources],
+    [filters, occupancyFilteredTimelineResources, plannerCatalogResources, selectedItem],
   );
   useEffect(() => {
     selectionHydratedRef.current = false;
@@ -1525,8 +1596,8 @@ export function ResourcePlannerWorkspace({
   }, [selectedItem, visibleProjectSnapshot.tasks]);
   const effectiveReadonly = !accessToken || readonly;
   const resourceLifecycleReadonly = effectiveReadonly || groupScopeReadonly;
-  const plannerResourceCount = timelineResources.length;
-  const plannerAssignmentCount = timelineResources.reduce((total, resource) => total + resource.items.length, 0);
+  const plannerResourceCount = occupancyFilteredTimelineResources.length;
+  const plannerAssignmentCount = occupancyFilteredTimelineResources.reduce((total, resource) => total + resource.items.length, 0);
   const pendingMoveCount = Object.keys(pendingMoveCounts).length;
   const pendingCommandCount = pendingCommands.length;
   const hasBlockedPendingCommand = pendingCommands.some((command) => command.status === 'conflict' || command.status === 'failed');
@@ -1546,7 +1617,8 @@ export function ResourcePlannerWorkspace({
   const hasActiveFilters = filters.query.trim().length > 0
     || filters.resourceTypes.length > 0
     || filters.conflictOnly
-    || !filters.includeInactive;
+    || !filters.includeInactive
+    || resourceOccupancyFilter !== 'all';
   const toolbarButtonClassName = 'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-primary hover:bg-primary/5 hover:text-primary';
   const getTimelineItemClassName = useCallback((item: ResourcePlannerTimelineItem) => {
     const metadata = getPlannerItemMetadata(item);
@@ -1732,7 +1804,7 @@ export function ResourcePlannerWorkspace({
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={hasActiveFilters ? 'secondary' : 'outline'}
                   size="sm"
                   className={cn(
                     toolbarButtonClassName,
@@ -1740,13 +1812,13 @@ export function ResourcePlannerWorkspace({
                   )}
                   data-testid="planner-open-filter"
                 >
-                  <Funnel className="h-4 w-4" />
+                  <div className="relative">
+                    <Funnel className="h-4 w-4" />
+                    {hasActiveFilters && (
+                      <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+                    )}
+                  </div>
                   <span>Фильтр</span>
-                  {hasActiveFilters ? (
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                      {Number(filters.query.trim().length > 0) + filters.resourceTypes.length + Number(filters.conflictOnly) + Number(!filters.includeInactive)}
-                    </span>
-                  ) : null}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80" data-testid="planner-filter-controls">
@@ -1821,18 +1893,66 @@ export function ResourcePlannerWorkspace({
                     </label>
                   </div>
 
+                  <fieldset className="space-y-2">
+                    <legend className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Занятость</legend>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        data-testid="planner-resource-occupancy-all"
+                        className={cn(
+                          'inline-flex h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium transition-colors',
+                          resourceOccupancyFilter === 'all'
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:bg-primary/5 hover:text-primary',
+                        )}
+                        onClick={() => setResourceOccupancyFilter('all')}
+                      >
+                        Все
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="planner-resource-occupancy-assigned"
+                        className={cn(
+                          'inline-flex h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium transition-colors',
+                          resourceOccupancyFilter === 'assigned'
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:bg-primary/5 hover:text-primary',
+                        )}
+                        onClick={() => setResourceOccupancyFilter('assigned')}
+                      >
+                        Назначенные
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="planner-resource-occupancy-free"
+                        className={cn(
+                          'inline-flex h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium transition-colors',
+                          resourceOccupancyFilter === 'free'
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:bg-primary/5 hover:text-primary',
+                        )}
+                        onClick={() => setResourceOccupancyFilter('free')}
+                      >
+                        Свободные
+                      </button>
+                    </div>
+                  </fieldset>
+
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     className="h-8 w-full hover:border-primary hover:bg-primary/5 hover:text-primary"
                     disabled={!hasActiveFilters}
-                    onClick={() => setFilters({
-                      query: '',
-                      resourceTypes: [],
-                      conflictOnly: false,
-                      includeInactive: true,
-                    })}
+                    onClick={() => {
+                      setFilters({
+                        query: '',
+                        resourceTypes: [],
+                        conflictOnly: false,
+                        includeInactive: true,
+                      });
+                      setResourceOccupancyFilter('all');
+                    }}
                   >
                     Сбросить фильтр
                   </Button>

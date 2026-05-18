@@ -3,6 +3,14 @@ import { persist } from 'zustand/middleware';
 
 import type { ViewMode } from './useUIStore.ts';
 import type { ResourceTableColumnWidthMap, TaskDateChangeMode, TaskListColumnWidthMap } from 'gantt-lib';
+import type { ResourceType } from '../lib/apiTypes.ts';
+
+interface PlannerResourceFiltersState {
+  query: string;
+  resourceTypes: ResourceType[];
+  conflictOnly: boolean;
+  includeInactive: boolean;
+}
 
 interface ProjectBaselineSelectionState {
   id: string;
@@ -31,6 +39,8 @@ interface ProjectUIState {
   taskListColumnWidths: TaskListColumnWidthMap;
   financeTaskListColumnWidths: TaskListColumnWidthMap;
   plannerResourceTableColumnWidths: ResourceTableColumnWidthMap;
+  plannerResourceFilters: PlannerResourceFiltersState;
+  plannerResourceOccupancyFilter: 'all' | 'assigned' | 'free';
   selectedBaseline: ProjectBaselineSelectionState | null;
   selectedBaselineVisible: boolean;
   plannerSelectedAssignmentId: string | null;
@@ -65,6 +75,13 @@ const DEFAULT_STATE: ProjectUIState = {
   taskListColumnWidths: {},
   financeTaskListColumnWidths: {},
   plannerResourceTableColumnWidths: {},
+  plannerResourceFilters: {
+    query: '',
+    resourceTypes: [],
+    conflictOnly: false,
+    includeInactive: true,
+  },
+  plannerResourceOccupancyFilter: 'all',
   selectedBaseline: null,
   selectedBaselineVisible: false,
   plannerSelectedAssignmentId: null,

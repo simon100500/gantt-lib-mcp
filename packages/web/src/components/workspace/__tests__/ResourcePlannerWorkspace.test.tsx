@@ -75,7 +75,7 @@ vi.mock('../ResourceAssignmentDetailsPanel.tsx', () => ({
   ResourceAssignmentDetailsPanel: () => null,
 }));
 
-import { ResourcePlannerWorkspace } from '../ResourcePlannerWorkspace.tsx';
+import { ResourcePlannerWorkspace, filterTimelineResourcesByOccupancy } from '../ResourcePlannerWorkspace.tsx';
 import { useAuthStore } from '../../../stores/useAuthStore.ts';
 import { useProjectStore } from '../../../stores/useProjectStore.ts';
 import { useProjectUIStore } from '../../../stores/useProjectUIStore.ts';
@@ -724,6 +724,171 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
     });
 
     expect(onScopeChange).toHaveBeenCalledWith('all-projects');
+
+    await unmount(root);
+  });
+
+  it('renders the main filter trigger in the toolbar', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/resources/planner?scope=current-project') {
+        return {
+          ok: true,
+          json: async () => buildPlannerPayload({
+            resources: [
+              {
+                resourceId: 'resource-1',
+                resourceName: 'Crew A',
+                intervals: [{
+                  assignmentId: 'assignment-1',
+                  resourceId: 'resource-1',
+                  resourceName: 'Crew A',
+                  projectId: 'project-1',
+                  projectName: 'Project 1',
+                  taskId: 'task-1',
+                  taskName: 'Install',
+                  startDate: '2026-04-01',
+                  endDate: '2026-04-03',
+                  assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                  hasConflict: false,
+                  conflictCount: 0,
+                  conflictAssignmentIds: [],
+                }],
+              },
+              { resourceId: 'resource-2', resourceName: 'Crew B', intervals: [] },
+              { resourceId: 'resource-3', resourceName: 'Crew C', intervals: [] },
+            ],
+          }),
+        } as Response;
+      }
+      if (url === '/api/resources?projectId=project-1') {
+        return {
+          ok: true,
+          json: async () => ({
+            resources: [
+              buildResource('resource-1', 'Crew A'),
+              buildResource('resource-2', 'Crew B'),
+              buildResource('resource-3', 'Crew C'),
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderPlannerWorkspace();
+    await flushEffects();
+
+    expect(container.querySelector('[data-testid="planner-open-filter"]')).toBeTruthy();
+
+    await unmount(root);
+  });
+
+  it('filters planner resources by occupancy mode', () => {
+    const resources: MockTimelineResource[] = [
+      {
+        id: 'resource-1',
+        name: 'Crew A',
+        items: [{
+          id: 'assignment-1',
+          taskId: 'task-1',
+          resourceId: 'resource-1',
+          title: 'Install',
+          startDate: '2026-04-01',
+          endDate: '2026-04-03',
+          metadata: {},
+        }],
+      },
+      {
+        id: 'resource-2',
+        name: 'Crew B',
+        items: [],
+      },
+      {
+        id: 'resource-3',
+        name: 'Crew C',
+        items: [],
+      },
+    ];
+
+    expect(filterTimelineResourcesByOccupancy(resources as never, 'all').map((resource) => resource.id)).toEqual([
+      'resource-1',
+      'resource-2',
+      'resource-3',
+    ]);
+    expect(filterTimelineResourcesByOccupancy(resources as never, 'assigned').map((resource) => resource.id)).toEqual([
+      'resource-1',
+    ]);
+    expect(filterTimelineResourcesByOccupancy(resources as never, 'free').map((resource) => resource.id)).toEqual([
+      'resource-2',
+      'resource-3',
+    ]);
+  });
+
+  it('hydrates persisted resource filters from project ui storage', async () => {
+    useProjectUIStore.getState().setProjectState('project-1', {
+      plannerResourceFilters: {
+        query: '',
+        resourceTypes: [],
+        conflictOnly: false,
+        includeInactive: true,
+      },
+      plannerResourceOccupancyFilter: 'assigned',
+    });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/resources/planner?scope=current-project') {
+        return {
+          ok: true,
+          json: async () => buildPlannerPayload({
+            resources: [
+              {
+                resourceId: 'resource-1',
+                resourceName: 'Crew A',
+                intervals: [{
+                  assignmentId: 'assignment-1',
+                  resourceId: 'resource-1',
+                  resourceName: 'Crew A',
+                  projectId: 'project-1',
+                  projectName: 'Project 1',
+                  taskId: 'task-1',
+                  taskName: 'Install',
+                  startDate: '2026-04-01',
+                  endDate: '2026-04-03',
+                  assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                  hasConflict: false,
+                  conflictCount: 0,
+                  conflictAssignmentIds: [],
+                }],
+              },
+              { resourceId: 'resource-2', resourceName: 'Crew B', intervals: [] },
+              { resourceId: 'resource-3', resourceName: 'Crew C', intervals: [] },
+            ],
+          }),
+        } as Response;
+      }
+      if (url === '/api/resources?projectId=project-1') {
+        return {
+          ok: true,
+          json: async () => ({
+            resources: [
+              buildResource('resource-1', 'Crew A'),
+              buildResource('resource-2', 'Crew B'),
+              buildResource('resource-3', 'Crew C'),
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { root } = await renderPlannerWorkspace();
+    await flushEffects();
+
+    expect(latestGanttProps().resources?.map((resource) => resource.id)).toEqual(['resource-1']);
 
     await unmount(root);
   });
