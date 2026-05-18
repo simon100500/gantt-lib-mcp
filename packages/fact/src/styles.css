@@ -129,6 +129,25 @@ textarea {
   min-height: 180px;
 }
 
+.brand-lockup {
+  color: var(--text-primary);
+}
+
+.brand-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+.brand-title {
+  font-size: 30px;
+  line-height: 36px;
+}
+
+.access-message {
+  margin-top: 10px;
+}
+
 .notice {
   margin: 0 16px 10px;
   border-radius: var(--size-border-radius-semantic-border-radius-card);

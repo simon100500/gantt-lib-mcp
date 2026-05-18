@@ -155,7 +155,7 @@ export function App() {
   useEffect(() => {
     if (!token) {
       setLoading(false);
-      setError('Откройте ссылку с token или MAX startapp.');
+      setError('Для доступа к проекту нужна специальная ссылка. Запросите её у администратора.');
       return;
     }
 
@@ -412,8 +412,12 @@ export function App() {
     return (
       <Panel mode="secondary" className="app-shell">
         <Container className="state-box">
-          <Typography.Title>Закрытие дня</Typography.Title>
-          <Typography.Body variant="medium">{error}</Typography.Body>
+          <Flex className="brand-lockup" align="center" justify="center" gap={10}>
+            <img className="brand-logo" src="/favicon.svg" alt="" aria-hidden="true" />
+            <Typography.Title className="brand-title">ГетГант</Typography.Title>
+          </Flex>
+          <Typography.Headline variant="small-strong">Отметка факта</Typography.Headline>
+          <Typography.Body className="access-message" variant="medium">{error}</Typography.Body>
         </Container>
       </Panel>
     );
