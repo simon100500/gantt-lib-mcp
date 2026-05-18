@@ -7,3 +7,12 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface Window {
+  readonly WebApp?: {
+    readonly initData?: string;
+    readonly initDataUnsafe?: {
+      readonly start_param?: string;
+    };
+  };
+}

@@ -155,7 +155,7 @@ export function App() {
   useEffect(() => {
     if (!token) {
       setLoading(false);
-      setError('Откройте ссылку с token.');
+      setError('Откройте ссылку с token или MAX startapp.');
       return;
     }
 

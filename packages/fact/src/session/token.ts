@@ -5,8 +5,17 @@ export function readLaunchToken(): string | null {
     return directToken;
   }
 
+  const maxBridgeToken = window.WebApp?.initDataUnsafe?.start_param?.trim();
+  if (maxBridgeToken) {
+    return maxBridgeToken;
+  }
+
   const maxStartParam = params.get('startapp')?.trim();
-  return maxStartParam || null;
+  if (maxStartParam) {
+    return maxStartParam;
+  }
+
+  return null;
 }
 
 export function todayKey(): string {
