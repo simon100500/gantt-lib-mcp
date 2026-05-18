@@ -161,6 +161,49 @@ function getTaskHierarchySection(task: FactTask, tasksById: Map<string, FactTask
   };
 }
 
+function sortSectionTasks(tasks: FactTask[]): FactTask[] {
+  return [...tasks].sort((left, right) => {
+    const leftRank = left.parentId === null ? 0 : 1;
+    const rightRank = right.parentId === null ? 0 : 1;
+
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return left.sortOrder - right.sortOrder;
+  });
+}
+
+function sortHierarchySections(sections: TaskHierarchySection[]): TaskHierarchySection[] {
+  const rootOrder = new Map<string, number>();
+
+  sections.forEach((section, index) => {
+    if (!rootOrder.has(section.sectionTitle)) {
+      rootOrder.set(section.sectionTitle, index);
+    }
+  });
+
+  return [...sections].sort((left, right) => {
+    const leftRootOrder = rootOrder.get(left.sectionTitle) ?? 0;
+    const rightRootOrder = rootOrder.get(right.sectionTitle) ?? 0;
+
+    if (leftRootOrder !== rightRootOrder) {
+      return leftRootOrder - rightRootOrder;
+    }
+
+    const leftRank = left.subsectionTitle === null ? 0 : 1;
+    const rightRank = right.subsectionTitle === null ? 0 : 1;
+
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    const leftSortOrder = left.tasks[0]?.sortOrder ?? 0;
+    const rightSortOrder = right.tasks[0]?.sortOrder ?? 0;
+    return leftSortOrder - rightSortOrder;
+  });
+}
+
 const dayOptions: Array<{ key: Exclude<DayPreset, 'custom'>; label: string }> = [
   { key: 'yesterday', label: 'Вчера' },
   { key: 'today', label: 'Сегодня' },
@@ -379,7 +422,10 @@ export function App() {
       }
     }
 
-    return sections;
+    return sortHierarchySections(sections.map((section) => ({
+      ...section,
+      tasks: sortSectionTasks(section.tasks),
+    })));
   }, [session?.tasks]);
   const visibleTaskSections = useMemo(() => {
     if (!hideMarkedTasks) {
